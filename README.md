@@ -1,10 +1,24 @@
 # PHOTONX EDA PCB
 
-![PHOTONX reverse engineering flow](docs/PHOTONX_reverse_flow.png)
-
 A working **PCB reverse-engineering MVP** that demonstrates the flow:
 
 **Gerber / Excellon → geometry → pad/hole classification → physical connectivity graph → reconstructed nets → component hypotheses → interactive GUI → KiCad export → regression tests.**
+
+```mermaid
+flowchart TD
+    A[Gerber + Excellon Manufacturing Files] --> B[Parse Layers and Drill Data]
+    B --> C[Reconstruct Tracks Pads Holes and Outline]
+    C --> D[Classify Pads Vias and Holes]
+    D --> E[Build Physical Connectivity Graph]
+    E --> F[Reconstruct Electrical Nets]
+    F --> G[Generate Component Hypotheses]
+    G --> H[Internal PCB Model]
+    H --> I[Interactive Tkinter GUI]
+    H --> J[KiCad PCB Export]
+    H --> K[Regression Tests]
+    I --> L[Inspect and Highlight Nets]
+    J --> M[Editable PCB Output]
+```
 
 > This is an engineering MVP, not a replacement for a production CAM/EDA parser. The Gerber parser intentionally supports a useful subset (aperture definitions, aperture selection, D01/D02/D03, common FS coordinates). Component recognition is explicitly probabilistic.
 
