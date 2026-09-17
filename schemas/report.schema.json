@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"PHOTONX Report","type":"object","required":["stats","completeness","quality","check_counts"],"properties":{"completeness":{"type":"number","minimum":0,"maximum":1},"quality":{"type":"number","minimum":0,"maximum":1},"stats":{"type":"object"},"check_counts":{"type":"object"}}}

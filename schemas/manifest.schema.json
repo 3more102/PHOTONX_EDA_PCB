@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"PHOTONX Source Manifest","type":"object","required":["root","files","sha256"],"properties":{"root":{"type":"string"},"files":{"type":"array"},"sha256":{"type":"object","additionalProperties":{"type":"string","pattern":"^[0-9a-f]{64}$"}}}}

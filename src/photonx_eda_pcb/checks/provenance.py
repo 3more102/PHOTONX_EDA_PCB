@@ -1,0 +1,6 @@
+from .base import CheckIssue
+def check_provenance(board):
+    issues=[]
+    for obj in [*board.tracks,*board.pads,*board.drills,*board.outline]:
+        if not obj.provenance.sources: issues.append(CheckIssue("info","PROVENANCE_SOURCE_MISSING","object has no source reference",obj.id))
+    return issues

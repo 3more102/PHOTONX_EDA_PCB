@@ -1,0 +1,11 @@
+from .base import CheckIssue
+from ..core.numeric import is_finite_number
+def check_geometry(board):
+    issues=[]
+    for t in board.tracks:
+        if not is_finite_number(t.width) or t.width<=0: issues.append(CheckIssue("error","TRACK_WIDTH_INVALID","track width must be positive",t.id))
+    for p in board.pads:
+        if p.size_x<=0 or p.size_y<=0: issues.append(CheckIssue("error","PAD_SIZE_INVALID","pad size must be positive",p.id))
+    for d in board.drills:
+        if d.diameter<=0: issues.append(CheckIssue("error","DRILL_DIAMETER_INVALID","drill diameter must be positive",d.id))
+    return issues
