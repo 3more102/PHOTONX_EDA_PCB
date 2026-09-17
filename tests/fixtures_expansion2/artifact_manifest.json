@@ -1,0 +1,1 @@
+{"artifacts":[{"name":"source","kind":"source","path":"input.gbr","inputs":[]},{"name":"board","kind":"board_model","path":"board.json","inputs":["source"]}],"synthetic":true}

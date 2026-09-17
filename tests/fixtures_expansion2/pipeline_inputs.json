@@ -1,0 +1,1 @@
+{"files":["copper.gbr","outline.gbr","drill.drl"],"stages":["discovery","parsing","normalization","connectivity","inference","validation","exporting"],"synthetic":true}
