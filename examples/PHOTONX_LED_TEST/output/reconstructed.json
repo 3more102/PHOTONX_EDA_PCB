@@ -1,36 +1,303 @@
 {
   "tracks": [
-    {"id":"T0","start":{"x":8.0,"y":15.0},"end":{"x":25.0,"y":15.0},"width":0.5,"layer":"F.Cu","net":"N$$1"},
-    {"id":"T1","start":{"x":28.0,"y":15.0},"end":{"x":42.0,"y":15.0},"width":0.5,"layer":"F.Cu","net":"N$$3"},
-    {"id":"T2","start":{"x":44.54,"y":15.0},"end":{"x":44.54,"y":17.54},"width":0.5,"layer":"F.Cu","net":"N$$2"},
-    {"id":"T3","start":{"x":44.54,"y":17.54},"end":{"x":8.0,"y":17.54},"width":0.5,"layer":"F.Cu","net":"N$$2"}
+    {
+      "id": "T0",
+      "start": {
+        "x": 8.0,
+        "y": 15.0
+      },
+      "end": {
+        "x": 25.0,
+        "y": 15.0
+      },
+      "width": 0.5,
+      "layer": "F.Cu",
+      "net": "N$$1"
+    },
+    {
+      "id": "T1",
+      "start": {
+        "x": 28.0,
+        "y": 15.0
+      },
+      "end": {
+        "x": 42.0,
+        "y": 15.0
+      },
+      "width": 0.5,
+      "layer": "F.Cu",
+      "net": "N$$3"
+    },
+    {
+      "id": "T2",
+      "start": {
+        "x": 44.54,
+        "y": 15.0
+      },
+      "end": {
+        "x": 44.54,
+        "y": 17.54
+      },
+      "width": 0.5,
+      "layer": "F.Cu",
+      "net": "N$$2"
+    },
+    {
+      "id": "T3",
+      "start": {
+        "x": 44.54,
+        "y": 17.54
+      },
+      "end": {
+        "x": 8.0,
+        "y": 17.54
+      },
+      "width": 0.5,
+      "layer": "F.Cu",
+      "net": "N$$2"
+    }
   ],
   "pads": [
-    {"id":"P0","center":{"x":8.0,"y":15.0},"diameter":1.8,"layer":"F.Cu","drill":0.8,"net":"N$$1"},
-    {"id":"P1","center":{"x":8.0,"y":17.54},"diameter":1.8,"layer":"F.Cu","drill":0.8,"net":"N$$2"},
-    {"id":"P2","center":{"x":25.0,"y":15.0},"diameter":1.8,"layer":"F.Cu","drill":0.8,"net":"N$$1"},
-    {"id":"P3","center":{"x":28.0,"y":15.0},"diameter":1.8,"layer":"F.Cu","drill":0.8,"net":"N$$3"},
-    {"id":"P4","center":{"x":42.0,"y":15.0},"diameter":1.8,"layer":"F.Cu","drill":0.8,"net":"N$$3"},
-    {"id":"P5","center":{"x":44.54,"y":15.0},"diameter":1.8,"layer":"F.Cu","drill":0.8,"net":"N$$2"}
+    {
+      "id": "P0",
+      "center": {
+        "x": 8.0,
+        "y": 15.0
+      },
+      "diameter": 1.8,
+      "layer": "F.Cu",
+      "drill": 0.8,
+      "net": "N$$1"
+    },
+    {
+      "id": "P1",
+      "center": {
+        "x": 8.0,
+        "y": 17.54
+      },
+      "diameter": 1.8,
+      "layer": "F.Cu",
+      "drill": 0.8,
+      "net": "N$$2"
+    },
+    {
+      "id": "P2",
+      "center": {
+        "x": 25.0,
+        "y": 15.0
+      },
+      "diameter": 1.8,
+      "layer": "F.Cu",
+      "drill": 0.8,
+      "net": "N$$1"
+    },
+    {
+      "id": "P3",
+      "center": {
+        "x": 28.0,
+        "y": 15.0
+      },
+      "diameter": 1.8,
+      "layer": "F.Cu",
+      "drill": 0.8,
+      "net": "N$$3"
+    },
+    {
+      "id": "P4",
+      "center": {
+        "x": 42.0,
+        "y": 15.0
+      },
+      "diameter": 1.8,
+      "layer": "F.Cu",
+      "drill": 0.8,
+      "net": "N$$3"
+    },
+    {
+      "id": "P5",
+      "center": {
+        "x": 44.54,
+        "y": 15.0
+      },
+      "diameter": 1.8,
+      "layer": "F.Cu",
+      "drill": 0.8,
+      "net": "N$$2"
+    }
   ],
   "holes": [
-    {"id":"H0","center":{"x":8.0,"y":15.0},"diameter":0.8,"plated":true},
-    {"id":"H1","center":{"x":8.0,"y":17.54},"diameter":0.8,"plated":true},
-    {"id":"H2","center":{"x":25.0,"y":15.0},"diameter":0.8,"plated":true},
-    {"id":"H3","center":{"x":28.0,"y":15.0},"diameter":0.8,"plated":true},
-    {"id":"H4","center":{"x":42.0,"y":15.0},"diameter":0.8,"plated":true},
-    {"id":"H5","center":{"x":44.54,"y":15.0},"diameter":0.8,"plated":true}
+    {
+      "id": "H0",
+      "center": {
+        "x": 8.0,
+        "y": 15.0
+      },
+      "diameter": 0.8,
+      "plated": true
+    },
+    {
+      "id": "H1",
+      "center": {
+        "x": 8.0,
+        "y": 17.54
+      },
+      "diameter": 0.8,
+      "plated": true
+    },
+    {
+      "id": "H2",
+      "center": {
+        "x": 25.0,
+        "y": 15.0
+      },
+      "diameter": 0.8,
+      "plated": true
+    },
+    {
+      "id": "H3",
+      "center": {
+        "x": 28.0,
+        "y": 15.0
+      },
+      "diameter": 0.8,
+      "plated": true
+    },
+    {
+      "id": "H4",
+      "center": {
+        "x": 42.0,
+        "y": 15.0
+      },
+      "diameter": 0.8,
+      "plated": true
+    },
+    {
+      "id": "H5",
+      "center": {
+        "x": 44.54,
+        "y": 15.0
+      },
+      "diameter": 0.8,
+      "plated": true
+    }
   ],
-  "outline":{"segments":[
-    {"id":"T0","start":{"x":5.0,"y":5.0},"end":{"x":55.0,"y":5.0},"width":0.1,"layer":"Edge.Cuts","net":null},
-    {"id":"T1","start":{"x":55.0,"y":5.0},"end":{"x":55.0,"y":35.0},"width":0.1,"layer":"Edge.Cuts","net":null},
-    {"id":"T2","start":{"x":55.0,"y":35.0},"end":{"x":5.0,"y":35.0},"width":0.1,"layer":"Edge.Cuts","net":null},
-    {"id":"T3","start":{"x":5.0,"y":35.0},"end":{"x":5.0,"y":5.0},"width":0.1,"layer":"Edge.Cuts","net":null}
-  ]},
-  "components":[
-    {"id":"C?1","pad_ids":["P0","P1"],"kind":"2-pin THT device","confidence":0.62,"evidence":["two pads separated by 2.54 mm","both pads drilled"]},
-    {"id":"C?2","pad_ids":["P2","P3"],"kind":"2-pin THT device","confidence":0.62,"evidence":["two pads separated by 3.00 mm","both pads drilled"]},
-    {"id":"C?3","pad_ids":["P4","P5"],"kind":"2-pin THT device","confidence":0.62,"evidence":["two pads separated by 2.54 mm","both pads drilled"]}
+  "outline": {
+    "segments": [
+      {
+        "id": "T0",
+        "start": {
+          "x": 5.0,
+          "y": 5.0
+        },
+        "end": {
+          "x": 55.0,
+          "y": 5.0
+        },
+        "width": 0.1,
+        "layer": "Edge.Cuts",
+        "net": null
+      },
+      {
+        "id": "T1",
+        "start": {
+          "x": 55.0,
+          "y": 5.0
+        },
+        "end": {
+          "x": 55.0,
+          "y": 35.0
+        },
+        "width": 0.1,
+        "layer": "Edge.Cuts",
+        "net": null
+      },
+      {
+        "id": "T2",
+        "start": {
+          "x": 55.0,
+          "y": 35.0
+        },
+        "end": {
+          "x": 5.0,
+          "y": 35.0
+        },
+        "width": 0.1,
+        "layer": "Edge.Cuts",
+        "net": null
+      },
+      {
+        "id": "T3",
+        "start": {
+          "x": 5.0,
+          "y": 35.0
+        },
+        "end": {
+          "x": 5.0,
+          "y": 5.0
+        },
+        "width": 0.1,
+        "layer": "Edge.Cuts",
+        "net": null
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "C?1",
+      "pad_ids": [
+        "P0",
+        "P1"
+      ],
+      "kind": "2-pin THT device",
+      "confidence": 0.62,
+      "evidence": [
+        "two pads separated by 2.54 mm",
+        "both pads drilled"
+      ]
+    },
+    {
+      "id": "C?2",
+      "pad_ids": [
+        "P2",
+        "P3"
+      ],
+      "kind": "2-pin THT device",
+      "confidence": 0.62,
+      "evidence": [
+        "two pads separated by 3.00 mm",
+        "both pads drilled"
+      ]
+    },
+    {
+      "id": "C?3",
+      "pad_ids": [
+        "P4",
+        "P5"
+      ],
+      "kind": "2-pin THT device",
+      "confidence": 0.62,
+      "evidence": [
+        "two pads separated by 2.54 mm",
+        "both pads drilled"
+      ]
+    }
   ],
-  "nets":{"N$$1":["P0","P2","T0"],"N$$2":["P1","P5","T2","T3"],"N$$3":["P3","P4","T1"]}
+  "nets": {
+    "N$$1": [
+      "P0",
+      "P2",
+      "T0"
+    ],
+    "N$$2": [
+      "P1",
+      "P5",
+      "T2",
+      "T3"
+    ],
+    "N$$3": [
+      "P3",
+      "P4",
+      "T1"
+    ]
+  }
 }
