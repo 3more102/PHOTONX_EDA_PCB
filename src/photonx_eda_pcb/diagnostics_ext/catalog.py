@@ -1,0 +1,2 @@
+CATALOG={"GERBER_ARC_INVALID":"Gerber arc geometry is inconsistent.","GERBER_REGION_OPEN":"Gerber region was not closed.","APERTURE_MACRO_UNSUPPORTED":"Aperture macro contains unsupported semantics.","KICAD_PARSE_ERROR":"KiCad S-expression input could not be parsed.","MULTILAYER_SPAN_UNKNOWN":"Layer span is not established by evidence."}
+def message_for(code): return CATALOG.get(str(code),"Unknown diagnostic code.")
