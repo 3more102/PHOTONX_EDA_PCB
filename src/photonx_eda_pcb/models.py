@@ -1,11 +1,13 @@
 from __future__ import annotations
 from dataclasses import dataclass, field, asdict
-from typing import Literal
+from .provenance import Provenance
+
 
 @dataclass(frozen=True)
 class Point:
     x: float
     y: float
+
 
 @dataclass
 class Track:
@@ -13,28 +15,50 @@ class Track:
     start: Point
     end: Point
     width: float
-    layer: str = "F.Cu"
-    net: str | None = None
+    layer: str
+    net_id: str | None = None
+    provenance: Provenance = field(default_factory=Provenance)
+
 
 @dataclass
-class Pad:
+class PadCandidate:
     id: str
     center: Point
-    diameter: float
-    layer: str = "F.Cu"
+    size_x: float
+    size_y: float
+    shape: str
+    layer: str
     drill: float | None = None
-    net: str | None = None
+    net_id: str | None = None
+    provenance: Provenance = field(default_factory=Provenance)
+
 
 @dataclass
-class Hole:
+class DrillHit:
     id: str
     center: Point
     diameter: float
-    plated: bool = True
+    plating: str = "unknown"
+    tool: str | None = None
+    provenance: Provenance = field(default_factory=Provenance)
+
 
 @dataclass
-class Outline:
-    segments: list[Track] = field(default_factory=list)
+class OutlineSegment:
+    id: str
+    start: Point
+    end: Point
+    provenance: Provenance = field(default_factory=Provenance)
+
+
+@dataclass
+class NetGroup:
+    id: str
+    members: list[str]
+    confidence: float
+    label: str | None = None
+    provenance: Provenance = field(default_factory=Provenance)
+
 
 @dataclass
 class ComponentHypothesis:
@@ -43,15 +67,32 @@ class ComponentHypothesis:
     kind: str
     confidence: float
     evidence: list[str]
+    reference: str | None = None
+
+
+@dataclass
+class ParseDiagnostic:
+    severity: str
+    code: str
+    message: str
+    path: str
+    line: int | None = None
+
 
 @dataclass
 class BoardModel:
     tracks: list[Track] = field(default_factory=list)
-    pads: list[Pad] = field(default_factory=list)
-    holes: list[Hole] = field(default_factory=list)
-    outline: Outline = field(default_factory=Outline)
+    pads: list[PadCandidate] = field(default_factory=list)
+    drills: list[DrillHit] = field(default_factory=list)
+    outline: list[OutlineSegment] = field(default_factory=list)
+    nets: list[NetGroup] = field(default_factory=list)
     components: list[ComponentHypothesis] = field(default_factory=list)
-    nets: dict[str, list[str]] = field(default_factory=dict)
+    diagnostics: list[ParseDiagnostic] = field(default_factory=list)
+    metadata: dict[str, object] = field(default_factory=dict)
 
-    def to_dict(self):
+    def object_index(self) -> dict[str, object]:
+        items = [*self.tracks, *self.pads, *self.drills, *self.outline]
+        return {obj.id: obj for obj in items}
+
+    def to_dict(self) -> dict[str, object]:
         return asdict(self)

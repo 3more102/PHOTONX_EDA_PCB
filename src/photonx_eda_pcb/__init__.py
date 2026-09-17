@@ -1,3 +1,11 @@
-__version__ = "0.1.0"
+__version__ = "0.2.0"
+from .config import ReconstructionConfig
+from .pipeline import reconstruct, ReconstructionResult
 from .project import load_project
-from .kicad import export_kicad
+from .validation import validate_board
+from .exporters import export_json, export_kicad, validate_with_kicad_cli
+
+__all__ = [
+    "ReconstructionConfig", "ReconstructionResult", "reconstruct", "load_project",
+    "validate_board", "export_json", "export_kicad", "validate_with_kicad_cli",
+]

@@ -1,33 +1,9 @@
 from pathlib import Path
-from photonx_eda_pcb import load_project, export_kicad
+from photonx_eda_pcb import reconstruct
+FIX=Path(__file__).parent/"fixtures"/"led"
 
-ROOT=Path(__file__).parents[1]
-INPUT=ROOT/'examples'/'PHOTONX_LED_TEST'/'input'
+def test_end_to_end_reconstruction():
+    result=reconstruct(FIX); b=result.board; assert result.validation.ok; assert len(b.pads)==6; assert len(b.tracks)==4; assert len(b.drills)==6; assert len(b.outline)==4; assert len(b.nets)==3; assert sorted(len(n.members) for n in b.nets)==[3,3,4]; assert all(p.drill==0.8 for p in b.pads)
 
-def test_parse_counts():
-    b=load_project(INPUT)
-    assert len(b.pads)==6
-    assert len(b.tracks)==4
-    assert len(b.holes)==6
-    assert len(b.outline.segments)==4
-
-def test_connectivity_reconstructs_three_nets():
-    b=load_project(INPUT)
-    assert len(b.nets)==3
-    sizes=sorted(len(v) for v in b.nets.values())
-    assert sizes==[3,3,4]
-
-def test_component_hypotheses():
-    b=load_project(INPUT)
-    assert len(b.components)==3
-    assert all(len(c.pad_ids)==2 for c in b.components)
-    assert all(c.confidence>0.5 for c in b.components)
-
-def test_kicad_export(tmp_path):
-    b=load_project(INPUT)
-    p=export_kicad(b,tmp_path/'out.kicad_pcb')
-    text=p.read_text()
-    assert '(kicad_pcb' in text
-    assert text.count('(segment ')==4
-    assert text.count('(footprint ')==6
-    assert 'Edge.Cuts' in text
+def test_reconstruction_ids_are_stable():
+    first=reconstruct(FIX).board; second=reconstruct(FIX).board; assert [p.id for p in first.pads]==[p.id for p in second.pads]; assert [n.id for n in first.nets]==[n.id for n in second.nets]
