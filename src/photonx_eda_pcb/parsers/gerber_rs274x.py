@@ -47,6 +47,7 @@ _FILE_POLARITY = re.compile(
     r"^%TF\.FilePolarity,(Positive|Negative)\*%$",
     re.IGNORECASE,
 )
+_LAYER_POLARITY = re.compile(r"^%LP([CD])\*%$", re.IGNORECASE)
 
 _MAX_STEP_REPEAT_INSTANCES = 10_000
 _ARC_MAX_CHORD_ERROR_MM = 0.005
@@ -119,6 +120,7 @@ class GerberRS274XParser:
         self.quadrant_mode: str | None = None
         self.current_operation: str | None = None
         self.file_polarity: str | None = None
+        self.layer_polarity = "dark"
         self.image_geometry_enabled = True
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
@@ -199,6 +201,44 @@ class GerberRS274XParser:
                 line_no,
             )
         )
+
+    def _handle_layer_polarity(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        match = _LAYER_POLARITY.match(line)
+        if match is None:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_LAYER_POLARITY",
+                "invalid Gerber LP layer-polarity command",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        polarity = "clear" if match.group(1).upper() == "C" else "dark"
+        self.layer_polarity = polarity
+        if polarity == "clear":
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "UNSUPPORTED_GERBER_CLEAR_POLARITY",
+                (
+                    "clear Gerber layer polarity subtracts from previously created "
+                    "objects; ordered clear/dark image composition is not modeled safely"
+                ),
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
 
     def _decode(self, raw, axis):
         if raw is None:
@@ -879,7 +919,10 @@ class GerberRS274XParser:
         for line_no, line in iter_gerber_statements(text):
             if not line or line.startswith("G04"):
                 continue
-            if line in {"M02*", "%LPD*%"}:
+            if line == "M02*":
+                continue
+            if line.startswith("%LP"):
+                self._handle_layer_polarity(line, p, line_no, out)
                 continue
             if line.startswith("%TF.FilePolarity"):
                 self._handle_file_polarity(line, p, line_no, out)
