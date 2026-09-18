@@ -117,6 +117,7 @@ class GerberRS274XParser:
         self.layer = layer
         self.strict = strict
         self.units = "mm"
+        self.units_declared = False
         self.xfmt = CoordinateFormat(2, 4, "L")
         self.yfmt = CoordinateFormat(2, 4, "L")
         self.apertures: dict[int, Aperture] = {}
@@ -145,6 +146,60 @@ class GerberRS274XParser:
         out.tracks.clear()
         out.pads.clear()
         out.outline.clear()
+
+    def _declare_units(
+        self,
+        units: str,
+        path: Path,
+        line_no: int,
+        raw: str,
+        out: GerberLayerResult,
+    ) -> bool:
+        if self.units_declared:
+            if self.units != units:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    raw,
+                    "CONFLICTING_GERBER_UNITS",
+                    (
+                        "Gerber unit mode changed after it was already declared "
+                        f"({self.units} -> {units})"
+                    ),
+                    out,
+                )
+                if not self.strict:
+                    self._disable_image_geometry(out)
+                return False
+            return True
+
+        self.units = units
+        self.units_declared = True
+        return True
+
+    def _require_units(
+        self,
+        path: Path,
+        line_no: int,
+        raw: str,
+        out: GerberLayerResult,
+    ) -> bool:
+        if self.units_declared:
+            return True
+        self._parse_error_or_warn(
+            path,
+            line_no,
+            raw,
+            "GERBER_UNITS_UNDECLARED",
+            (
+                "Gerber dimensional data encountered before explicit "
+                "MO/G70/G71 unit declaration"
+            ),
+            out,
+        )
+        if not self.strict:
+            self._disable_image_geometry(out)
+        return False
 
     def _handle_file_polarity(
         self,
@@ -1086,16 +1141,17 @@ class GerberRS274XParser:
 
             m = _MO.match(line)
             if m:
-                self.units = "mm" if m.group(1) == "MM" else "inch"
+                units = "mm" if m.group(1) == "MM" else "inch"
+                self._declare_units(units, p, line_no, line, out)
                 continue
 
             # Legacy RS-274-D/early RS-274X unit commands still appear in
-            # exported CAM jobs. Their semantics are unambiguous here.
+            # exported CAM jobs. Treat them as explicit unit declarations.
             if line in {"G70*", "G070*"}:
-                self.units = "inch"
+                self._declare_units("inch", p, line_no, line, out)
                 continue
             if line in {"G71*", "G071*"}:
-                self.units = "mm"
+                self._declare_units("mm", p, line_no, line, out)
                 continue
 
             # PHOTONX models absolute coordinates. Explicit absolute mode is
@@ -1145,6 +1201,8 @@ class GerberRS274XParser:
 
             m = _AD_STANDARD.match(line)
             if m:
+                if not self._require_units(p, line_no, line, out):
+                    continue
                 code, shape, modifiers = m.groups()
                 self._instantiate_standard_aperture(
                     int(code),
@@ -1159,6 +1217,8 @@ class GerberRS274XParser:
 
             m = _AD_MACRO.match(line)
             if m:
+                if not self._require_units(p, line_no, line, out):
+                    continue
                 code, name, modifiers = m.groups()
                 self._instantiate_macro_aperture(
                     int(code),
@@ -1182,6 +1242,10 @@ class GerberRS274XParser:
                 continue
 
             if line.startswith("%SR"):
+                if line != "%SR*%" and not self._require_units(
+                    p, line_no, line, out
+                ):
+                    continue
                 self._configure_step_repeat(line, p, line_no, out)
                 continue
 
@@ -1225,6 +1289,8 @@ class GerberRS274XParser:
 
             arc_match = _ARC_COORD.match(line)
             if arc_match:
+                if not self._require_units(p, line_no, line, out):
+                    continue
                 gcode, x_raw, y_raw, i_raw, j_raw, op = arc_match.groups()
                 operation = op or self.current_operation
                 if op is not None:
@@ -1313,6 +1379,8 @@ class GerberRS274XParser:
 
             m = _COORD.match(line)
             if m:
+                if not self._require_units(p, line_no, line, out):
+                    continue
                 x_raw, y_raw, op = m.groups()
                 operation = op or self.current_operation
                 if op is not None:
