@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="760" viewBox="0 0 1500 760" role="img" aria-labelledby="title desc">
+<title id="title">PHOTONX Human Review Decision Flow</title>
+<desc id="desc">Ambiguous reconstruction findings are reviewed without modifying source evidence: inspect evidence, classify confidence and conflict, accept, reject, defer, request more evidence, then record the decision.</desc>
+<defs>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0 0 L0 6 L9 3 z" fill="#64748b"/></marker>
+  <style>
+    .title{font:700 36px Inter,Segoe UI,Arial,sans-serif;fill:#111827}.sub{font:400 17px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+    .box{stroke-width:2;rx:16;ry:16}.t{font:700 18px Inter,Segoe UI,Arial,sans-serif;fill:#111827}.s{font:400 14px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+    .a{stroke:#64748b;stroke-width:3;fill:none;marker-end:url(#arrow)}.loop{stroke:#8b5cf6;stroke-width:3;fill:none;stroke-dasharray:8 7;marker-end:url(#arrow)}
+  </style>
+</defs>
+<rect width="1500" height="760" fill="#fff"/>
+<text x="70" y="60" class="title">PHOTONX Human Review Decision Flow</text>
+<text x="70" y="94" class="sub">Ambiguous findings are reviewed explicitly. Source evidence is never silently rewritten.</text>
+
+<rect x="80" y="180" width="220" height="90" class="box" fill="#e0f2fe" stroke="#0284c7"/>
+<text x="190" y="214" text-anchor="middle" class="t">Finding Enters Queue</text>
+<text x="190" y="240" text-anchor="middle" class="s">ambiguity · conflict · warning</text>
+
+<rect x="380" y="180" width="220" height="90" class="box" fill="#ecfeff" stroke="#0891b2"/>
+<text x="490" y="214" text-anchor="middle" class="t">Inspect Evidence</text>
+<text x="490" y="240" text-anchor="middle" class="s">source · provenance · context</text>
+
+<rect x="680" y="180" width="220" height="90" class="box" fill="#eef2ff" stroke="#4f46e5"/>
+<text x="790" y="214" text-anchor="middle" class="t">Assess Confidence</text>
+<text x="790" y="240" text-anchor="middle" class="s">support · conflict · unknowns</text>
+
+<rect x="980" y="180" width="220" height="90" class="box" fill="#f5f3ff" stroke="#7c3aed"/>
+<text x="1090" y="214" text-anchor="middle" class="t">Decision</text>
+<text x="1090" y="240" text-anchor="middle" class="s">human-in-the-loop</text>
+
+<path d="M300 225 H380" class="a"/><path d="M600 225 H680" class="a"/><path d="M900 225 H980" class="a"/>
+
+<rect x="160" y="390" width="220" height="90" class="box" fill="#ecfdf5" stroke="#059669"/>
+<text x="270" y="424" text-anchor="middle" class="t">Accept</text>
+<text x="270" y="450" text-anchor="middle" class="s">evidence supports claim</text>
+
+<rect x="470" y="390" width="220" height="90" class="box" fill="#fff1f2" stroke="#e11d48"/>
+<text x="580" y="424" text-anchor="middle" class="t">Reject</text>
+<text x="580" y="450" text-anchor="middle" class="s">claim not defensible</text>
+
+<rect x="780" y="390" width="220" height="90" class="box" fill="#fefce8" stroke="#ca8a04"/>
+<text x="890" y="424" text-anchor="middle" class="t">Defer</text>
+<text x="890" y="450" text-anchor="middle" class="s">insufficient evidence</text>
+
+<rect x="1090" y="390" width="250" height="90" class="box" fill="#fff7ed" stroke="#ea580c"/>
+<text x="1215" y="424" text-anchor="middle" class="t">Request More Evidence</text>
+<text x="1215" y="450" text-anchor="middle" class="s">BOM · image · measurement · source</text>
+
+<path d="M1090 270 C1090 330 270 330 270 390" class="a"/>
+<path d="M1090 270 C1090 340 580 340 580 390" class="a"/>
+<path d="M1090 270 C1090 350 890 350 890 390" class="a"/>
+<path d="M1090 270 V340 H1215 V390" class="a"/>
+
+<rect x="500" y="590" width="500" height="95" class="box" fill="#f8fafc" stroke="#64748b"/>
+<text x="750" y="624" text-anchor="middle" class="t">Record Decision + Rationale</text>
+<text x="750" y="650" text-anchor="middle" class="s">review state · reviewer action · provenance · confidence · unresolved evidence</text>
+
+<path d="M270 480 V540 H650 V590" class="a"/>
+<path d="M580 480 V550 H700 V590" class="a"/>
+<path d="M890 480 V550 H800 V590" class="a"/>
+<path d="M1215 480 V530 H850 V590" class="a"/>
+<path d="M1215 390 C1390 350 1390 155 900 155" class="loop"/>
+
+<text x="70" y="730" class="sub">A review action changes the interpretation/review state — not the historical source evidence.</text>
+</svg>
