@@ -13,6 +13,7 @@ CAPABILITIES=[
     Capability("Gerber linear draws/flashes","partial","Circular-aperture D01 draws and solid C/R/O flashes are reconstructed exactly; non-circular draws and holed apertures fail closed instead of being approximated."),
     Capability("Gerber X2 file polarity","partial","Explicit Positive file polarity is accepted; Negative polarity fails closed because absence-of-material image inversion is not yet modeled."),
     Capability("Gerber layer polarity","partial","Dark LPD polarity is supported; clear LPC polarity fails closed because ordered clear/dark image subtraction is not yet modeled."),
+    Capability("Gerber aperture transforms","partial","Identity LM/LR/LS transforms are accepted; non-identity mirroring, rotation, or scaling fails closed until transformed aperture geometry is modeled."),
     Capability("Gerber step-and-repeat","implemented","Linear draws, flashes, and outlines are expanded deterministically with source provenance and unit-aware offsets."),
     Capability("Gerber G75 circular arcs","partial","Multi-quadrant G02/G03 arcs use signed I/J center offsets with circular apertures and deterministic tessellation with explicit provenance."),
     Capability("Gerber simple aperture macros","partial","Single positive centered circle macros, including parameterized diameter, are reduced safely to circular apertures; complex macro geometry remains fail-closed."),

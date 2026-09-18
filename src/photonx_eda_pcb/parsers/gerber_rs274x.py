@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import pi
+from math import isclose, pi
 from pathlib import Path
 import re
 
@@ -48,6 +48,15 @@ _FILE_POLARITY = re.compile(
     re.IGNORECASE,
 )
 _LAYER_POLARITY = re.compile(r"^%LP([CD])\*%$", re.IGNORECASE)
+_APERTURE_MIRROR = re.compile(r"^%LM(N|X|Y|XY)\*%$", re.IGNORECASE)
+_APERTURE_ROTATION = re.compile(
+    r"^%LR([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))\*%$",
+    re.IGNORECASE,
+)
+_APERTURE_SCALING = re.compile(
+    r"^%LS([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))\*%$",
+    re.IGNORECASE,
+)
 
 _MAX_STEP_REPEAT_INSTANCES = 10_000
 _ARC_MAX_CHORD_ERROR_MM = 0.005
@@ -239,6 +248,82 @@ class GerberRS274XParser:
             )
             if not self.strict:
                 self._disable_image_geometry(out)
+
+    def _handle_aperture_transform(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        transform = None
+        value = None
+
+        match = _APERTURE_MIRROR.match(line)
+        if match is not None:
+            transform = "mirroring"
+            value = match.group(1).upper()
+            is_identity = value == "N"
+        else:
+            match = _APERTURE_ROTATION.match(line)
+            if match is not None:
+                transform = "rotation"
+                value = float(match.group(1))
+                normalized = value % 360.0
+                is_identity = isclose(
+                    normalized, 0.0, rel_tol=0.0, abs_tol=1e-12
+                ) or isclose(
+                    normalized, 360.0, rel_tol=0.0, abs_tol=1e-12
+                )
+            else:
+                match = _APERTURE_SCALING.match(line)
+                if match is not None:
+                    transform = "scaling"
+                    value = float(match.group(1))
+                    if value <= 0:
+                        self._parse_error_or_warn(
+                            path,
+                            line_no,
+                            line,
+                            "INVALID_GERBER_APERTURE_TRANSFORM",
+                            "Gerber LS scaling factor must be greater than zero",
+                            out,
+                        )
+                        if not self.strict:
+                            self._disable_image_geometry(out)
+                        return
+                    is_identity = isclose(
+                        value, 1.0, rel_tol=0.0, abs_tol=1e-12
+                    )
+                else:
+                    self._parse_error_or_warn(
+                        path,
+                        line_no,
+                        line,
+                        "INVALID_GERBER_APERTURE_TRANSFORM",
+                        "invalid Gerber LM/LR/LS aperture-transform command",
+                        out,
+                    )
+                    if not self.strict:
+                        self._disable_image_geometry(out)
+                    return
+
+        if is_identity:
+            return
+
+        self._fail_or_warn(
+            path,
+            line_no,
+            line,
+            "UNSUPPORTED_GERBER_APERTURE_TRANSFORM",
+            (
+                f"non-identity Gerber aperture {transform} ({value}) changes "
+                "object geometry and is not modeled safely"
+            ),
+            out,
+        )
+        if not self.strict:
+            self._disable_image_geometry(out)
 
     def _decode(self, raw, axis):
         if raw is None:
@@ -936,6 +1021,9 @@ class GerberRS274XParser:
                 continue
             if line.startswith("%LP"):
                 self._handle_layer_polarity(line, p, line_no, out)
+                continue
+            if line.startswith(("%LM", "%LR", "%LS")):
+                self._handle_aperture_transform(line, p, line_no, out)
                 continue
             if line.startswith("%TF.FilePolarity"):
                 self._handle_file_polarity(line, p, line_no, out)

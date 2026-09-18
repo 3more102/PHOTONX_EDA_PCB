@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Hardened Gerber `LM/LR/LS` aperture-transform handling: identity states remain supported, while non-identity or malformed transforms fail closed so mirrored, rotated, or scaled objects cannot be emitted with untransformed geometry.
 - Hardened permissive Gerber parsing so rectangular/obround D01 draws are skipped with diagnostics instead of being approximated as width-only tracks; current-point state is still advanced correctly.
 - Validated standard Gerber rectangle/obround outer dimensions at parse time; zero X/Y sizes now fail closed instead of entering reconstruction as invalid geometry.
 - Hardened Gerber layer-polarity handling: `%LPD*%` remains supported, while `%LPC*%` fails closed in strict mode and suppresses file geometry in permissive mode so clear subtraction cannot be emitted as positive material.
