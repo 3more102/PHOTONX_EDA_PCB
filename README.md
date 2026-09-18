@@ -26,6 +26,8 @@ PHOTONX converts PCB manufacturing evidence into an auditable engineering model:
 | [Evidence escalation](#evidence-model) | Observed → derived → inferred → corroborated claims |
 | [Human review flow](#how-to-review-a-reconstruction) | Decision path for ambiguous findings |
 | [Validation / release flow](#validation-stack) | Tests, round-trip checks, and readiness gates |
+| [Parser decision flow](#parsing-and-manufacturing-geometry) | Strict vs permissive handling of unsupported syntax |
+| [KiCad export flow](#kicad-export-policy) | Conservative export and native-validation decision path |
 
 ---
 
@@ -51,10 +53,10 @@ PHOTONX is built around that distinction.
 | Package | **0.2.0** |
 | Python | **3.11+** |
 | Main dependencies | **NetworkX**, **Shapely** |
-| Verified commit | **`96cbda6` — 18 Sep 2026** |
+| Verified commit | **`0d0475a` — 18 Sep 2026** |
 | CI matrix | Python **3.11**, **3.12**, **3.13** |
 | Test result | **615 passed, 2 warnings** on each CI matrix job |
-| CI run | [GitHub Actions run 35378099287](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35378099287) |
+| CI run | [GitHub Actions run 35378371092](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35378371092) |
 
 PHOTONX is an active engineering platform. It is **not** a complete CAM replacement, electrical sign-off tool, safety certification system, or fabrication guarantee.
 
@@ -334,6 +336,10 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 
 ### Parsing and manufacturing geometry
 
+<p align="center">
+  <img src="docs/assets/photonx_parser_decision_flow.svg" alt="PHOTONX parser strict and permissive decision flow" width="100%">
+</p>
+
 | Capability | Status | Current behavior |
 |---|---|---|
 | Gerber linear draws / flashes | **Implemented subset** | Strict RS-274X subset with provenance |
@@ -434,6 +440,10 @@ Risk scores and synthesized constraints are review aids. They do **not** replace
 ## KiCad export policy
 
 KiCad export is intentionally conservative.
+
+<p align="center">
+  <img src="docs/assets/photonx_kicad_export_flow.svg" alt="PHOTONX KiCad export and native validation decision flow" width="100%">
+</p>
 
 - Pads, tracks, nets, and board outlines can be represented in the experimental PCB export path.
 - NPTH slots can be exported when their semantics are known.
@@ -568,7 +578,7 @@ The GitHub Actions matrix runs the regression suite on:
 - Python 3.12
 - Python 3.13
 
-For verified commit **`96cbda6`**, each matrix job completed successfully with:
+For verified commit **`0d0475a`**, each matrix job completed successfully with:
 
 ```text
 615 passed, 2 warnings
@@ -576,7 +586,7 @@ For verified commit **`96cbda6`**, each matrix job completed successfully with:
 
 The two pytest warnings are collection warnings for a model class named `TestPointCandidate`; the CI jobs still complete successfully.
 
-[Open the verified workflow run](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35378099287).
+[Open the verified workflow run](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35378371092).
 
 ---
 
