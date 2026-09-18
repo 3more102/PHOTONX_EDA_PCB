@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="560" viewBox="0 0 1500 560" role="img" aria-labelledby="title desc">
+<title id="title">PHOTONX Evidence Escalation Flow</title>
+<desc id="desc">A source artifact produces observed facts, deterministic derivations, bounded inferences and only then higher-confidence engineering claims. Unknown facts remain unresolved.</desc>
+<defs>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#64748b"/></marker>
+  <style>
+    .t1{font:700 34px Inter,Segoe UI,Arial,sans-serif;fill:#111827}.sub{font:400 17px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+    .box{stroke-width:2;rx:18;ry:18}.t{font:700 19px Inter,Segoe UI,Arial,sans-serif;fill:#111827}.s{font:400 14px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+    .a{stroke:#64748b;stroke-width:3;fill:none;marker-end:url(#arrow)}.u{stroke:#dc2626;stroke-width:3;fill:none;stroke-dasharray:8 7;marker-end:url(#arrow)}
+  </style>
+</defs>
+<rect width="1500" height="560" fill="#ffffff"/>
+<text x="70" y="62" class="t1">PHOTONX Evidence Escalation</text>
+<text x="70" y="95" class="sub">Confidence increases only through evidence and explicit transformation — never through convenience.</text>
+
+<rect x="70" y="180" width="220" height="96" class="box" fill="#e0f2fe" stroke="#0284c7"/>
+<text x="180" y="216" text-anchor="middle" class="t">Source Artifact</text>
+<text x="180" y="242" text-anchor="middle" class="s">Gerber · drill · BOM · PnP</text>
+
+<rect x="350" y="180" width="220" height="96" class="box" fill="#ecfeff" stroke="#0891b2"/>
+<text x="460" y="216" text-anchor="middle" class="t">Observed Fact</text>
+<text x="460" y="242" text-anchor="middle" class="s">directly present in source</text>
+
+<rect x="630" y="180" width="220" height="96" class="box" fill="#eef2ff" stroke="#4f46e5"/>
+<text x="740" y="216" text-anchor="middle" class="t">Derived Fact</text>
+<text x="740" y="242" text-anchor="middle" class="s">deterministic transformation</text>
+
+<rect x="910" y="180" width="220" height="96" class="box" fill="#f5f3ff" stroke="#7c3aed"/>
+<text x="1020" y="216" text-anchor="middle" class="t">Inference</text>
+<text x="1020" y="242" text-anchor="middle" class="s">bounded hypothesis + confidence</text>
+
+<rect x="1190" y="180" width="240" height="96" class="box" fill="#ecfdf5" stroke="#059669"/>
+<text x="1310" y="216" text-anchor="middle" class="t">Engineering Claim</text>
+<text x="1310" y="242" text-anchor="middle" class="s">requires corroboration</text>
+
+<path d="M290 228 H350" class="a"/><path d="M570 228 H630" class="a"/><path d="M850 228 H910" class="a"/><path d="M1130 228 H1190" class="a"/>
+
+<rect x="520" y="380" width="460" height="96" class="box" fill="#fff1f2" stroke="#dc2626"/>
+<text x="750" y="416" text-anchor="middle" class="t">UNKNOWN / UNRESOLVED</text>
+<text x="750" y="442" text-anchor="middle" class="s">Missing evidence stays visible. It is not promoted into a fact.</text>
+
+<path d="M460 276 C460 330 620 330 620 380" class="u"/>
+<path d="M740 276 V380" class="u"/>
+<path d="M1020 276 C1020 330 880 330 880 380" class="u"/>
+
+<text x="70" y="525" class="sub">Examples: unknown plating · unknown layer span · unknown value/MPN · unknown original net name · unknown design intent</text>
+</svg>
