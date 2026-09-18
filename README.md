@@ -347,7 +347,7 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 
 | Capability | Status | Current behavior |
 |---|---|---|
-| Gerber linear draws / flashes | **Implemented subset** | Strict RS-274X subset with provenance |
+| Gerber linear draws / flashes | **Implemented subset** | Solid C/R/O standard apertures are reconstructed with provenance; holed standard apertures fail closed |
 | Gerber X2 file polarity | **Partial** | Explicit `Positive` is accepted; `Negative` fails closed because absence-of-material image inversion is not yet modeled |
 | Gerber C/R/O apertures | **Implemented** | Used by the production geometry path |
 | Gerber step-and-repeat | **Implemented subset** | Supported linear draws/flashes/outlines are expanded deterministically with source provenance |
