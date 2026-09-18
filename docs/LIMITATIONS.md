@@ -34,6 +34,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - non-default legacy Gerber `AS/IP/MI/OF` transforms: strict mode rejects them and permissive mode suppresses file geometry rather than emitting untransformed coordinates/image semantics;
 - Gerber incremental coordinates, whether selected by `G91` or legacy FS `I` notation such as `%FSLIX...*%`: strict mode rejects them, permissive mode suppresses file geometry, and preflight marks them as blockers rather than interpreting increments as absolute;
 - Excellon incremental coordinates selected by legacy `G91` or `ICI,ON`: strict mode rejects them, permissive mode clears/suppresses file geometry, and preflight blocks strict reconstruction rather than interpreting deltas as absolute positions;
+- Excellon tool definitions before explicit `METRIC/INCH/M71/M72` units: strict mode rejects them and permissive mode suppresses file geometry instead of assuming the parser's default millimeter state;
 - Excellon routed-arc dialects outside the bounded I/J center-offset subset and the standard XNC X/Y/A radius form;
 - automatic original net names when source data does not prove them;
 - definite component references/values from pad geometry alone;

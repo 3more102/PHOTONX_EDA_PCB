@@ -350,6 +350,8 @@ class ExcellonParser:
                             line_no,
                         )
                     )
+                    self._disable_geometry(out)
+                    continue
                 tool,diameter=m.groups();self.tools[tool]=to_mm(float(diameter),self.units);continue
             m=_TOOL_SEL.match(line)
             if m:
