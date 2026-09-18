@@ -210,18 +210,124 @@ def test_g75_arc_on_edge_cuts_becomes_outline_segments(tmp_path):
     )
 
 
-def test_g74_single_quadrant_mode_remains_explicitly_unsupported(tmp_path):
-    p = tmp_path / "g74.gbr"
+def test_g74_ccw_quarter_arc_resolves_unsigned_center(tmp_path):
+    p = tmp_path / "g74_ccw.gbr"
     p.write_text(
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
         "%ADD10C,0.200*%\n"
         "D10*\n"
         "G74*\n"
+        "X110000Y060000D02*\n"
+        "G03*\n"
+        "X070000Y100000I040000J000000D01*\n"
         "M02*\n"
     )
 
-    with pytest.raises(UnsupportedFeatureError):
+    result = GerberRS274XParser("F.Cu").parse(p)
+
+    assert len(result.tracks) > 1
+    assert result.tracks[0].start.x == pytest.approx(11.0)
+    assert result.tracks[0].start.y == pytest.approx(6.0)
+    assert result.tracks[-1].end.x == pytest.approx(7.0)
+    assert result.tracks[-1].end.y == pytest.approx(10.0)
+    assert all(
+        any(
+            ev.kind == "gerber_arc_tessellation"
+            and "quadrant_mode=single" in ev.detail
+            for ev in track.provenance.evidence
+        )
+        for track in result.tracks
+    )
+
+
+def test_g74_four_quadrants_follow_unsigned_center_semantics(tmp_path):
+    p = tmp_path / "g74_four_quadrants.gbr"
+    p.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "G74*\n"
+        "X110000Y060000D02*\n"
+        "G03*\n"
+        "X070000Y100000I040000J000000D01*\n"
+        "X030000Y060000I000000J040000D01*\n"
+        "X070000Y020000I040000J000000D01*\n"
+        "X110000Y060000I000000J040000D01*\n"
+        "M02*\n"
+    )
+
+    result = GerberRS274XParser("F.Cu").parse(p)
+
+    assert len(result.tracks) > 4
+    assert result.tracks[0].start.x == pytest.approx(11.0)
+    assert result.tracks[0].start.y == pytest.approx(6.0)
+    assert result.tracks[-1].end.x == pytest.approx(11.0)
+    assert result.tracks[-1].end.y == pytest.approx(6.0)
+    assert all(
+        any(
+            ev.kind == "gerber_arc_tessellation"
+            and "quadrant_mode=single" in ev.detail
+            for ev in track.provenance.evidence
+        )
+        for track in result.tracks
+    )
+
+
+def test_g74_zero_length_arc_emits_no_geometry(tmp_path):
+    p = tmp_path / "g74_zero_length.gbr"
+    p.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "G74*\n"
+        "X010000Y010000D02*\n"
+        "G03*\n"
+        "X010000Y010000I010000J000000D01*\n"
+        "M02*\n"
+    )
+
+    result = GerberRS274XParser("F.Cu").parse(p)
+
+    assert result.tracks == []
+    assert result.diagnostics == []
+
+
+def test_g74_rejects_signed_center_distances(tmp_path):
+    p = tmp_path / "g74_signed.gbr"
+    p.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "G74*\n"
+        "X110000Y060000D02*\n"
+        "G03*\n"
+        "X070000Y100000I-040000J000000D01*\n"
+        "M02*\n"
+    )
+
+    with pytest.raises(ParseError):
+        GerberRS274XParser("F.Cu", strict=True).parse(p)
+
+
+def test_g74_rejects_arc_over_90_degrees(tmp_path):
+    p = tmp_path / "g74_over_90.gbr"
+    p.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "G74*\n"
+        "X010000Y000000D02*\n"
+        "G03*\n"
+        "X-010000Y000000I010000J000000D01*\n"
+        "M02*\n"
+    )
+
+    with pytest.raises(ParseError):
         GerberRS274XParser("F.Cu", strict=True).parse(p)
 
 

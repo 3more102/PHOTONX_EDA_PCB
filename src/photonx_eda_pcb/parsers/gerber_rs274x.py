@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import pi
 from pathlib import Path
 import re
 
 from ..aperture_macros import evaluate_macro, parse_macro_body
 from ..errors import ParseError, UnsupportedFeatureError
-from ..gerber_geometry.arc import ArcSpec, arc_points, segments_for_chord_error, validate_arc
+from ..gerber_geometry.arc import (
+    ArcSpec,
+    arc_points,
+    arc_radii,
+    segments_for_chord_error,
+    sweep_radians,
+    validate_arc,
+)
 from ..gerber_geometry.model import GeoPoint
 from ..ids import stable_id
 from ..models import OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
@@ -82,8 +90,8 @@ class GerberRS274XParser:
     """Strict, auditable RS-274X subset parser.
 
     Supported: FS, MO, ADD(C/R/O), Dnn selection, G01/D01/D02/D03,
-    G75 multi-quadrant G02/G03 circular interpolation with I/J center
-    offsets and circular apertures, G04, M02, and standard linear
+    bounded G74 single-quadrant and G75 multi-quadrant G02/G03 circular
+    interpolation with circular apertures, G04, M02, and standard linear
     step-and-repeat (%SR...*% / %SR*%).
 
     Unsupported constructs are never silently discarded in strict mode.
@@ -364,6 +372,145 @@ class GerberRS274XParser:
         y_resolution = to_mm(10 ** (-self.yfmt.decimal), self.units)
         return max(1e-6, 2.0 * max(x_resolution, y_resolution))
 
+    def _resolve_arc_center(
+        self,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+        nxt: Point,
+        i_raw: str | None,
+        j_raw: str | None,
+        clockwise: bool,
+    ) -> Point | None:
+        if self.quadrant_mode == "multi":
+            if i_raw is None and j_raw is None:
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "GERBER_ARC_CENTER_MISSING",
+                    "G75 arc draw requires I/J center offsets",
+                    out,
+                )
+                return None
+            i_mm = 0.0 if i_raw is None else self._decode(i_raw, "x")
+            j_mm = 0.0 if j_raw is None else self._decode(j_raw, "y")
+            return Point(self.current.x + i_mm, self.current.y + j_mm)
+
+        if self.quadrant_mode != "single":
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_ARC_QUADRANT_UNSUPPORTED",
+                "arc draw requires explicit G74 or G75 quadrant mode",
+                out,
+            )
+            return None
+
+        if i_raw is None or j_raw is None:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_G74_CENTER_MISSING",
+                "G74 single-quadrant arcs require both unsigned I and J distances",
+                out,
+            )
+            return None
+
+        i_mm = self._decode(i_raw, "x")
+        j_mm = self._decode(j_raw, "y")
+        if i_mm < 0 or j_mm < 0:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_G74_SIGNED_OFFSET",
+                "G74 I/J values are unsigned center distances",
+                out,
+            )
+            return None
+
+        radius_tolerance = self._arc_radius_tolerance_mm()
+        candidates: list[tuple[float, float, Point]] = []
+        seen: set[tuple[float, float]] = set()
+
+        for x_sign in (-1.0, 1.0):
+            for y_sign in (-1.0, 1.0):
+                center = Point(
+                    self.current.x + x_sign * i_mm,
+                    self.current.y + y_sign * j_mm,
+                )
+                key = (round(center.x, 15), round(center.y, 15))
+                if key in seen:
+                    continue
+                seen.add(key)
+                spec = ArcSpec(
+                    GeoPoint(self.current.x, self.current.y),
+                    GeoPoint(nxt.x, nxt.y),
+                    GeoPoint(center.x, center.y),
+                    clockwise=clockwise,
+                )
+                try:
+                    start_radius, end_radius = arc_radii(spec)
+                    validate_arc(
+                        spec,
+                        rel_tol=1e-6,
+                        abs_tol=radius_tolerance,
+                    )
+                    sweep = abs(
+                        sweep_radians(
+                            spec,
+                            rel_tol=1e-6,
+                            abs_tol=radius_tolerance,
+                        )
+                    )
+                except ValueError:
+                    continue
+                if sweep > (pi / 2) + 1e-9:
+                    continue
+                candidates.append(
+                    (abs(start_radius - end_radius), sweep, center)
+                )
+
+        if not candidates:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_G74_CENTER_UNRESOLVED",
+                (
+                    "no G74 center candidate satisfies the requested direction, "
+                    "radius tolerance, and <=90 degree sweep"
+                ),
+                out,
+            )
+            return None
+
+        candidates.sort(
+            key=lambda item: (item[0], item[1], item[2].x, item[2].y)
+        )
+        best_deviation = candidates[0][0]
+        tie_tolerance = max(1e-12, radius_tolerance * 1e-6)
+        best = [
+            item
+            for item in candidates
+            if abs(item[0] - best_deviation) <= tie_tolerance
+        ]
+        if len(best) != 1:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_G74_CENTER_AMBIGUOUS",
+                "multiple G74 center candidates have the same least deviation",
+                out,
+            )
+            return None
+        return best[0][2]
+
     def _emit_arc(
         self,
         path: Path,
@@ -375,13 +522,13 @@ class GerberRS274XParser:
         j_raw: str | None,
         clockwise: bool,
     ) -> None:
-        if self.quadrant_mode != "multi":
+        if self.quadrant_mode not in {"single", "multi"}:
             self._fail_or_warn(
                 path,
                 line_no,
                 line,
                 "GERBER_ARC_QUADRANT_UNSUPPORTED",
-                "only explicit G75 multi-quadrant arcs are supported",
+                "arc draw requires explicit G74 or G75 quadrant mode",
                 out,
             )
             self.current = nxt
@@ -426,21 +573,44 @@ class GerberRS274XParser:
             self.current = nxt
             return
 
-        if i_raw is None and j_raw is None:
-            self._parse_error_or_warn(
-                path,
-                line_no,
-                line,
-                "GERBER_ARC_CENTER_MISSING",
-                "G75 arc draw requires I/J center offsets",
-                out,
-            )
+        if self.quadrant_mode == "single" and self.current == nxt:
+            if i_raw is None or j_raw is None:
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "GERBER_G74_CENTER_MISSING",
+                    "G74 single-quadrant zero-length arc still requires I and J",
+                    out,
+                )
+            else:
+                i_mm = self._decode(i_raw, "x")
+                j_mm = self._decode(j_raw, "y")
+                if i_mm < 0 or j_mm < 0:
+                    self._parse_error_or_warn(
+                        path,
+                        line_no,
+                        line,
+                        "GERBER_G74_SIGNED_OFFSET",
+                        "G74 I/J values are unsigned center distances",
+                        out,
+                    )
             self.current = nxt
             return
 
-        i_mm = 0.0 if i_raw is None else self._decode(i_raw, "x")
-        j_mm = 0.0 if j_raw is None else self._decode(j_raw, "y")
-        center = Point(self.current.x + i_mm, self.current.y + j_mm)
+        center = self._resolve_arc_center(
+            path,
+            line_no,
+            line,
+            out,
+            nxt,
+            i_raw,
+            j_raw,
+            clockwise,
+        )
+        if center is None:
+            self.current = nxt
+            return
         spec = ArcSpec(
             GeoPoint(self.current.x, self.current.y),
             GeoPoint(nxt.x, nxt.y),
@@ -474,7 +644,7 @@ class GerberRS274XParser:
                 line_no,
                 line,
                 "GERBER_ARC_INVALID",
-                f"invalid G75 arc geometry ({exc})",
+                f"invalid {self.quadrant_mode.upper()} arc geometry ({exc})",
                 out,
             )
             self.current = nxt
@@ -522,6 +692,7 @@ class GerberRS274XParser:
                     Evidence(
                         "gerber_arc_tessellation",
                         (
+                            f"quadrant_mode={self.quadrant_mode}; "
                             f"direction={direction}; "
                             f"center_mm=({repeated_center.x:.12g},"
                             f"{repeated_center.y:.12g}); "
@@ -675,14 +846,6 @@ class GerberRS274XParser:
 
             if line in {"G74*", "G074*"}:
                 self.quadrant_mode = "single"
-                self._fail_or_warn(
-                    p,
-                    line_no,
-                    line,
-                    "GERBER_SINGLE_QUADRANT_ARC_UNSUPPORTED",
-                    "G74 single-quadrant arc center disambiguation is not implemented",
-                    out,
-                )
                 continue
 
             if line in {"G01*", "G1*"}:
@@ -691,26 +854,26 @@ class GerberRS274XParser:
 
             if line in {"G02*", "G2*"}:
                 self.interpolation = "cw_arc"
-                if self.quadrant_mode != "multi":
+                if self.quadrant_mode not in {"single", "multi"}:
                     self._fail_or_warn(
                         p,
                         line_no,
                         line,
                         "GERBER_ARC_QUADRANT_UNSUPPORTED",
-                        "G02 arc mode requires explicit G75 in the supported subset",
+                        "G02 arc mode requires explicit G74 or G75",
                         out,
                     )
                 continue
 
             if line in {"G03*", "G3*"}:
                 self.interpolation = "ccw_arc"
-                if self.quadrant_mode != "multi":
+                if self.quadrant_mode not in {"single", "multi"}:
                     self._fail_or_warn(
                         p,
                         line_no,
                         line,
                         "GERBER_ARC_QUADRANT_UNSUPPORTED",
-                        "G03 arc mode requires explicit G75 in the supported subset",
+                        "G03 arc mode requires explicit G74 or G75",
                         out,
                     )
                 continue

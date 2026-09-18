@@ -83,7 +83,9 @@ The generic input path also handles several common real-world variations:
 - headerless Excellon-like packages are detected, but PHOTONX will not silently
   guess their units;
 - simple parameterized Gerber aperture macros that resolve to one positive,
-  centered circle are accepted as exact circular apertures.
+  centered circle are accepted as exact circular apertures;
+- legacy Gerber G74 single-quadrant arcs are accepted only when unsigned I/J
+  distances resolve to one unambiguous center with a sweep of at most 90 degrees.
 
 Discovery reads only a bounded prefix of each candidate file rather than loading
 entire files into memory. Binary-looking files containing NUL bytes in the

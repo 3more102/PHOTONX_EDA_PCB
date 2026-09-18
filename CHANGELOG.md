@@ -11,7 +11,8 @@
 - Added coordinate-resolution-aware radius validation and deterministic arc tessellation with a 0.005 mm chord-error target.
 - Added explicit `gerber_arc_tessellation` provenance evidence and step-repeat composition for generated arc segments.
 - Added safe production support for single positive centered-circle Gerber aperture macros, including parameterized diameters and active-unit conversion.
-- Kept G74 single-quadrant arcs, regions, complex aperture macros, and aperture blocks explicitly unsupported.
+- Added bounded legacy G74 single-quadrant G02/G03 arc support using unsigned I/J distances, four-candidate center resolution, <=90-degree sweep enforcement, and fail-closed ambiguity handling.
+- Kept Gerber regions, complex aperture macros, and aperture blocks explicitly unsupported.
 
 ## 0.2.0
 
