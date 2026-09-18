@@ -13,7 +13,7 @@ from ..provenance import Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
 from .excellon_parts.slots import parse_slot_command
 
-_TOOL_DEF = re.compile(r"^T(\\d+)C([0-9.]+)(?:F[0-9.]+)?(?:S[0-9.]+)?$")
+_TOOL_DEF = re.compile(r"^T(\d+)C([0-9.]+)(?:F[0-9.]+)?(?:S[0-9.]+)?$")
 _TOOL_SEL = re.compile(r"^T(\d+)$")
 _HIT = re.compile(r"^(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?$")
 
