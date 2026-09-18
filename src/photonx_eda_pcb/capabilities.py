@@ -21,7 +21,7 @@ CAPABILITIES=[
     Capability("Excellon drill hits","implemented","Point hits with explicitly declared metric/inch units and positive tool diameters; tool definitions before unit declaration or zero-diameter tools fail closed."),
     Capability("Excellon coordinate mode","partial","Absolute coordinates, including explicit G90/ICI,OFF, are supported; incremental G91/ICI,ON fails closed and suppresses permissive file geometry."),
     Capability("Excellon G85 slots","implemented","Straight canned slots with explicit endpoints are reconstructed."),
-    Capability("Excellon linear routing","implemented","G00/M15/G01/M16 linear routed paths are reconstructed."),
+    Capability("Excellon linear routing","implemented","G00/M15/G01/M16 linear routed paths are reconstructed; malformed commands or invalid route-state transitions fail closed and suppress permissive file geometry."),
     Capability("Excellon routed arcs","partial","G02/G03 routed arcs support the bounded I/J center-offset subset plus standard XNC X/Y/A radius form (<=180 degrees), with deterministic tessellation; unsupported or invalid arc semantics fail closed and suppress permissive file geometry."),
     Capability("Excellon slots/routes","partial","G85 straight slots plus G00/M15/G01 linear routing and bounded G02/G03 circular routes are supported, including I/J center offsets and standard XNC A-radius form."),
     Capability("Physical copper connectivity","implemented","Geometry-overlap graph with deterministic IDs."),
