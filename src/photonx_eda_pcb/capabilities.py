@@ -9,7 +9,7 @@ class Capability:
 
 CAPABILITIES=[
     Capability("Generic manufacturing package input","implemented","Directory, single-file, ZIP, TAR, TAR.GZ, and TGZ ingestion with recursive discovery, content sniffing, X2/filename layer inference, parser-backed preflight, and bounded safe extraction."),
-    Capability("Legacy Gerber compatibility","partial","Supports G70/G71 units, G90 absolute mode, standalone/modal D01/D02/D03 operations, UTF-8 BOM, and identity legacy transforms; G91 and non-identity transforms remain fail-closed."),
+    Capability("Legacy Gerber compatibility","partial","Supports G70/G71 units, G90 absolute mode, standalone/modal D01/D02/D03 operations, UTF-8 BOM, and identity legacy transforms; G91 and non-identity AS/IP/MI/OF transforms remain fail-closed, with permissive geometry suppression for transform semantics."),
     Capability("Gerber linear draws/flashes","partial","Circular-aperture D01 draws and positive-size solid C/R/O flashes are reconstructed exactly; zero-size apertures, non-circular draws, and holed apertures fail closed instead of being approximated."),
     Capability("Gerber X2 file polarity","partial","Explicit Positive file polarity is accepted; Negative polarity fails closed because absence-of-material image inversion is not yet modeled."),
     Capability("Gerber layer polarity","partial","Dark LPD polarity is supported; clear LPC polarity fails closed because ordered clear/dark image subtraction is not yet modeled."),
