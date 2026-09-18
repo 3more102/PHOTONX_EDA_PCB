@@ -88,5 +88,5 @@ sniff window are ignored by content detection.
 PHOTONX still rejects or explicitly diagnoses semantics that would be unsafe to
 guess, including Gerber G91 incremental coordinates, non-identity legacy
 transforms, Gerber regions/aperture macros not supported by the production
-geometry path, and Excellon routed arcs. An input being discovered does not mean
+geometry path, and Excellon routed-arc dialects outside the bounded G02/G03 I/J subset. An input being discovered does not mean
 every construct inside it is automatically accepted.

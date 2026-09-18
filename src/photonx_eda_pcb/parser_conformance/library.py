@@ -9,5 +9,6 @@ def builtin_cases():
         ConformanceCase("excellon-basic","excellon","M48\nMETRIC\nT01C0.800\n%\nT01\nX1.000Y1.000\nX2.000Y2.000\nM30\n",ConformanceExpectation({"drills":2,"slots":0,"routes":0})),
         ConformanceCase("excellon-g85-slot","excellon","M48\nMETRIC\nT01C0.800\n%\nT01\nX1.000Y2.000G85X3.000Y2.000\nM30\n",ConformanceExpectation({"drills":0,"slots":1,"routes":0})),
         ConformanceCase("excellon-linear-route","excellon","M48\nMETRIC\nT01C0.800\n%\nT01\nG00X1.000Y1.000\nM15\nG01X2.000Y1.000\nM16\nM30\n",ConformanceExpectation({"drills":0,"slots":0,"routes":1})),
-        ConformanceCase("excellon-route-arc-strict","excellon","M48\nMETRIC\nT01C0.800\n%\nT01\nG02X1Y1\nM30\n",ConformanceExpectation(exception_type="UnsupportedFeatureError")),
+        ConformanceCase("excellon-ij-route-arc","excellon","M48\nMETRIC\nT01C0.800\n%\nT01\nG00X10.000Y0.000\nM15\nG03X0.000Y10.000I-10.000J0.000\nM16\nM30\n",ConformanceExpectation({"drills":0,"slots":0,"routes":1})),
+        ConformanceCase("excellon-radius-route-arc-strict","excellon","M48\nMETRIC\nT01C0.800\n%\nT01\nG00X10.000Y0.000\nM15\nG03X0.000Y10.000A10.000\nM30\n",ConformanceExpectation(exception_type="UnsupportedFeatureError")),
     ]

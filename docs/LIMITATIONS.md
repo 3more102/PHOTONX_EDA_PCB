@@ -20,7 +20,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 ## Deliberately rejected instead of faked
 
 - G74 single-quadrant Gerber arcs, Gerber regions, aperture macros and aperture blocks;
-- Excellon routed slots/routes;
+- Excellon routed arcs outside the bounded G02/G03 I/J center-offset subset, including radius/A-form dialects;
 - automatic original net names when source data does not prove them;
 - definite component references/values from pad geometry alone;
 - plated-vs-non-plated claims without source evidence;

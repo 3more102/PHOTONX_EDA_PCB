@@ -3,19 +3,25 @@ from dataclasses import dataclass, field
 import re
 from pathlib import Path
 from ..errors import ParseError, UnsupportedFeatureError
+from ..gerber_geometry.arc import ArcSpec, arc_points, segments_for_chord_error, validate_arc
+from ..gerber_geometry.model import GeoPoint
 from ..ids import stable_id
 from ..models import Point, DrillHit, ParseDiagnostic
 from ..mechanical_features.model import SlotFeature
 from ..excellon_routing.model import RoutedPath
 from ..excellon_routing.state import LinearRouteState
 from ..excellon_routing.commands import parse_linear_route_command,classify_route_control
-from ..provenance import Provenance, SourceRef
+from ..excellon_routing.arc_commands import parse_arc_route_command
+from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
 from .excellon_parts.slots import parse_slot_command
 
 _TOOL_DEF = re.compile(r"^T(\d+)C([0-9.]+)(?:F[0-9.]+)?(?:S[0-9.]+)?$")
 _TOOL_SEL = re.compile(r"^T(\d+)$")
 _HIT = re.compile(r"^(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?$")
+
+_ROUTE_ARC_MAX_CHORD_ERROR_MM = 0.005
+_ROUTE_ARC_MAX_SEGMENTS = 4096
 
 @dataclass
 class ExcellonResult:
@@ -27,13 +33,14 @@ class ExcellonResult:
 class ExcellonParser:
     """Strict point-drill/G85 parser with conservative linear route support.
 
-    Supported route sequence: G00 position -> M15 -> one or more G01 -> M16/M17.
-    G02/G03 routed arcs remain unsupported.
+    Supported route sequence: G00 position -> M15 -> G01 and/or bounded
+    G02/G03 I/J circular interpolation -> M16/M17. Routed arcs are converted
+    to deterministic polyline points with explicit approximation evidence.
     """
     def __init__(self, strict: bool = True):
         self.strict = strict; self.units = "mm"; self.zero = "L"; self.units_declared = False
         self.fmt = CoordinateFormat(2, 4, "L"); self.tools = {}; self.tool = None; self.current = Point(0.0, 0.0)
-        self.route=LinearRouteState();self._route_sources=[]
+        self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
 
     def _decode(self, raw):
         if raw is None:return None
@@ -43,6 +50,100 @@ class ExcellonParser:
     def _route_xy(self,xraw,yraw):
         x=self._decode(xraw);y=self._decode(yraw)
         return (self.current.x if x is None else x,self.current.y if y is None else y)
+
+    def _route_arc_tolerance_mm(self):
+        # Keep tolerance below one coordinate grid step so very small but
+        # valid routed arcs are not mistaken for zero-radius geometry.
+        resolution = to_mm(10 ** (-self.fmt.decimal), self.units)
+        return max(1e-9, 0.25 * resolution)
+
+    def _route_arc(self,p,out,line_no,line):
+        try:
+            command,xraw,yraw,iraw,jraw=parse_arc_route_command(line)
+        except ValueError:
+            if self.strict:
+                raise UnsupportedFeatureError(
+                    f"{p}:{line_no}: unsupported Excellon routed-arc syntax: {line}"
+                )
+            out.diagnostics.append(
+                ParseDiagnostic(
+                    "warning",
+                    "UNSUPPORTED_EXCELLON_ROUTE_ARC_SYNTAX",
+                    line,
+                    str(p),
+                    line_no,
+                )
+            )
+            return
+
+        if not self.route.tool_down:
+            message="routed arc requires G00/M15 before G02/G03"
+            if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}")
+            out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_SEQUENCE",message,str(p),line_no));return
+
+        if self.tool is None or self.tool not in self.tools:
+            raise ParseError(f"{p}:{line_no}: routed arc before valid tool selection")
+
+        if iraw is None and jraw is None:
+            message="G02/G03 routed arc requires I/J center offsets"
+            if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}")
+            out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_ARC_CENTER",message,str(p),line_no));return
+
+        x,y=self._route_xy(xraw,yraw)
+        i=0.0 if iraw is None else self._decode(iraw)
+        j=0.0 if jraw is None else self._decode(jraw)
+        center=(self.current.x+i,self.current.y+j)
+        spec=ArcSpec(
+            GeoPoint(self.current.x,self.current.y),
+            GeoPoint(x,y),
+            GeoPoint(center[0],center[1]),
+            clockwise=command=="G02",
+        )
+        tolerance=self._route_arc_tolerance_mm()
+
+        try:
+            radius=validate_arc(spec,rel_tol=1e-6,abs_tol=tolerance)
+            segment_count=segments_for_chord_error(
+                spec,
+                _ROUTE_ARC_MAX_CHORD_ERROR_MM,
+                max_segments=_ROUTE_ARC_MAX_SEGMENTS,
+                rel_tol=1e-6,
+                abs_tol=tolerance,
+            )
+            points=arc_points(
+                spec,
+                segments=segment_count,
+                rel_tol=1e-6,
+                abs_tol=tolerance,
+            )
+        except ValueError as exc:
+            message=f"invalid Excellon routed arc ({exc})"
+            if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
+            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_ARC_INVALID",message,str(p),line_no));return
+
+        try:
+            for point in points[1:]:
+                self.route.line(point.x,point.y)
+        except RuntimeError as exc:
+            if self.strict:raise ParseError(f"{p}:{line_no}: {exc}")
+            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no));return
+
+        src=SourceRef(str(p),line_no,line)
+        self._route_sources.append(src)
+        self._route_evidence.append(
+            Evidence(
+                "excellon_route_arc_tessellation",
+                (
+                    f"direction={'CW' if command=='G02' else 'CCW'}; "
+                    f"center_mm=({center[0]:.12g},{center[1]:.12g}); "
+                    f"radius_mm={radius:.12g}; segments={segment_count}; "
+                    f"max_chord_error_mm={_ROUTE_ARC_MAX_CHORD_ERROR_MM:.12g}"
+                ),
+                1.0,
+                src,
+            )
+        )
+        self.current=Point(x,y)
 
     def _finish_route(self,p,out,line_no,line):
         try:pts=self.route.raise_tool()
@@ -54,9 +155,9 @@ class ExcellonParser:
             out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_EMPTY","route ended without a segment",str(p),line_no));return
         if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: route before valid tool selection")
         rid=stable_id("route",p.name,pts,self.tool,self.tools[self.tool])
-        prov=Provenance(list(self._route_sources),[])
+        prov=Provenance(list(self._route_sources),list(self._route_evidence))
         out.routes.append(RoutedPath(rid,pts,self.tools[self.tool],"unknown",f"T{self.tool}",prov))
-        self._route_sources=[]
+        self._route_sources=[];self._route_evidence=[]
 
     def parse(self,path:str|Path)->ExcellonResult:
         p=Path(path);out=ExcellonResult()
@@ -88,8 +189,7 @@ class ExcellonParser:
                 out.slots.append(SlotFeature(slot_id,(x1,y1),(x2,y2),self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],[])))
                 self.current=Point(x2,y2);continue
             if line.startswith(("G02","G03")):
-                if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: routed Excellon arc geometry is not implemented: {line}")
-                out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_ARC",line,str(p),line_no));continue
+                self._route_arc(p,out,line_no,line);continue
             if line.startswith(("G00","G01")):
                 cmd, xraw, yraw = None, None, None
                 try:cmd,xraw,yraw=parse_linear_route_command(line)
@@ -102,7 +202,7 @@ class ExcellonParser:
                     except RuntimeError as exc:
                         if self.strict:raise ParseError(f"{p}:{line_no}: {exc}")
                         out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no));continue
-                    self.current=Point(x,y);self._route_sources=[src];continue
+                    self.current=Point(x,y);self._route_sources=[src];self._route_evidence=[];continue
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: linear route before valid tool selection")
                 if not self.route.tool_down:
                     if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: standalone G01 routing is unsupported; use G00/M15/G01/M16 sequence")
