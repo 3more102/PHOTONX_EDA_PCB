@@ -1,5 +1,9 @@
 # PHOTONX EDA PCB
 
+[![CI](https://github.com/3more102/PHOTONX_EDA_PCB/actions/workflows/tests.yml/badge.svg)](https://github.com/3more102/PHOTONX_EDA_PCB/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
+![Version](https://img.shields.io/badge/version-0.2.0-informational)
+
 PHOTONX is an **evidence-driven PCB manufacturing-data reconstruction and reverse-engineering platform**.
 
 It is designed to recover defensible physical structure, connectivity, manufacturing evidence, and higher-level engineering hypotheses from PCB manufacturing data without pretending that lost design intent is magically known.
@@ -7,12 +11,25 @@ It is designed to recover defensible physical structure, connectivity, manufactu
 > **Core rule:** unknown stays unknown.  
 > PHOTONX preserves provenance, confidence, assumptions, conflicts, and unresolved state instead of replacing missing information with plausible-looking guesses.
 
+## At a glance
+
+| Area | Current state |
+|---|---|
+| Primary inputs | Gerber / Excellon manufacturing data, plus optional reference evidence such as BOM and pick-and-place data |
+| Physical reconstruction | Geometry, drills/slots, copper connectivity, physical nets, board material, and evidence-backed multilayer reasoning |
+| Higher-level reconstruction | Component/footprint hypotheses, semantic evidence, schematic graph, functional blocks, and review-oriented engineering analysis |
+| Outputs | Auditable JSON/reports, editable/review artifacts, and experimental KiCad board/schematic export |
+| Truth model | **Observed → Derived → Inferred → Unknown**; missing source facts are not silently invented |
+| Verified main snapshot | **18 Sep 2026 — `fcc9904`**; GitHub Actions passed on Python 3.11, 3.12, and 3.13 with **615 passed, 2 warnings** in each matrix job |
+
+[View the verified CI run](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35375960572).
+
 ## Project status
 
 - Package version: **0.2.0**
 - Python: **3.11+**
 - Main dependencies: **NetworkX** and **Shapely**
-- Latest green CI at this README update: **615 tests passed** on Python **3.11, 3.12, and 3.13**
+- Verified main snapshot: **18 Sep 2026**, commit **`fcc9904`** — CI passed on Python **3.11, 3.12, and 3.13**, with **615 passed, 2 warnings** per matrix job
 - Development state: active engineering platform with strict parser boundaries, evidence tracking, reconstruction, analysis, GUI/schematic tooling, regression infrastructure, release governance, and milestone-readiness checks
 
 PHOTONX is **not** a complete CAM replacement, electrical sign-off tool, or fabrication guarantee.
@@ -36,6 +53,17 @@ Gerber, Excellon, fabrication artifacts, BOMs, pick-and-place files, IPC-style n
 - or engineering rationale.
 
 PHOTONX therefore treats reverse engineering as an **evidence pipeline**, not as image-to-BOM magic.
+
+### Evidence states used throughout PHOTONX
+
+| State | Meaning | Example |
+|---|---|---|
+| **Observed** | Present directly in a source artifact | Gerber flash geometry, Excellon drill coordinate, source attribute |
+| **Derived** | Deterministically computed from observed evidence | Copper contact, board bounds, connected physical island |
+| **Inferred** | A hypothesis supported by evidence and confidence | Component type, semantic net role, functional block |
+| **Unknown** | Not defensibly recoverable from the available evidence | Original design intent, missing value/MPN, unproven plating or layer span |
+
+This distinction is carried into provenance, review, validation, export, and readiness logic.
 
 ---
 
@@ -328,6 +356,22 @@ If `kicad-cli` is unavailable, PHOTONX records that fact. It does not claim nati
 ```bash
 photonx gui examples/PHOTONX_LED_TEST/input
 ```
+
+### Included regression fixture
+
+`examples/PHOTONX_LED_TEST/` is intentionally **synthetic**. It is a compact end-to-end regression fixture, not a claimed recovery of an unknown production PCB.
+
+Its expected model is:
+
+| Object | Expected count |
+|---|---:|
+| Pad candidates | 6 |
+| Copper tracks | 4 |
+| Drill hits | 6 |
+| Board-outline segments | 4 |
+| Physical copper islands | 3 |
+
+The fixture exercises Gerber flashes/linear draws, Excellon point drills, drill-to-pad evidence association, physical connectivity, component hypotheses, validation, JSON output, and KiCad export.
 
 ---
 
