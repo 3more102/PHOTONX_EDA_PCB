@@ -15,7 +15,7 @@ PHOTONX converts PCB manufacturing evidence into an auditable engineering model:
 > **Core rule: unknown stays unknown.**  
 > PHOTONX records provenance, confidence, assumptions, conflicts, omissions, and unresolved state instead of silently turning missing design intent into plausible-looking facts.
 
-**Jump to:** [Quick start](#quick-start) · [Use cases](#where-photonx-fits) · [Pipeline](#reconstruction-pipeline) · [Architecture](#architecture-layers) · [Evidence model](#evidence-model) · [Capabilities](#capability-matrix) · [Python API](#python-api) · [Review checklist](#how-to-review-a-reconstruction) · [Verification](#verification-and-ci) · [Roadmap](#roadmap) · [Documentation](#documentation)
+**Jump to:** [Quick start](#quick-start) · [Use cases](#where-photonx-fits) · [Flow charts](#reconstruction-flow-chart) · [Pipeline](#reconstruction-pipeline) · [Architecture](#architecture-layers) · [Evidence model](#evidence-model) · [Capabilities](#capability-matrix) · [Python API](#python-api) · [Review checklist](#how-to-review-a-reconstruction) · [Verification](#verification-and-ci) · [Roadmap](#roadmap) · [Documentation](#documentation)
 
 ---
 
@@ -226,24 +226,9 @@ If `kicad-cli` is unavailable, PHOTONX records that state. It does not claim nat
 
 ## Reconstruction flow chart
 
-```mermaid
-flowchart LR
-    A[Manufacturing Files] --> B[Discovery]
-    B --> C[Strict Parsing]
-    C --> D[Normalized Geometry]
-    D --> E[Physical Connectivity]
-    E --> F[Physical Nets]
-    F --> G[Component Hypotheses]
-    G --> H[Semantic Evidence]
-    H --> I[Schematic / Functional Blocks]
-    D --> J[DRC / ERC / Engineering Checks]
-    I --> K[Review / Editing]
-    J --> L[Validation / Provenance]
-    K --> M[JSON / Reports / KiCad]
-    L --> N[Regression / Round-Trip]
-    M --> N
-    N --> O[Release / Readiness]
-```
+<p align="center">
+  <img src="docs/assets/photonx_reconstruction_flow.svg" alt="PHOTONX end-to-end reconstruction flow" width="100%">
+</p>
 
 **Flow summary:** manufacturing evidence is parsed into normalized physical objects, converted into connectivity and physical-net evidence, enriched with bounded hypotheses, independently validated, then exported and audited. Unknown facts remain explicit instead of being silently invented.
 
@@ -251,31 +236,7 @@ flowchart LR
 
 ## Reconstruction pipeline
 
-```mermaid
-flowchart TD
-    A[Manufacturing and reference evidence] --> B[Discovery and classification]
-    B --> C[Strict Gerber / Excellon parsing]
-    C --> D[Normalized geometry]
-    D --> E[Shared geometry kernel]
-    E --> F[Spatial candidate indexing]
-    F --> G[Physical copper connectivity]
-    F --> H[Drill / via / slot / mechanical association]
-    G --> I[Physical-net reconstruction]
-    H --> I
-    I --> J[Component / footprint hypotheses]
-    J --> K[Semantic evidence resolution]
-    K --> L[Net names / references / identities]
-    K --> M[Protocols / buses / clocks / reset / power]
-    L --> N[Schematic graph and functional blocks]
-    M --> N
-    N --> O[Review / editing / auto-layout]
-    O --> P[JSON / report / KiCad export]
-    E --> Q[DRC / ERC / manufacturing analysis]
-    Q --> R[Evidence database / provenance / review]
-    P --> S[Round-trip / regression / release audit]
-    R --> S
-    S --> T[Release profiles and milestone readiness]
-```
+The rendered flow chart above shows the complete end-to-end path. The key implementation constraints behind that flow are:
 
 ### Architectural invariants
 
@@ -337,6 +298,10 @@ Every important reconstructed statement should fall into one of four states:
 | **Unknown** | Not defensibly recoverable from available evidence | Missing value/MPN, original intent, unproven plating or layer span |
 
 This distinction feeds provenance, conflict handling, review workflows, validation, exports, and readiness logic.
+
+<p align="center">
+  <img src="docs/assets/photonx_evidence_flow.svg" alt="PHOTONX evidence escalation flow" width="100%">
+</p>
 
 ### Examples of conservative interpretation
 
@@ -559,14 +524,10 @@ At no point should a missing source fact move upward merely because a plausible 
 
 PHOTONX separates different kinds of confidence instead of collapsing them into one “pass/fail” claim.
 
-```mermaid
-flowchart LR
-    A[Parser acceptance] --> B[Geometry / model validation]
-    B --> C[Connectivity / inference checks]
-    C --> D[Regression and fault injection]
-    D --> E[Round-trip / export checks]
-    E --> F[Release / readiness aggregation]
-```
+<p align="center">
+  <img src="docs/assets/photonx_validation_flow.svg" alt="PHOTONX validation and release flow" width="100%">
+</p>
+
 
 | Layer | Question answered |
 |---|---|
