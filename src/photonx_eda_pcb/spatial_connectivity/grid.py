@@ -17,4 +17,6 @@ class SpatialHashIndex:
             for iy in self._range(box.min_y,box.max_y):ids.update(self._cells.get((ix,iy),()))
         return sorted(x for x in ids if self._boxes[x].intersects(box))
     def box(self,obj_id):return self._boxes[str(obj_id)]
+    def ids(self):return tuple(sorted(self._boxes))
+    def boxes(self):return {k:self._boxes[k] for k in sorted(self._boxes)}
     def __len__(self):return len(self._boxes)
