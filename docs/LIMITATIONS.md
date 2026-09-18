@@ -31,6 +31,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - X2 `.FilePolarity,Negative` image inversion: strict mode rejects it, while permissive mode records the unsupported semantic and suppresses all geometry from that file rather than treating clearances as positive material;
 - Gerber `%LPC*%` clear layer polarity: strict mode rejects it, while permissive mode suppresses the file geometry because clear objects subtract from previously created image content and object ordering matters;
 - non-identity Gerber aperture mirroring/rotation/scaling (`LM/LR/LS`): strict mode rejects them, while permissive mode suppresses file geometry because these graphics-state transforms alter flashes, draws, and arcs;
+- non-default legacy Gerber `AS/IP/MI/OF` transforms: strict mode rejects them and permissive mode suppresses file geometry rather than emitting untransformed coordinates/image semantics;
 - Excellon routed-arc dialects outside the bounded I/J center-offset subset and the standard XNC X/Y/A radius form;
 - automatic original net names when source data does not prove them;
 - definite component references/values from pad geometry alone;
