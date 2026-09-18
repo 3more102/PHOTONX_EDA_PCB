@@ -118,6 +118,7 @@ class GerberRS274XParser:
         self.strict = strict
         self.units = "mm"
         self.units_declared = False
+        self.format_declared = False
         self.xfmt = CoordinateFormat(2, 4, "L")
         self.yfmt = CoordinateFormat(2, 4, "L")
         self.apertures: dict[int, Aperture] = {}
@@ -195,6 +196,62 @@ class GerberRS274XParser:
                 "Gerber dimensional data encountered before explicit "
                 "MO/G70/G71 unit declaration"
             ),
+            out,
+        )
+        if not self.strict:
+            self._disable_image_geometry(out)
+        return False
+
+    def _declare_format(
+        self,
+        xfmt: CoordinateFormat,
+        yfmt: CoordinateFormat,
+        path: Path,
+        line_no: int,
+        raw: str,
+        out: GerberLayerResult,
+    ) -> bool:
+        if self.format_declared:
+            if self.xfmt != xfmt or self.yfmt != yfmt:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    raw,
+                    "CONFLICTING_GERBER_FORMAT",
+                    (
+                        "Gerber coordinate format changed after it was already "
+                        f"declared ({self.xfmt.integer}.{self.xfmt.decimal}/"
+                        f"{self.yfmt.integer}.{self.yfmt.decimal} -> "
+                        f"{xfmt.integer}.{xfmt.decimal}/"
+                        f"{yfmt.integer}.{yfmt.decimal})"
+                    ),
+                    out,
+                )
+                if not self.strict:
+                    self._disable_image_geometry(out)
+                return False
+            return True
+
+        self.xfmt = xfmt
+        self.yfmt = yfmt
+        self.format_declared = True
+        return True
+
+    def _require_format(
+        self,
+        path: Path,
+        line_no: int,
+        raw: str,
+        out: GerberLayerResult,
+    ) -> bool:
+        if self.format_declared:
+            return True
+        self._parse_error_or_warn(
+            path,
+            line_no,
+            raw,
+            "GERBER_FORMAT_UNDECLARED",
+            "Gerber coordinate data encountered before explicit FS declaration",
             out,
         )
         if not self.strict:
@@ -1121,8 +1178,9 @@ class GerberRS274XParser:
             m = _FS.match(line)
             if m:
                 zs, notation, xi, xd, yi, yd = m.groups()
-                self.xfmt = CoordinateFormat(int(xi), int(xd), zs)
-                self.yfmt = CoordinateFormat(int(yi), int(yd), zs)
+                xfmt = CoordinateFormat(int(xi), int(xd), zs)
+                yfmt = CoordinateFormat(int(yi), int(yd), zs)
+                self._declare_format(xfmt, yfmt, p, line_no, line, out)
                 if notation == "I":
                     self._fail_or_warn(
                         p,
@@ -1291,6 +1349,8 @@ class GerberRS274XParser:
             if arc_match:
                 if not self._require_units(p, line_no, line, out):
                     continue
+                if not self._require_format(p, line_no, line, out):
+                    continue
                 gcode, x_raw, y_raw, i_raw, j_raw, op = arc_match.groups()
                 operation = op or self.current_operation
                 if op is not None:
@@ -1380,6 +1440,8 @@ class GerberRS274XParser:
             m = _COORD.match(line)
             if m:
                 if not self._require_units(p, line_no, line, out):
+                    continue
+                if not self._require_format(p, line_no, line, out):
                     continue
                 x_raw, y_raw, op = m.groups()
                 operation = op or self.current_operation
