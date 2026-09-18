@@ -1,0 +1,1 @@
+[{"id":"e1","object_id":"pad:1","kind":"geometry","confidence":0.8,"source":"top.gbr","detail":"flash","group":"gerber"},{"id":"e2","object_id":"pad:1","kind":"mask","confidence":0.7,"source":"topmask.gbr","detail":"opening","group":"mask"}]

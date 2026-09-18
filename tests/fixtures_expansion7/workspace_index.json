@@ -1,0 +1,1 @@
+[{"path":"fab/top.gbr","role":"gerber_copper","size":100,"tags":["top","copper"]},{"path":"fab/board.drl","role":"excellon","size":40,"tags":["drill"]}]

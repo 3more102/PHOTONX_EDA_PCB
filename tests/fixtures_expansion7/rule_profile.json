@@ -1,0 +1,1 @@
+{"name":"fixture","min_track_mm":0.15,"min_clearance_mm":0.15,"min_drill_mm":0.2,"min_annular_mm":0.1,"min_mask_sliver_mm":0.1,"net_overrides":{"VCC":{"min_track_mm":0.5}}}
