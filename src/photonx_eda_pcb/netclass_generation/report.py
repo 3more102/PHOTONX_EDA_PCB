@@ -1,0 +1,1 @@
+def generated_netclass_report(items):return [{"name":x.name,"nets":list(x.nets),"min_width_mm":x.min_width_mm,"clearance_mm":x.clearance_mm,"confidence":x.confidence,"source_roles":list(x.source_roles)} for x in items]

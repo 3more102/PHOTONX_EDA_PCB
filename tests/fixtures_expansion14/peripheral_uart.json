@@ -1,0 +1,1 @@
+{"protocol":"UART","nets":["tx","rx"],"components":{"U1":"mcu","J1":"connector"},"labels":{"tx":"UART_TX","rx":"UART_RX"}}

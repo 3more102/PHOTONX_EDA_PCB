@@ -1,0 +1,2 @@
+CLASS_DEFAULTS={"ground":{"min_width_mm":.2,"clearance_mm":.15},"power":{"min_width_mm":.3,"clearance_mm":.2},"differential":{"min_width_mm":.15,"clearance_mm":.15,"diff_pair_gap_mm":.15},"high_speed":{"min_width_mm":.15,"clearance_mm":.18},"clock":{"min_width_mm":.15,"clearance_mm":.2},"reset":{"min_width_mm":.15,"clearance_mm":.15},"signal":{"min_width_mm":.15,"clearance_mm":.15}}
+def defaults_for(role):return dict(CLASS_DEFAULTS.get(str(role),CLASS_DEFAULTS["signal"]))
