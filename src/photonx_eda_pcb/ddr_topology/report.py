@@ -1,0 +1,1 @@
+def ddr_report(t):return {"controller":t.controller,"memories":list(t.memories),"confidence":t.confidence,"lanes":[{"name":x.name,"role":x.role,"nets":list(x.nets),"confidence":x.confidence} for x in t.lanes],"evidence":list(t.evidence)}

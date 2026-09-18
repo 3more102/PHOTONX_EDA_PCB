@@ -1,0 +1,1 @@
+def supply_domain_report(items):return [{"name":x.name,"supply_nets":list(x.supply_nets),"ground_nets":list(x.ground_nets),"components":list(x.components),"voltage":x.voltage,"confidence":x.confidence} for x in items]
