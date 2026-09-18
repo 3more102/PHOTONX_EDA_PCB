@@ -39,8 +39,13 @@ def validate_arc(
     return start_radius
 
 
-def sweep_radians(spec: ArcSpec) -> float:
-    validate_arc(spec)
+def sweep_radians(
+    spec: ArcSpec,
+    *,
+    rel_tol: float = 1e-6,
+    abs_tol: float = 1e-6,
+) -> float:
+    validate_arc(spec, rel_tol=rel_tol, abs_tol=abs_tol)
     a = atan2(spec.start.y - spec.center.y, spec.start.x - spec.center.x)
     b = atan2(spec.end.y - spec.center.y, spec.end.x - spec.center.x)
     delta = b - a
@@ -57,6 +62,8 @@ def segments_for_chord_error(
     max_chord_error_mm: float = 0.005,
     *,
     max_segments: int = 4096,
+    rel_tol: float = 1e-6,
+    abs_tol: float = 1e-6,
 ) -> int:
     """Choose a deterministic tessellation count bounded by chord sagitta."""
     if max_chord_error_mm <= 0:
@@ -64,8 +71,8 @@ def segments_for_chord_error(
     if max_segments < 1:
         raise ValueError("max_segments must be positive")
 
-    radius = validate_arc(spec)
-    sweep = abs(sweep_radians(spec))
+    radius = validate_arc(spec, rel_tol=rel_tol, abs_tol=abs_tol)
+    sweep = abs(sweep_radians(spec, rel_tol=rel_tol, abs_tol=abs_tol))
     topology_limit = pi / 2
 
     ratio = min(max_chord_error_mm / radius, 2.0)
@@ -86,18 +93,22 @@ def arc_points(
     *,
     max_chord_error_mm: float = 0.005,
     max_segments: int = 4096,
+    rel_tol: float = 1e-6,
+    abs_tol: float = 1e-6,
 ) -> list[GeoPoint]:
     """Return deterministic arc points.
 
     Passing segments=None enables adaptive tessellation using the requested
     maximum chord error. Explicit segments remains supported for compatibility.
     """
-    radius = validate_arc(spec)
+    radius = validate_arc(spec, rel_tol=rel_tol, abs_tol=abs_tol)
     if segments is None:
         segments = segments_for_chord_error(
             spec,
             max_chord_error_mm,
             max_segments=max_segments,
+            rel_tol=rel_tol,
+            abs_tol=abs_tol,
         )
     if segments < 1:
         raise ValueError("segments must be positive")
@@ -106,7 +117,7 @@ def arc_points(
         spec.start.y - spec.center.y,
         spec.start.x - spec.center.x,
     )
-    sweep = sweep_radians(spec)
+    sweep = sweep_radians(spec, rel_tol=rel_tol, abs_tol=abs_tol)
     points = [
         GeoPoint(
             spec.center.x + radius * cos(start_angle + sweep * i / segments),
