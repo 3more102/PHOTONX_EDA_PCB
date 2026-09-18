@@ -42,7 +42,7 @@ def _npth_slot_lines(slot,report):
 def _plated_slot_lines(board,slot,net_num,report):
     inf=infer_plated_slot_padstack(board,slot)
     if inf.padstack is None:
-        _record_skip(report,slot,"KICAD_SLOT_PLATED_PADSTACK_UNRESOLVED",";".join(inf.blockers));return []
+        _record_skip(report,slot,"KICAD_SLOT_PLATED_UNSUPPORTED",";".join(inf.blockers));return []
     p=inf.padstack;shape=pad_shape_name(p.pad_shape);n=net_num.get(p.net_id,0)
     net_name=next((net.label or net.id for net in board.nets if net.id==p.net_id),"")
     layer_tokens=" ".join(_q(x) for x in p.layers)+' "*.Mask"'

@@ -12,5 +12,5 @@ def test_plated_slot_with_conflicting_nets_is_skipped(tmp_path):
     assert 'RecoveredPlatedSlot' not in p.read_text()
     assert r.skipped_slot_ids==["S"]
     issue=r.issues[0]
-    assert issue.code=="KICAD_SLOT_PLATED_PADSTACK_UNRESOLVED"
+    assert issue.code=="KICAD_SLOT_PLATED_UNSUPPORTED"
     assert "SLOT_PAD_NET_CONFLICT" in issue.message
