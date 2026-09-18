@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass,field
 from .models import BoardModel
+from .excellon_routing.validation import validate_route
 
 @dataclass(frozen=True)
 class ValidationIssue:
@@ -21,7 +22,7 @@ class ValidationReport:
 
 def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationReport:
     r=ValidationReport()
-    all_objects=[*board.tracks,*board.pads,*board.drills,*board.outline,*getattr(board,"slots",())]
+    all_objects=[*board.tracks,*board.pads,*board.drills,*board.outline,*getattr(board,"slots",()),*getattr(board,"routes",())]
     ids=[o.id for o in all_objects]
     if len(ids)!=len(set(ids)):r.issues.append(ValidationIssue("error","DUPLICATE_OBJECT_ID","object IDs must be globally unique"))
     idx=board.object_index();net_members=set()
@@ -42,6 +43,10 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
         if float(slot.width_mm)<=0:r.issues.append(ValidationIssue("error","SLOT_WIDTH_INVALID","slot width must be positive",(slot.id,)))
         if tuple(slot.start)==tuple(slot.end):r.issues.append(ValidationIssue("warning","SLOT_ZERO_LENGTH","slot start and end are identical",(slot.id,)))
         if slot.plated not in {"unknown","plated","non-plated","non_plated"}:r.issues.append(ValidationIssue("warning","SLOT_PLATING_UNKNOWN_ENUM",f"unexpected slot plating value {slot.plated}",(slot.id,)))
+    for route in getattr(board,"routes",()):
+        for code in validate_route(route):
+            sev="warning" if code=="ROUTE_ZERO_LENGTH_SEGMENT" else "error"
+            r.issues.append(ValidationIssue(sev,code,code.replace("_"," ").lower(),(route.id,)))
     if board.outline:
         degree={}
         def key(pt):return (round(pt.x/outline_tolerance_mm)*outline_tolerance_mm,round(pt.y/outline_tolerance_mm)*outline_tolerance_mm)

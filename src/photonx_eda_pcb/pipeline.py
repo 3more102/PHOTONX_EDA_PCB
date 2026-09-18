@@ -20,7 +20,7 @@ def reconstruct(directory:str|Path,config:ReconstructionConfig|None=None)->Recon
     for item in files:
         if item.kind=="drill":
             r=ExcellonParser(strict=cfg.strict_parsing).parse(item.path)
-            board.drills.extend(r.drills);board.slots.extend(r.slots);board.diagnostics.extend(r.diagnostics);continue
+            board.drills.extend(r.drills);board.slots.extend(r.slots);board.routes.extend(r.routes);board.diagnostics.extend(r.diagnostics);continue
         layer=item.layer
         if layer is None:
             board.diagnostics.append(ParseDiagnostic("warning","UNKNOWN_LAYER","Gerber file skipped because layer could not be inferred",str(item.path)));continue

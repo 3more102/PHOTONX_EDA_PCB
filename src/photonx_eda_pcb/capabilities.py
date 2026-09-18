@@ -9,9 +9,10 @@ CAPABILITIES=[
     Capability("Gerber linear draws/flashes","implemented","Strict RS-274X subset; unsupported syntax is reported, not ignored."),
     Capability("Gerber arcs/regions/macros","not_implemented","Rejected in strict mode to prevent silent geometry corruption."),
     Capability("Excellon drill hits","implemented","Metric/inch tool definitions and point hits."),
-    Capability("Excellon slots/routes","partial","G85 canned slots with explicit endpoints are reconstructed; G00/G01/G02/G03 routed geometry remains unsupported."),
+    Capability("Excellon G85 slots","implemented","Straight canned slots with explicit endpoints are reconstructed."),
+    Capability("Excellon linear routing","partial","G00/M15/G01/M16 linear routed paths are reconstructed; G02/G03 routed arcs remain unsupported."),
     Capability("Physical copper connectivity","implemented","Geometry-overlap graph with deterministic IDs."),
     Capability("Logical net names","not_inferable","Manufacturing layers generally do not preserve original schematic net names."),
     Capability("Component hypotheses","implemented","Heuristic hypotheses only; never promoted to fact without evidence."),
-    Capability("KiCad board export","experimental","Structured export; external kicad-cli validation is used when available."),
+    Capability("KiCad board export","experimental","Structured export; arbitrary Excellon routed paths are explicitly omitted until equivalent semantics are available."),
 ]
