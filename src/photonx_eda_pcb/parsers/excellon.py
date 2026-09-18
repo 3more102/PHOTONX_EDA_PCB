@@ -52,8 +52,10 @@ class ExcellonParser:
         return (self.current.x if x is None else x,self.current.y if y is None else y)
 
     def _route_arc_tolerance_mm(self):
+        # Keep tolerance below one coordinate grid step so very small but
+        # valid routed arcs are not mistaken for zero-radius geometry.
         resolution = to_mm(10 ** (-self.fmt.decimal), self.units)
-        return max(1e-6, 2.0 * resolution)
+        return max(1e-9, 0.25 * resolution)
 
     def _route_arc(self,p,out,line_no,line):
         try:
