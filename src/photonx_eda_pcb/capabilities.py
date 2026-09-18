@@ -8,7 +8,7 @@ class Capability:
     note:str
 
 CAPABILITIES=[
-    Capability("Generic manufacturing package input","implemented","Directory, single-file, and ZIP ingestion with recursive discovery, content sniffing, X2/filename layer inference, and parser-backed preflight."),
+    Capability("Generic manufacturing package input","implemented","Directory, single-file, ZIP, TAR, TAR.GZ, and TGZ ingestion with recursive discovery, content sniffing, X2/filename layer inference, parser-backed preflight, and bounded safe extraction."),
     Capability("Legacy Gerber compatibility","partial","Supports G70/G71 units, G90 absolute mode, standalone/modal D01/D02/D03 operations, UTF-8 BOM, and identity legacy transforms; G91 and non-identity transforms remain fail-closed."),
     Capability("Gerber linear draws/flashes","implemented","Strict RS-274X subset; unsupported syntax is reported, not ignored."),
     Capability("Gerber step-and-repeat","implemented","Linear draws, flashes, and outlines are expanded deterministically with source provenance and unit-aware offsets."),

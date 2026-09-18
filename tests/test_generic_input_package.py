@@ -1,4 +1,6 @@
 from pathlib import Path
+import io
+import tarfile
 import zipfile
 
 import pytest
@@ -100,3 +102,55 @@ def test_preflight_accepts_supported_g75_arc(tmp_path: Path):
     )
     report = preflight(tmp_path)
     assert report.ready_for_strict_reconstruction
+
+
+
+@pytest.mark.parametrize(
+    ("suffix", "mode"),
+    [
+        (".tar", "w"),
+        (".tgz", "w:gz"),
+    ],
+)
+def test_tar_family_package_can_be_reconstructed(tmp_path: Path, suffix: str, mode: str):
+    archive = tmp_path / f"board{suffix}"
+    payload = GERBER_LINEAR.encode("utf-8")
+
+    with tarfile.open(archive, mode) as tf:
+        info = tarfile.TarInfo("nested/top.gtl")
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+
+    result = reconstruct(archive)
+
+    assert result.board.metadata["input_kind"] == "tar"
+    assert result.board.metadata["manufacturing_file_count"] == 1
+    assert len(result.board.tracks) == 1
+
+
+def test_tar_path_traversal_is_rejected(tmp_path: Path):
+    archive = tmp_path / "unsafe.tar"
+    payload = GERBER_LINEAR.encode("utf-8")
+
+    with tarfile.open(archive, "w") as tf:
+        info = tarfile.TarInfo("../escape.gtl")
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+
+    with pytest.raises(ValueError, match="unsafe archive member"):
+        with prepare_input(archive):
+            pass
+
+
+def test_tar_links_are_rejected(tmp_path: Path):
+    archive = tmp_path / "unsafe-link.tar"
+
+    with tarfile.open(archive, "w") as tf:
+        info = tarfile.TarInfo("nested/top.gtl")
+        info.type = tarfile.SYMTYPE
+        info.linkname = "../../outside.gtl"
+        tf.addfile(info)
+
+    with pytest.raises(ValueError, match="archive links are not allowed"):
+        with prepare_input(archive):
+            pass

@@ -1,12 +1,14 @@
 # Generic manufacturing input
 
-PHOTONX accepts three input shapes through the production reconstruction path:
+PHOTONX accepts multiple input shapes through the production reconstruction path:
 
 - a directory containing Gerber/Excellon data;
 - a single manufacturing file;
-- a ZIP package containing a manufacturing-data tree.
+- a ZIP package;
+- a TAR package;
+- a compressed TAR package such as TAR.GZ or TGZ.
 
-Directory and ZIP discovery is recursive. Detection does not rely only on file
+Directory and archive discovery is recursive. Detection does not rely only on file
 extensions: PHOTONX inspects file content for Gerber/Excellon signatures and
 uses Gerber X2 `TF.FileFunction` metadata when available to infer the PCB
 layer.
@@ -17,6 +19,7 @@ Run a parser-backed compatibility check before reconstruction:
 
 ```bash
 photonx preflight board.zip
+photonx preflight board.tgz
 photonx preflight board.zip --output preflight.json
 ```
 
@@ -31,6 +34,7 @@ can actually consume rather than claiming support based only on a filename.
 
 ```bash
 photonx reconstruct board.zip --output out --kicad
+photonx reconstruct board.tgz --output out --kicad
 ```
 
 Strict reconstruction is the default. If preflight finds syntax that the
@@ -90,3 +94,18 @@ guess, including Gerber G91 incremental coordinates, non-identity legacy
 transforms, Gerber regions/aperture macros not supported by the production
 geometry path, and Excellon routed-arc dialects outside the bounded G02/G03 I/J subset. An input being discovered does not mean
 every construct inside it is automatically accepted.
+
+
+## Archive safety
+
+ZIP, TAR, TAR.GZ, and TGZ packages are extracted into temporary private
+directories. PHOTONX validates archive members before extraction and rejects:
+
+- path traversal outside the temporary extraction root;
+- symbolic and hard links in TAR-family packages;
+- device/FIFO special files;
+- packages exceeding the configured entry-count limit;
+- packages whose declared expanded size exceeds the configured safety limit.
+
+The archive is only a transport container. After extraction, the same recursive
+content-aware Gerber/Excellon discovery and preflight path is used.
