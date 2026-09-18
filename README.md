@@ -351,7 +351,8 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Gerber C/R/O apertures | **Implemented** | Used by the production geometry path |
 | Gerber step-and-repeat | **Implemented subset** | Supported linear draws/flashes/outlines are expanded deterministically with source provenance |
 | Gerber G75 circular arcs | **Partial** | Multi-quadrant G02/G03 arcs with I/J center offsets and circular apertures; deterministic tessellation with explicit provenance |
-| Gerber G74 arcs / regions / macros | **Not implemented** | Single-quadrant arcs, regions, aperture macros, and aperture blocks remain fail-closed |
+| Gerber simple aperture macros | **Partial** | Single positive centered circle macros, including parameterized diameters, are reduced exactly to circular apertures |
+| Gerber G74 arcs / regions / complex macros | **Not implemented** | Single-quadrant arcs, regions, complex aperture macros, and aperture blocks remain fail-closed |
 | Excellon point drill hits | **Implemented** | Metric/inch tools and drill hits |
 | Excellon G85 straight slots | **Implemented** | Straight canned slots reconstructed from explicit endpoints |
 | Excellon linear routing | **Implemented** | G00/M15/G01/M16 linear routed paths supported |
@@ -623,7 +624,7 @@ Without independent evidence, manufacturing geometry generally cannot prove:
 
 - The production Gerber path is still a declared subset, not the full language.
 - G75 multi-quadrant circular arcs are supported only for I/J center offsets with circular draw apertures and are represented by explicitly evidenced tessellation.
-- G74 single-quadrant arcs, Gerber regions, aperture macros, and aperture blocks remain outside the declared production high-level parser.
+- Single positive centered-circle Gerber aperture macros are supported; G74 single-quadrant arcs, Gerber regions, complex aperture macros, and aperture blocks remain outside the declared production high-level parser.
 - Excellon G02/G03 routed arcs are supported for the bounded I/J center-offset subset; radius/A-form dialects remain unsupported.
 - Some low-level helpers may recognize constructs that the high-level reconstruction path does not yet claim as production support.
 
@@ -680,7 +681,7 @@ The current roadmap keeps the highest-risk gaps explicit rather than masking the
 
 **Primary future work includes:**
 
-- broader Gerber support, including regions, aperture macros/blocks, and G74 single-quadrant arc semantics;
+- broader Gerber support, including regions, more aperture macro primitives/blocks, and G74 single-quadrant arc semantics;
 - richer Gerber X2 attribute handling;
 - broader Excellon route/slot dialect support, including radius/A-form routed arcs and additional vendor variants;
 - stronger multilayer via-span reasoning;

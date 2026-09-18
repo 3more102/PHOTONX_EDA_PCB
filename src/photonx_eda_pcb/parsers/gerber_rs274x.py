@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import re
 
+from ..aperture_macros import evaluate_macro, parse_macro_body
 from ..errors import ParseError, UnsupportedFeatureError
 from ..gerber_geometry.arc import ArcSpec, arc_points, segments_for_chord_error, validate_arc
 from ..gerber_geometry.model import GeoPoint
@@ -18,6 +19,7 @@ from .gerber_parts.tokenizer import iter_gerber_statements
 _FS = re.compile(r"^%FS([LT])A?X(\d)(\d)Y(\d)(\d)\*%$")
 _MO = re.compile(r"^%MO(MM|IN)\*%$")
 _AD = re.compile(r"^%ADD(\d+)([CRO]),?([0-9.]+)(?:X([0-9.]+))?\*%$")
+_AD_MACRO = re.compile(r"^%ADD(\d+)([A-Za-z_.$][A-Za-z0-9_.$-]*)(?:,([^*]*))?\*%$")
 _SELECT = re.compile(r"^(?:G54)?D(\d+)\*$")
 _OP_SELECT = re.compile(r"^D0?([123])\*$")
 _COORD = re.compile(
@@ -94,6 +96,8 @@ class GerberRS274XParser:
         self.xfmt = CoordinateFormat(2, 4, "L")
         self.yfmt = CoordinateFormat(2, 4, "L")
         self.apertures: dict[int, Aperture] = {}
+        self.aperture_macros: dict[str, str] = {}
+        self.unsupported_apertures: set[int] = set()
         self.current_aperture: int | None = None
         self.current = Point(0.0, 0.0)
         self.step_repeat: StepRepeat | None = None
@@ -114,6 +118,136 @@ class GerberRS274XParser:
         fmt = self.xfmt if axis == "x" else self.yfmt
         value = float(raw) if "." in raw else fmt.decode(raw)
         return to_mm(value, self.units)
+
+    def _register_aperture_macro(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        inner = line[3:-1] if line.endswith("%") else line[3:]
+        if "*" not in inner:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_APERTURE_MACRO",
+                "aperture macro has no body",
+                out,
+            )
+            return
+        name, body = inner.split("*", 1)
+        name = name.strip()
+        if not name:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_APERTURE_MACRO",
+                "aperture macro has no name",
+                out,
+            )
+            return
+        self.aperture_macros[name] = body
+
+    def _instantiate_macro_aperture(
+        self,
+        code: int,
+        name: str,
+        modifier_text: str | None,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+    ) -> None:
+        body = self.aperture_macros.get(name)
+        if body is None:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "UNKNOWN_GERBER_APERTURE_MACRO",
+                f"aperture macro {name!r} is not defined",
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
+        try:
+            raw_modifiers = [] if not modifier_text else modifier_text.split("X")
+            variables = {
+                str(index + 1): float(value)
+                for index, value in enumerate(raw_modifiers)
+                if value != ""
+            }
+            primitives = parse_macro_body(body)
+            evaluated = evaluate_macro(primitives, variables)
+        except (ValueError, SyntaxError, ZeroDivisionError) as exc:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_APERTURE_MACRO",
+                f"aperture macro {name!r} could not be evaluated ({exc})",
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
+        if len(evaluated) != 1 or evaluated[0]["kind"] != "circle":
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                (
+                    f"aperture macro {name!r} is not a single positive "
+                    "centered circle"
+                ),
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
+        values = evaluated[0]["values"]
+        if len(values) < 4:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_APERTURE_MACRO",
+                f"circle aperture macro {name!r} has too few modifiers",
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
+        exposure, diameter, center_x, center_y = values[:4]
+        rotation = values[4] if len(values) > 4 else 0.0
+        if (
+            exposure != 1
+            or diameter <= 0
+            or abs(center_x) > 1e-12
+            or abs(center_y) > 1e-12
+            or abs(rotation) > 1e-12
+        ):
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                (
+                    f"aperture macro {name!r} requires unsupported exposure, "
+                    "offset, rotation, or diameter semantics"
+                ),
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
+        diameter_mm = to_mm(float(diameter), self.units)
+        self.apertures[code] = Aperture(code, "C", diameter_mm, diameter_mm)
 
     def _step_repeat_provenance(
         self,
@@ -257,6 +391,24 @@ class GerberRS274XParser:
             self.current_aperture is None
             or self.current_aperture not in self.apertures
         ):
+            if (
+                not self.strict
+                and self.current_aperture in self.unsupported_apertures
+            ):
+                out.diagnostics.append(
+                    ParseDiagnostic(
+                        "warning",
+                        "GERBER_APERTURE_GEOMETRY_SKIPPED",
+                        (
+                            "arc geometry skipped because the selected "
+                            "aperture macro is unsupported"
+                        ),
+                        str(path),
+                        line_no,
+                    )
+                )
+                self.current = nxt
+                return
             raise ParseError(
                 f"{path}:{line_no}: arc draw before valid aperture selection"
             )
@@ -477,12 +629,30 @@ class GerberRS274XParser:
                 )
                 continue
 
+            if line.startswith("%AM"):
+                self._register_aperture_macro(line, p, line_no, out)
+                continue
+
             m = _AD.match(line)
             if m:
                 code, shape, a, b = m.groups()
                 ax = to_mm(float(a), self.units)
                 ay = to_mm(float(b), self.units) if b else ax
                 self.apertures[int(code)] = Aperture(int(code), shape, ax, ay)
+                continue
+
+            m = _AD_MACRO.match(line)
+            if m:
+                code, name, modifiers = m.groups()
+                self._instantiate_macro_aperture(
+                    int(code),
+                    name,
+                    modifiers,
+                    p,
+                    line_no,
+                    line,
+                    out,
+                )
                 continue
 
             m = _SELECT.match(line)
@@ -613,9 +783,7 @@ class GerberRS274XParser:
                     )
                     continue
 
-            if line.startswith(("G36", "G37")) or line.startswith(
-                ("%AM", "%AB")
-            ):
+            if line.startswith(("G36", "G37")) or line.startswith("%AB"):
                 self._fail_or_warn(
                     p,
                     line_no,
@@ -659,6 +827,24 @@ class GerberRS274XParser:
                     self.current_aperture is None
                     or self.current_aperture not in self.apertures
                 ):
+                    if (
+                        not self.strict
+                        and self.current_aperture in self.unsupported_apertures
+                    ):
+                        out.diagnostics.append(
+                            ParseDiagnostic(
+                                "warning",
+                                "GERBER_APERTURE_GEOMETRY_SKIPPED",
+                                (
+                                    "geometry skipped because the selected "
+                                    "aperture macro is unsupported"
+                                ),
+                                str(p),
+                                line_no,
+                            )
+                        )
+                        self.current = nxt
+                        continue
                     raise ParseError(
                         f"{p}:{line_no}: draw/flash before valid aperture selection"
                     )
