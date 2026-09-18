@@ -94,3 +94,39 @@ def test_preflight_blocks_holed_standard_aperture(tmp_path: Path):
     assert report.discovered_files == 1
     assert not report.ready_for_strict_reconstruction
     assert report.strict_blockers
+
+
+def test_zero_circle_diameter_fails_closed_in_strict_mode(tmp_path: Path):
+    path = _write(tmp_path, "%ADD10C,0.000*%")
+
+    with pytest.raises(ParseError, match="diameter must be positive"):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
+def test_zero_circle_diameter_skips_permissive_geometry(tmp_path: Path):
+    path = _write(tmp_path, "%ADD10C,0.000*%")
+
+    result = GerberRS274XParser("F.Cu", strict=False).parse(path)
+
+    assert result.pads == []
+    assert any(
+        diagnostic.code == "INVALID_GERBER_STANDARD_APERTURE_SIZE"
+        for diagnostic in result.diagnostics
+    )
+    assert any(
+        diagnostic.code == "GERBER_APERTURE_GEOMETRY_SKIPPED"
+        for diagnostic in result.diagnostics
+    )
+
+
+def test_preflight_blocks_zero_circle_diameter(tmp_path: Path):
+    path = _write(tmp_path, "%ADD10C,0.000*%")
+
+    report = preflight(path)
+
+    assert report.discovered_files == 1
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "INVALID_GERBER_STANDARD_APERTURE_SIZE" in blocker
+        for blocker in report.strict_blockers
+    )
