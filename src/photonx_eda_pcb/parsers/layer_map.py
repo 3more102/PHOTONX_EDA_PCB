@@ -19,6 +19,13 @@ _SUFFIXES = {
     ".gml": "Edge.Cuts",
     ".cmp": "F.Cu",
     ".sol": "B.Cu",
+    ".plc": "F.SilkS",
+    ".pls": "B.SilkS",
+    ".stc": "F.Mask",
+    ".sts": "B.Mask",
+    ".smt": "F.Paste",
+    ".smb": "B.Paste",
+    ".dim": "Edge.Cuts",
 }
 
 _FILE_FUNCTION = re.compile(
@@ -80,6 +87,20 @@ def _filename_layer(path: Path) -> str | None:
     if suffix in _SUFFIXES:
         return _SUFFIXES[suffix]
 
+    # Common Protel/Altium inner-layer Gerber extensions: .G1, .G2, ...
+    inner = re.fullmatch(r"\.g(\d+)", suffix)
+    if inner:
+        index = int(inner.group(1))
+        if index >= 1:
+            return f"In{index}.Cu"
+
+    # Internal-plane variants are still copper layers for geometry purposes.
+    plane = re.fullmatch(r"\.gp(\d+)", suffix)
+    if plane:
+        index = int(plane.group(1))
+        if index >= 1:
+            return f"In{index}.Cu"
+
     name = path.name.lower()
     normalized = re.sub(r"[^a-z0-9]+", "_", name)
 
@@ -90,6 +111,10 @@ def _filename_layer(path: Path) -> str | None:
         return "F.Cu"
     if any(k in normalized for k in ("b_cu", "bottom_copper", "copper_bottom", "back_copper")):
         return "B.Cu"
+
+    inner_name = re.search(r"(?:inner|internal|in)[_-]?(\d+)(?:[_\.-]|$)", normalized)
+    if inner_name:
+        return f"In{int(inner_name.group(1))}.Cu"
 
     if any(k in normalized for k in ("f_mask", "top_mask", "soldermask_top")):
         return "F.Mask"
