@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Completed positive outer-size validation for standard Gerber apertures by rejecting zero-diameter circle apertures in strict, permissive, and preflight paths.
 - Hardened Gerber `LM/LR/LS` aperture-transform handling: identity states remain supported, while non-identity or malformed transforms fail closed so mirrored, rotated, or scaled objects cannot be emitted with untransformed geometry.
 - Hardened permissive Gerber parsing so rectangular/obround D01 draws are skipped with diagnostics instead of being approximated as width-only tracks; current-point state is still advanced correctly.
 - Validated standard Gerber rectangle/obround outer dimensions at parse time; zero X/Y sizes now fail closed instead of entering reconstruction as invalid geometry.
