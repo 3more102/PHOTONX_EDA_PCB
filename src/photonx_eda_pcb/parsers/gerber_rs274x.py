@@ -272,6 +272,34 @@ class GerberRS274XParser:
             return
 
         solid_parameter_count = 1 if shape == "C" else 2
+        if len(values) not in {solid_parameter_count, solid_parameter_count + 1}:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_STANDARD_APERTURE",
+                (
+                    f"{shape} standard aperture requires "
+                    f"{solid_parameter_count} solid modifier(s)"
+                    " with at most one trailing round-hole modifier"
+                ),
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
+        if shape in {"R", "O"} and (values[0] <= 0 or values[1] <= 0):
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_STANDARD_APERTURE_SIZE",
+                f"{shape} standard aperture X/Y sizes must both be positive",
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
         if len(values) == solid_parameter_count + 1:
             hole_diameter = values[-1]
             if hole_diameter <= 0:
@@ -295,21 +323,6 @@ class GerberRS274XParser:
                     ),
                     out,
                 )
-            self.unsupported_apertures.add(code)
-            return
-
-        if len(values) != solid_parameter_count:
-            self._parse_error_or_warn(
-                path,
-                line_no,
-                line,
-                "INVALID_GERBER_STANDARD_APERTURE",
-                (
-                    f"{shape} standard aperture requires "
-                    f"{solid_parameter_count} solid modifier(s)"
-                ),
-                out,
-            )
             self.unsupported_apertures.add(code)
             return
 
