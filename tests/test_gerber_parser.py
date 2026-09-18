@@ -138,8 +138,10 @@ def test_g75_ccw_arc_is_tessellated_with_explicit_evidence(tmp_path):
     result = GerberRS274XParser("F.Cu").parse(p)
 
     assert len(result.tracks) > 1
-    assert result.tracks[0].start == pytest.approx((1.0, 0.0))
-    assert result.tracks[-1].end == pytest.approx((0.0, 1.0))
+    assert result.tracks[0].start.x == pytest.approx(1.0)
+    assert result.tracks[0].start.y == pytest.approx(0.0)
+    assert result.tracks[-1].end.x == pytest.approx(0.0)
+    assert result.tracks[-1].end.y == pytest.approx(1.0)
     assert all(track.width == pytest.approx(0.2) for track in result.tracks)
     assert all(
         any(ev.kind == "gerber_arc_tessellation" for ev in track.provenance.evidence)
