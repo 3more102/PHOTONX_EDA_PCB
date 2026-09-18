@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Hardened X2 `.FilePolarity` handling: explicit positive polarity is accepted, negative polarity fails closed in strict mode, and permissive parsing suppresses geometry instead of emitting inverted material semantics.
 - Added production-path Gerber step-and-repeat support for the currently supported linear geometry subset.
 - Expanded flashes, linear draws, and outline segments deterministically while preserving source provenance.
 - Added unit-aware repeat spacing, deterministic per-instance IDs, and explicit `gerber_step_repeat` evidence.
