@@ -97,6 +97,9 @@ class ExcellonParser:
                         out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no));continue
                     self.current=Point(x,y);self._route_sources=[src];continue
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: linear route before valid tool selection")
+                if not self.route.tool_down:
+                    if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: standalone G01 routing is unsupported; use G00/M15/G01/M16 sequence")
+                    out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_SEQUENCE",line,str(p),line_no));continue
                 try:self.route.line(x,y)
                 except RuntimeError as exc:
                     if self.strict:raise ParseError(f"{p}:{line_no}: {exc}")

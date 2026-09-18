@@ -11,6 +11,7 @@ CAPABILITIES=[
     Capability("Excellon drill hits","implemented","Metric/inch tool definitions and point hits."),
     Capability("Excellon G85 slots","implemented","Straight canned slots with explicit endpoints are reconstructed."),
     Capability("Excellon linear routing","partial","G00/M15/G01/M16 linear routed paths are reconstructed; G02/G03 routed arcs remain unsupported."),
+    Capability("Excellon slots/routes","partial","G85 straight slots and G00/M15/G01/M16 linear routes are supported; G02/G03 routed arcs remain unsupported."),
     Capability("Physical copper connectivity","implemented","Geometry-overlap graph with deterministic IDs."),
     Capability("Logical net names","not_inferable","Manufacturing layers generally do not preserve original schematic net names."),
     Capability("Component hypotheses","implemented","Heuristic hypotheses only; never promoted to fact without evidence."),
