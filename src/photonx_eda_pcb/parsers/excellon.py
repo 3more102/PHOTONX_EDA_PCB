@@ -267,6 +267,13 @@ class ExcellonParser:
                 self.units="inch";self.units_declared=True;self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(2,4,self.zero);continue
             if line.startswith(("FMAT,", "VER,")):
                 continue
+            if line == "G90":
+                continue
+            if line == "G91":
+                if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: incremental Excellon coordinates are unsupported: {line}")
+                out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_INCREMENTAL",line,str(p),line_no))
+                self._disable_geometry(out)
+                continue
             if line.startswith("ICI,"):
                 if line == "ICI,OFF":
                     continue
