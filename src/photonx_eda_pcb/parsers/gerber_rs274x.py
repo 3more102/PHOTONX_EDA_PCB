@@ -489,6 +489,11 @@ class GerberRS274XParser:
                 self.current_aperture = int(m.group(1))
                 continue
 
+            m = _OP_SELECT.match(line)
+            if m:
+                self.current_operation = m.group(1)
+                continue
+
             if line.startswith("%SR"):
                 self._configure_step_repeat(line, p, line_no, out)
                 continue
