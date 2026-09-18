@@ -43,8 +43,8 @@ def test_solid_standard_apertures_keep_exact_dimensions(
     assert len(result.pads) == 1
     pad = result.pads[0]
     assert pad.shape == shape
-    assert pad.width == pytest.approx(x_mm)
-    assert pad.height == pytest.approx(y_mm)
+    assert pad.size_x == pytest.approx(x_mm)
+    assert pad.size_y == pytest.approx(y_mm)
 
 
 def test_circle_hole_modifier_is_not_misread_as_y_dimension(tmp_path: Path):
