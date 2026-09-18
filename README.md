@@ -347,7 +347,7 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 
 | Capability | Status | Current behavior |
 |---|---|---|
-| Gerber linear draws / flashes | **Implemented subset** | Solid C/R/O standard apertures are reconstructed with provenance; holed standard apertures fail closed |
+| Gerber linear draws / flashes | **Partial** | Circular-aperture D01 draws and solid C/R/O flashes are exact; non-circular draws and holed apertures fail closed |
 | Gerber X2 file polarity | **Partial** | Explicit `Positive` is accepted; `Negative` fails closed because absence-of-material image inversion is not yet modeled |
 | Gerber layer polarity | **Partial** | `LPD` dark objects are supported; `LPC` clear objects fail closed because ordered image subtraction is not yet modeled |
 | Gerber C/R/O apertures | **Implemented subset** | Solid C/R/O apertures are modeled; round-hole modifiers fail closed until aperture-hole subtraction is represented |
