@@ -23,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pf = sub.add_parser(
         "preflight",
-        help="inspect a folder/file/ZIP and report parser compatibility",
+        help="inspect a folder/file/archive and report parser compatibility",
     )
     pf.add_argument("input", type=Path)
     pf.add_argument("--output", type=Path)
@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument(
         "input",
         type=Path,
-        help="Gerber/Excellon directory, single file, or ZIP package",
+        help="Gerber/Excellon directory, single file, ZIP, TAR, or TGZ package",
     )
     r.add_argument("--output", type=Path, required=True)
     r.add_argument(
