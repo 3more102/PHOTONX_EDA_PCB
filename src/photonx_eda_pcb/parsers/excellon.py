@@ -84,7 +84,7 @@ class ExcellonParser:
                 if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: routed Excellon arc geometry is not implemented: {line}")
                 out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_ARC",line,str(p),line_no));continue
             if line.startswith(("G00","G01")):
-                try, xraw, yraw = None, None, None
+                cmd, xraw, yraw = None, None, None
                 try:cmd,xraw,yraw=parse_linear_route_command(line)
                 except ValueError:
                     if self.strict:raise ParseError(f"{p}:{line_no}: malformed linear route command: {line}")
