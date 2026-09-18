@@ -4,6 +4,7 @@ import pytest
 
 from photonx_eda_pcb.errors import ParseError, UnsupportedFeatureError
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
+from photonx_eda_pcb.preflight import preflight
 
 
 HEADER = """%FSLAX24Y24*%
@@ -132,3 +133,23 @@ def test_invalid_file_polarity_value_is_not_treated_as_generic_metadata(
 
     with pytest.raises(ParseError, match="invalid X2 .FilePolarity"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
+def test_preflight_blocks_negative_x2_file_polarity(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%TF.FilePolarity,Negative*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "X000000Y000000D02*\n"
+        "X010000Y000000D01*\n"
+        "M02*\n",
+    )
+
+    report = preflight(path)
+
+    assert report.discovered_files == 1
+    assert not report.ready_for_strict_reconstruction
+    assert report.strict_blockers
