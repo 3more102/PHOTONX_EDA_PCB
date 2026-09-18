@@ -1,0 +1,1 @@
+{"synthetic":true,"components":{"R1":{"kind":"resistor","value":"10kΩ"},"C1":{"kind":"capacitor","value":"100nF"}},"pin_nets":{"R1":{"1":"IN","2":"OUT"},"C1":{"1":"OUT","2":"GND"}},"ground":["GND"],"expected_kind":"rc_filter","intentionally_unknown":["source_impedance","load_impedance","parasitics"]}

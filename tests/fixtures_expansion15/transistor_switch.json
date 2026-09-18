@@ -1,0 +1,1 @@
+{"synthetic":true,"components":{"Q1":{"kind":"mosfet"},"R1":{"kind":"resistor"}},"pin_names":{"Q1":{"1":"G","2":"S","3":"D"}},"pin_nets":{"Q1":{"1":"CTRL","2":"GND","3":"LOAD"},"R1":{"1":"IN","2":"CTRL"}},"expected_kind":"transistor_stage","intentionally_unknown":["switching_frequency","load_current","actual_mode"]}

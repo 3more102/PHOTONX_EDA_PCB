@@ -1,0 +1,1 @@
+{"synthetic":true,"components":{"R1":{"kind":"resistor","value":"10kΩ"},"R2":{"kind":"resistor","value":"10kΩ"}},"pin_nets":{"R1":{"1":"VCC","2":"MID"},"R2":{"1":"MID","2":"GND"}},"power":["VCC"],"ground":["GND"],"expected_kind":"voltage_divider","intentionally_unknown":["load_impedance","actual_purpose"]}

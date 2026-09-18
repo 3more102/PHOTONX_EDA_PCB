@@ -1,0 +1,1 @@
+{"synthetic":true,"components":{"U1":{"kind":"opamp"},"R1":{"kind":"resistor"},"R2":{"kind":"resistor"}},"pin_names":{"U1":{"1":"IN-","2":"OUT"}},"pin_nets":{"U1":{"1":"FB","2":"OUT"},"R1":{"1":"FB","2":"OUT"},"R2":{"1":"FB","2":"GND"}},"expected":["opamp_stage","feedback_network"],"intentionally_unknown":["gain","stability","opamp_part_number"]}
