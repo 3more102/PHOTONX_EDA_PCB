@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="650" viewBox="0 0 1500 650" role="img" aria-labelledby="title desc">
+<title id="title">PHOTONX Validation and Release Flow</title>
+<desc id="desc">Validation proceeds from parser acceptance to model validation, engineering checks, regression, round-trip and release readiness, with review required at every layer.</desc>
+<defs>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#64748b"/></marker>
+  <style>
+    .t1{font:700 34px Inter,Segoe UI,Arial,sans-serif;fill:#111827}.sub{font:400 17px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+    .box{stroke-width:2;rx:16;ry:16}.t{font:700 18px Inter,Segoe UI,Arial,sans-serif;fill:#111827}.s{font:400 13px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+    .a{stroke:#64748b;stroke-width:3;fill:none;marker-end:url(#arrow)}.down{stroke:#ef4444;stroke-width:2.5;fill:none;stroke-dasharray:7 6;marker-end:url(#arrow)}
+  </style>
+</defs>
+<rect width="1500" height="650" fill="#ffffff"/>
+<text x="70" y="62" class="t1">PHOTONX Validation → Release Flow</text>
+<text x="70" y="96" class="sub">A pass at one layer does not imply a pass at the next.</text>
+
+<rect x="60" y="185" width="190" height="108" class="box" fill="#e0f2fe" stroke="#0284c7"/>
+<text x="155" y="222" text-anchor="middle" class="t">Parser Acceptance</text>
+<text x="155" y="248" text-anchor="middle" class="s">supported syntax?</text>
+<text x="155" y="268" text-anchor="middle" class="s">diagnostics preserved?</text>
+
+<rect x="300" y="185" width="190" height="108" class="box" fill="#ecfeff" stroke="#0891b2"/>
+<text x="395" y="222" text-anchor="middle" class="t">Model Validation</text>
+<text x="395" y="248" text-anchor="middle" class="s">IDs · references · bounds</text>
+<text x="395" y="268" text-anchor="middle" class="s">structural consistency</text>
+
+<rect x="540" y="185" width="190" height="108" class="box" fill="#eef2ff" stroke="#4f46e5"/>
+<text x="635" y="222" text-anchor="middle" class="t">Engineering Checks</text>
+<text x="635" y="248" text-anchor="middle" class="s">geometry · connectivity</text>
+<text x="635" y="268" text-anchor="middle" class="s">DRC · ERC · evidence</text>
+
+<rect x="780" y="185" width="190" height="108" class="box" fill="#f5f3ff" stroke="#7c3aed"/>
+<text x="875" y="222" text-anchor="middle" class="t">Regression</text>
+<text x="875" y="248" text-anchor="middle" class="s">fixtures · CI · replay</text>
+<text x="875" y="268" text-anchor="middle" class="s">fault injection</text>
+
+<rect x="1020" y="185" width="190" height="108" class="box" fill="#fefce8" stroke="#ca8a04"/>
+<text x="1115" y="222" text-anchor="middle" class="t">Round-Trip</text>
+<text x="1115" y="248" text-anchor="middle" class="s">export / import fidelity</text>
+<text x="1115" y="268" text-anchor="middle" class="s">native-tool checks</text>
+
+<rect x="1260" y="185" width="190" height="108" class="box" fill="#ecfdf5" stroke="#059669"/>
+<text x="1355" y="222" text-anchor="middle" class="t">Release Readiness</text>
+<text x="1355" y="248" text-anchor="middle" class="s">profile / milestone</text>
+<text x="1355" y="268" text-anchor="middle" class="s">internal evidence gate</text>
+
+<path d="M250 239 H300" class="a"/><path d="M490 239 H540" class="a"/><path d="M730 239 H780" class="a"/><path d="M970 239 H1020" class="a"/><path d="M1210 239 H1260" class="a"/>
+
+<rect x="245" y="420" width="1010" height="105" class="box" fill="#fff7ed" stroke="#ea580c"/>
+<text x="750" y="457" text-anchor="middle" class="t">Human Review / Corrective Loop</text>
+<text x="750" y="483" text-anchor="middle" class="s">errors, warnings, omissions, unsupported syntax, unknown evidence, exporter gaps, or failed parity return to engineering review</text>
+<text x="750" y="505" text-anchor="middle" class="s">No release gate converts an unresolved engineering question into certification.</text>
+
+<path d="M155 293 V365 H370 V420" class="down"/>
+<path d="M395 293 V390 H500 V420" class="down"/>
+<path d="M635 293 V420" class="down"/>
+<path d="M875 293 V390 H840 V420" class="down"/>
+<path d="M1115 293 V365 H1030 V420" class="down"/>
+<path d="M1355 293 V365 H1130 V420" class="down"/>
+
+<text x="70" y="600" class="sub">Release readiness = software/evidence readiness for the declared profile. It is not electrical, safety, EMC, regulatory, or fabrication approval.</text>
+</svg>
