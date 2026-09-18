@@ -1,13 +1,12 @@
 from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from .provenance import Provenance
-
+from .mechanical_features.model import SlotFeature
 
 @dataclass(frozen=True)
 class Point:
     x: float
     y: float
-
 
 @dataclass
 class Track:
@@ -18,7 +17,6 @@ class Track:
     layer: str
     net_id: str | None = None
     provenance: Provenance = field(default_factory=Provenance)
-
 
 @dataclass
 class PadCandidate:
@@ -32,7 +30,6 @@ class PadCandidate:
     net_id: str | None = None
     provenance: Provenance = field(default_factory=Provenance)
 
-
 @dataclass
 class DrillHit:
     id: str
@@ -42,14 +39,12 @@ class DrillHit:
     tool: str | None = None
     provenance: Provenance = field(default_factory=Provenance)
 
-
 @dataclass
 class OutlineSegment:
     id: str
     start: Point
     end: Point
     provenance: Provenance = field(default_factory=Provenance)
-
 
 @dataclass
 class NetGroup:
@@ -58,7 +53,6 @@ class NetGroup:
     confidence: float
     label: str | None = None
     provenance: Provenance = field(default_factory=Provenance)
-
 
 @dataclass
 class ComponentHypothesis:
@@ -69,7 +63,6 @@ class ComponentHypothesis:
     evidence: list[str]
     reference: str | None = None
 
-
 @dataclass
 class ParseDiagnostic:
     severity: str
@@ -77,7 +70,6 @@ class ParseDiagnostic:
     message: str
     path: str
     line: int | None = None
-
 
 @dataclass
 class BoardModel:
@@ -89,9 +81,10 @@ class BoardModel:
     components: list[ComponentHypothesis] = field(default_factory=list)
     diagnostics: list[ParseDiagnostic] = field(default_factory=list)
     metadata: dict[str, object] = field(default_factory=dict)
+    slots: list[SlotFeature] = field(default_factory=list)
 
     def object_index(self) -> dict[str, object]:
-        items = [*self.tracks, *self.pads, *self.drills, *self.outline]
+        items = [*self.tracks, *self.pads, *self.drills, *self.outline, *self.slots]
         return {obj.id: obj for obj in items}
 
     def to_dict(self) -> dict[str, object]:
