@@ -1,2 +1,3 @@
-# Phases 15–17 fixtures
-All fixtures are synthetic regression inputs. They encode expected evidence patterns only; no production design intent is implied.
+# Phase 24 synthetic corpus
+
+Every file in this directory is synthetic and exists for deterministic regression testing. None is recovered production data. Original net names, BOM, material stack-up and design intent are unknown unless explicitly present in the fixture.

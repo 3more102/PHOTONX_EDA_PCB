@@ -1,3 +1,3 @@
-# Regression corpus
+# Regression Corpus
 
-Regression cases pair inputs with explicit expected summaries and stable fingerprints. Synthetic cases must be labeled, and real-board cases need provenance and redistribution permission.
+Corpus cases declare input artifacts, expected metrics, tolerances, intentionally unknown fields and whether a fixture is synthetic. External cases require separate dataset source/license metadata.
