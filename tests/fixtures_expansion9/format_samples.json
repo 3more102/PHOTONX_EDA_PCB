@@ -1,0 +1,1 @@
+[{"path":"top.gbr","text":"%FSLAX24Y24*%\n%MOMM*%\nM02*","format":"gerber"},{"path":"board.drl","text":"M48\nMETRIC\nM30","format":"excellon"},{"path":"board.kicad_pcb","text":"(kicad_pcb (version 20240108))","format":"kicad_pcb"}]

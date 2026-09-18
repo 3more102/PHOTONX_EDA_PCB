@@ -1,0 +1,1 @@
+[{"feature":"linear_draws","format":"gerber","status":"supported","notes":"","tests":["test_gerber_parser"]},{"feature":"routed_slots","format":"excellon","status":"partial","notes":"subset","tests":[]}]
