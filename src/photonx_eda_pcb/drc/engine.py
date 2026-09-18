@@ -5,8 +5,9 @@ from .annular import check_annular_ring
 from .clearance import check_clearance
 from .edge import check_edge_presence
 from .duplicates import check_duplicate_ids
-RULES=(check_track_widths,check_drills,check_annular_ring,check_clearance,check_edge_presence,check_duplicate_ids)
+from .drill_copper import check_drill_copper_clearance
+RULES=(check_track_widths,check_drills,check_annular_ring,check_clearance,check_drill_copper_clearance,check_edge_presence,check_duplicate_ids)
 def run_drc(board,cfg=None):
-    cfg=cfg or DrcConfig(); out=[]
+    cfg=cfg or DrcConfig();out=[]
     for rule in RULES:out.extend(rule(board,cfg))
     return out

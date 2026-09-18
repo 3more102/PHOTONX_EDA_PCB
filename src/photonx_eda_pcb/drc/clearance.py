@@ -1,12 +1,8 @@
-from shapely.geometry import Point as SPoint,LineString,box
 from .model import DrcIssue
 from photonx_eda_pcb.spatial_connectivity import AABB,SpatialHashIndex,candidate_pairs
+from photonx_eda_pcb.geometry_kernel import object_shape
 
-def _shape(o):
-    if hasattr(o,"start"):return LineString([(o.start.x,o.start.y),(o.end.x,o.end.y)]).buffer(o.width/2)
-    shape=str(getattr(o,"shape","C")).upper()
-    if shape=="C":return SPoint(o.center.x,o.center.y).buffer(o.size_x/2)
-    return box(o.center.x-o.size_x/2,o.center.y-o.size_y/2,o.center.x+o.size_x/2,o.center.y+o.size_y/2)
+def _shape(o):return object_shape(o)
 
 def _bounds(s):
     x0,y0,x1,y1=s.bounds;return AABB(float(x0),float(y0),float(x1),float(y1))

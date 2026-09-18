@@ -1,0 +1,1 @@
+{"pads":[{"shape":"C","size":[2,2]},{"shape":"R","size":[4,2]},{"shape":"O","size":[4,2]}],"cutout":{"outer":[[0,0],[10,0],[10,10],[0,10]],"inner":[[4,4],[6,4],[6,6],[4,6]]},"synthetic":true}

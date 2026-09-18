@@ -8,3 +8,4 @@ class DrcConfig:
     min_annular_ring_mm:float=0.1
     min_clearance_mm:float=0.15
     edge_clearance_mm:float=0.2
+    min_drill_copper_clearance_mm:float=0.15
