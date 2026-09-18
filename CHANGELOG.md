@@ -7,6 +7,10 @@
 - Added unit-aware repeat spacing, deterministic per-instance IDs, and explicit `gerber_step_repeat` evidence.
 - Added focused regression coverage for flash expansion, track expansion/termination, and inch-to-mm spacing.
 - Verified the merged code on Python 3.11, 3.12, and 3.13 with 618 passing tests and 2 existing collection warnings.
+- Added production-path G75 multi-quadrant G02/G03 Gerber arc support using I/J center offsets with circular draw apertures.
+- Added coordinate-resolution-aware radius validation and deterministic arc tessellation with a 0.005 mm chord-error target.
+- Added explicit `gerber_arc_tessellation` provenance evidence and step-repeat composition for generated arc segments.
+- Kept G74 single-quadrant arcs, regions, aperture macros, and aperture blocks explicitly unsupported.
 
 ## 0.2.0
 

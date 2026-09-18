@@ -5,6 +5,8 @@ from pathlib import Path
 import re
 
 from ..errors import ParseError, UnsupportedFeatureError
+from ..gerber_geometry.arc import ArcSpec, arc_points, segments_for_chord_error, validate_arc
+from ..gerber_geometry.model import GeoPoint
 from ..ids import stable_id
 from ..models import OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
 from ..provenance import Evidence, Provenance, SourceRef
@@ -19,8 +21,18 @@ _SELECT = re.compile(r"^(?:G54)?D(\d+)\*$")
 _COORD = re.compile(
     r"^(?:G0?1)?(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?(?:D0?([123]))?\*$"
 )
+_ARC_COORD = re.compile(
+    r"^(?:(G0?[23]))?"
+    r"(?:X([+-]?[0-9.]+))?"
+    r"(?:Y([+-]?[0-9.]+))?"
+    r"(?:I([+-]?[0-9.]+))?"
+    r"(?:J([+-]?[0-9.]+))?"
+    r"(?:D0?([12]))?\*$"
+)
 
 _MAX_STEP_REPEAT_INSTANCES = 10_000
+_ARC_MAX_CHORD_ERROR_MM = 0.005
+_MAX_ARC_SEGMENTS = 4096
 
 
 @dataclass(frozen=True)
@@ -66,7 +78,9 @@ class GerberRS274XParser:
     """Strict, auditable RS-274X subset parser.
 
     Supported: FS, MO, ADD(C/R/O), Dnn selection, G01/D01/D02/D03,
-    G04, M02, and standard linear step-and-repeat (%SR...*% / %SR*%).
+    G75 multi-quadrant G02/G03 circular interpolation with I/J center
+    offsets and circular apertures, G04, M02, and standard linear
+    step-and-repeat (%SR...*% / %SR*%).
 
     Unsupported constructs are never silently discarded in strict mode.
     """
@@ -81,6 +95,8 @@ class GerberRS274XParser:
         self.current_aperture: int | None = None
         self.current = Point(0.0, 0.0)
         self.step_repeat: StepRepeat | None = None
+        self.interpolation = "linear"
+        self.quadrant_mode: str | None = None
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -191,6 +207,194 @@ class GerberRS274XParser:
             return
         yield from self.step_repeat.offsets()
 
+    def _parse_error_or_warn(
+        self,
+        path: Path,
+        line_no: int,
+        raw: str,
+        code: str,
+        message: str,
+        out: GerberLayerResult,
+    ) -> None:
+        if self.strict:
+            raise ParseError(f"{path}:{line_no}: {message}: {raw}")
+        out.diagnostics.append(
+            ParseDiagnostic("warning", code, message, str(path), line_no)
+        )
+
+    def _arc_radius_tolerance_mm(self) -> float:
+        x_resolution = to_mm(10 ** (-self.xfmt.decimal), self.units)
+        y_resolution = to_mm(10 ** (-self.yfmt.decimal), self.units)
+        return max(1e-6, 2.0 * max(x_resolution, y_resolution))
+
+    def _emit_arc(
+        self,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+        nxt: Point,
+        i_raw: str | None,
+        j_raw: str | None,
+        clockwise: bool,
+    ) -> None:
+        if self.quadrant_mode != "multi":
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_ARC_QUADRANT_UNSUPPORTED",
+                "only explicit G75 multi-quadrant arcs are supported",
+                out,
+            )
+            self.current = nxt
+            return
+
+        if (
+            self.current_aperture is None
+            or self.current_aperture not in self.apertures
+        ):
+            raise ParseError(
+                f"{path}:{line_no}: arc draw before valid aperture selection"
+            )
+
+        aperture = self.apertures[self.current_aperture]
+        if aperture.shape != "C":
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_ARC_NON_CIRCULAR_APERTURE",
+                "arc interpolation is supported only with circular draw apertures",
+                out,
+            )
+            self.current = nxt
+            return
+
+        if i_raw is None and j_raw is None:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_ARC_CENTER_MISSING",
+                "G75 arc draw requires I/J center offsets",
+                out,
+            )
+            self.current = nxt
+            return
+
+        i_mm = 0.0 if i_raw is None else self._decode(i_raw, "x")
+        j_mm = 0.0 if j_raw is None else self._decode(j_raw, "y")
+        center = Point(self.current.x + i_mm, self.current.y + j_mm)
+        spec = ArcSpec(
+            GeoPoint(self.current.x, self.current.y),
+            GeoPoint(nxt.x, nxt.y),
+            GeoPoint(center.x, center.y),
+            clockwise=clockwise,
+        )
+        radius_tolerance = self._arc_radius_tolerance_mm()
+
+        try:
+            radius = validate_arc(
+                spec,
+                rel_tol=1e-6,
+                abs_tol=radius_tolerance,
+            )
+            segment_count = segments_for_chord_error(
+                spec,
+                _ARC_MAX_CHORD_ERROR_MM,
+                max_segments=_MAX_ARC_SEGMENTS,
+                rel_tol=1e-6,
+                abs_tol=radius_tolerance,
+            )
+            points = arc_points(
+                spec,
+                segments=segment_count,
+                rel_tol=1e-6,
+                abs_tol=radius_tolerance,
+            )
+        except ValueError as exc:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_ARC_INVALID",
+                f"invalid G75 arc geometry ({exc})",
+                out,
+            )
+            self.current = nxt
+            return
+
+        src = SourceRef(str(path), line_no, line)
+        direction = "CW" if clockwise else "CCW"
+        width = max(aperture.x, aperture.y)
+
+        for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
+            repeated_center = Point(center.x + dx_mm, center.y + dy_mm)
+            for segment_index in range(segment_count):
+                start_geo = points[segment_index]
+                end_geo = points[segment_index + 1]
+                start = Point(start_geo.x + dx_mm, start_geo.y + dy_mm)
+                end = Point(end_geo.x + dx_mm, end_geo.y + dy_mm)
+
+                id_parts = [
+                    path.name,
+                    line_no,
+                    self.current.x,
+                    self.current.y,
+                    nxt.x,
+                    nxt.y,
+                    center.x,
+                    center.y,
+                    direction,
+                    segment_index,
+                    segment_count,
+                    width,
+                    self.layer,
+                ]
+                if self.step_repeat is not None:
+                    id_parts.extend(["sr", x_index, y_index])
+                obj_id = stable_id("trk", *id_parts)
+
+                prov = self._step_repeat_provenance(
+                    src,
+                    x_index or 0,
+                    y_index or 0,
+                    dx_mm,
+                    dy_mm,
+                )
+                prov.add_evidence(
+                    Evidence(
+                        "gerber_arc_tessellation",
+                        (
+                            f"direction={direction}; "
+                            f"center_mm=({repeated_center.x:.12g},"
+                            f"{repeated_center.y:.12g}); "
+                            f"radius_mm={radius:.12g}; "
+                            f"segment={segment_index + 1}/{segment_count}; "
+                            f"max_chord_error_mm={_ARC_MAX_CHORD_ERROR_MM:.12g}"
+                        ),
+                        1.0,
+                        src,
+                    )
+                )
+
+                if self.layer == "Edge.Cuts":
+                    out.outline.append(OutlineSegment(obj_id, start, end, prov))
+                else:
+                    out.tracks.append(
+                        Track(
+                            obj_id,
+                            start,
+                            end,
+                            width,
+                            self.layer,
+                            provenance=prov,
+                        )
+                    )
+
+        self.current = nxt
+
     def parse(self, path: str | Path) -> GerberLayerResult:
         p = Path(path)
         out = GerberLayerResult()
@@ -249,7 +453,118 @@ class GerberRS274XParser:
                 self._configure_step_repeat(line, p, line_no, out)
                 continue
 
-            if line.startswith(("G02", "G03", "G36", "G37")) or line.startswith(
+            if line in {"G75*", "G075*"}:
+                self.quadrant_mode = "multi"
+                continue
+
+            if line in {"G74*", "G074*"}:
+                self.quadrant_mode = "single"
+                self._fail_or_warn(
+                    p,
+                    line_no,
+                    line,
+                    "GERBER_SINGLE_QUADRANT_ARC_UNSUPPORTED",
+                    "G74 single-quadrant arc center disambiguation is not implemented",
+                    out,
+                )
+                continue
+
+            if line in {"G01*", "G1*"}:
+                self.interpolation = "linear"
+                continue
+
+            if line in {"G02*", "G2*"}:
+                self.interpolation = "cw_arc"
+                if self.quadrant_mode != "multi":
+                    self._fail_or_warn(
+                        p,
+                        line_no,
+                        line,
+                        "GERBER_ARC_QUADRANT_UNSUPPORTED",
+                        "G02 arc mode requires explicit G75 in the supported subset",
+                        out,
+                    )
+                continue
+
+            if line in {"G03*", "G3*"}:
+                self.interpolation = "ccw_arc"
+                if self.quadrant_mode != "multi":
+                    self._fail_or_warn(
+                        p,
+                        line_no,
+                        line,
+                        "GERBER_ARC_QUADRANT_UNSUPPORTED",
+                        "G03 arc mode requires explicit G75 in the supported subset",
+                        out,
+                    )
+                continue
+
+            arc_match = _ARC_COORD.match(line)
+            if arc_match:
+                gcode, x_raw, y_raw, i_raw, j_raw, op = arc_match.groups()
+                arc_candidate = (
+                    gcode is not None
+                    or i_raw is not None
+                    or j_raw is not None
+                    or (
+                        self.interpolation in {"cw_arc", "ccw_arc"}
+                        and op == "1"
+                    )
+                )
+                if arc_candidate:
+                    if gcode in {"G02", "G2"}:
+                        self.interpolation = "cw_arc"
+                    elif gcode in {"G03", "G3"}:
+                        self.interpolation = "ccw_arc"
+
+                    x = self._decode(x_raw, "x")
+                    y = self._decode(y_raw, "y")
+                    nxt = Point(
+                        self.current.x if x is None else x,
+                        self.current.y if y is None else y,
+                    )
+
+                    if op == "2":
+                        self.current = nxt
+                        continue
+
+                    if op != "1":
+                        self._parse_error_or_warn(
+                            p,
+                            line_no,
+                            line,
+                            "GERBER_ARC_DCODE_REQUIRED",
+                            "arc interpolation requires explicit D01 or D02",
+                            out,
+                        )
+                        self.current = nxt
+                        continue
+
+                    if self.interpolation not in {"cw_arc", "ccw_arc"}:
+                        self._parse_error_or_warn(
+                            p,
+                            line_no,
+                            line,
+                            "GERBER_ARC_MODE_MISSING",
+                            "I/J center offsets require active G02 or G03 interpolation",
+                            out,
+                        )
+                        self.current = nxt
+                        continue
+
+                    self._emit_arc(
+                        p,
+                        line_no,
+                        line,
+                        out,
+                        nxt,
+                        i_raw,
+                        j_raw,
+                        clockwise=self.interpolation == "cw_arc",
+                    )
+                    continue
+
+            if line.startswith(("G36", "G37")) or line.startswith(
                 ("%AM", "%AB")
             ):
                 self._fail_or_warn(

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from photonx_eda_pcb.errors import UnsupportedFeatureError
+from photonx_eda_pcb.errors import ParseError, UnsupportedFeatureError
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 
 FIX = Path(__file__).parent / "fixtures" / "led"
@@ -118,3 +118,157 @@ def test_step_repeat_step_distance_uses_active_gerber_units(tmp_path):
 
     assert [pad.center.x for pad in result.pads] == pytest.approx([25.4, 50.8])
     assert [pad.center.y for pad in result.pads] == pytest.approx([25.4, 25.4])
+
+
+
+def test_g75_ccw_arc_is_tessellated_with_explicit_evidence(tmp_path):
+    p = tmp_path / "g75_ccw.gbr"
+    p.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "G75*\n"
+        "G03*\n"
+        "X010000Y000000D02*\n"
+        "X000000Y010000I-010000J000000D01*\n"
+        "M02*\n"
+    )
+
+    result = GerberRS274XParser("F.Cu").parse(p)
+
+    assert len(result.tracks) > 1
+    assert result.tracks[0].start.x == pytest.approx(1.0)
+    assert result.tracks[0].start.y == pytest.approx(0.0)
+    assert result.tracks[-1].end.x == pytest.approx(0.0)
+    assert result.tracks[-1].end.y == pytest.approx(1.0)
+    assert all(track.width == pytest.approx(0.2) for track in result.tracks)
+    assert all(
+        any(ev.kind == "gerber_arc_tessellation" for ev in track.provenance.evidence)
+        for track in result.tracks
+    )
+    assert all(
+        track.provenance.sources[0].raw
+        == "X000000Y010000I-010000J000000D01*"
+        for track in result.tracks
+    )
+
+
+def test_g01_resets_modal_arc_interpolation(tmp_path):
+    p = tmp_path / "arc_then_line.gbr"
+    p.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "G75*\n"
+        "G03*\n"
+        "X010000Y000000D02*\n"
+        "X000000Y010000I-010000J000000D01*\n"
+        "G01*\n"
+        "X000000Y020000D01*\n"
+        "M02*\n"
+    )
+
+    result = GerberRS274XParser("F.Cu").parse(p)
+
+    assert len(result.tracks) > 2
+    assert result.tracks[-1].start.x == pytest.approx(0.0)
+    assert result.tracks[-1].start.y == pytest.approx(1.0)
+    assert result.tracks[-1].end.x == pytest.approx(0.0)
+    assert result.tracks[-1].end.y == pytest.approx(2.0)
+    assert not any(
+        ev.kind == "gerber_arc_tessellation"
+        for ev in result.tracks[-1].provenance.evidence
+    )
+
+
+def test_g75_arc_on_edge_cuts_becomes_outline_segments(tmp_path):
+    p = tmp_path / "rounded_edge.gbr"
+    p.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.100*%\n"
+        "D10*\n"
+        "G75*\n"
+        "X010000Y000000D02*\n"
+        "G03X000000Y010000I-010000J000000D01*\n"
+        "M02*\n"
+    )
+
+    result = GerberRS274XParser("Edge.Cuts").parse(p)
+
+    assert not result.tracks
+    assert len(result.outline) > 1
+    assert result.outline[0].start.x == pytest.approx(1.0)
+    assert result.outline[0].start.y == pytest.approx(0.0)
+    assert result.outline[-1].end.x == pytest.approx(0.0)
+    assert result.outline[-1].end.y == pytest.approx(1.0)
+    assert all(
+        any(ev.kind == "gerber_arc_tessellation" for ev in seg.provenance.evidence)
+        for seg in result.outline
+    )
+
+
+def test_g74_single_quadrant_mode_remains_explicitly_unsupported(tmp_path):
+    p = tmp_path / "g74.gbr"
+    p.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "G74*\n"
+        "M02*\n"
+    )
+
+    with pytest.raises(UnsupportedFeatureError):
+        GerberRS274XParser("F.Cu", strict=True).parse(p)
+
+
+def test_g75_arc_rejects_inconsistent_center_geometry(tmp_path):
+    p = tmp_path / "bad_arc.gbr"
+    p.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "G75*\n"
+        "X010000Y000000D02*\n"
+        "G03X000000Y020000I-010000J000000D01*\n"
+        "M02*\n"
+    )
+
+    with pytest.raises(ParseError):
+        GerberRS274XParser("F.Cu", strict=True).parse(p)
+
+
+def test_step_repeat_composes_with_g75_arc_tessellation(tmp_path):
+    p = tmp_path / "panel_arc.gbr"
+    p.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "G75*\n"
+        "X010000Y000000D02*\n"
+        "%SRX2Y1I10.0J0.0*%\n"
+        "G03X000000Y010000I-010000J000000D01*\n"
+        "%SR*%\n"
+        "M02*\n"
+    )
+
+    result = GerberRS274XParser("F.Cu").parse(p)
+
+    assert len(result.tracks) >= 4
+    assert len(result.tracks) % 2 == 0
+    assert len({track.id for track in result.tracks}) == len(result.tracks)
+
+    first_half = result.tracks[: len(result.tracks) // 2]
+    second_half = result.tracks[len(result.tracks) // 2 :]
+    assert first_half[0].start.x == pytest.approx(1.0)
+    assert second_half[0].start.x == pytest.approx(11.0)
+    assert all(
+        {ev.kind for ev in track.provenance.evidence}
+        >= {"gerber_step_repeat", "gerber_arc_tessellation"}
+        for track in result.tracks
+    )
