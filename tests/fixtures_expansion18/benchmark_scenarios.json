@@ -1,0 +1,1 @@
+{"scenarios":[{"name":"1k_objects","rows":24,"cols":24,"pitch_mm":2.0},{"name":"3k_objects","rows":40,"cols":40,"pitch_mm":2.0},{"name":"7k_objects","rows":60,"cols":60,"pitch_mm":2.0}],"synthetic":true,"timing_gate":false}
