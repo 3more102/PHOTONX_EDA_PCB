@@ -358,8 +358,8 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Gerber regions / complex macros | **Not implemented** | Regions and aperture blocks fail closed and suppress permissive file geometry; complex aperture macros remain unsupported |
 | Excellon point drill hits | **Implemented** | Drill hits with explicit metric/inch units and positive tool diameters; undeclared-unit and zero-diameter tools fail closed |
 | Excellon coordinate mode | **Partial** | Absolute coordinates are supported; legacy `G91` / `ICI,ON` incremental mode fails closed and suppresses permissive file geometry |
-| Excellon G85 straight slots | **Implemented** | Straight canned slots reconstructed from explicit endpoints |
-| Excellon linear routing | **Implemented** | G00/M15/G01/M16 linear routed paths supported |
+| Excellon G85 straight slots | **Implemented** | Straight canned slots reconstructed from explicit endpoints; malformed slot syntax fails closed and suppresses permissive file geometry |
+| Excellon linear routing | **Implemented** | G00/M15/G01/M16 routes supported; malformed commands and invalid route-state transitions fail closed |
 | Excellon routed arcs | **Partial** | Bounded I/J and standard XNC X/Y/A radius arcs (<=180°) are supported; invalid/unsupported arcs fail closed and suppress permissive file geometry |
 | Strict / permissive parser modes | **Implemented** | Strict fails on unsupported syntax; permissive records diagnostics |
 | Parser conformance harness | **Implemented** | Executable support-boundary regression coverage |
@@ -637,6 +637,7 @@ Without independent evidence, manufacturing geometry generally cannot prove:
 - Excellon tool diameters require explicit units before their definition; permissive parsing suppresses the file after an undeclared-unit violation rather than guessing millimeters.
 - Excellon tool diameters must also be positive; zero-diameter tools are rejected in strict mode and suppress permissive file geometry instead of creating zero-width physical features.
 - Excellon G02/G03 routed arcs are supported for the bounded I/J center-offset subset and standard XNC X/Y/A radius form with <=180° sweep; invalid geometry or unsupported arc dialects fail closed, and permissive parsing suppresses file geometry rather than outputting a route with the failed arc omitted.
+- Excellon route/slot state violations are also fail-closed: malformed G00/G01 or G85 syntax, tool/drill/mode changes while routing, empty route termination, and unterminated routes suppress permissive file geometry instead of producing a partial board.
 - Some low-level helpers may recognize constructs that the high-level reconstruction path does not yet claim as production support.
 
 Before treating output as production evidence, review the current parser capabilities and the relevant domain documentation.
