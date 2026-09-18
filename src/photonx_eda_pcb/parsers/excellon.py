@@ -52,6 +52,12 @@ class ExcellonParser:
         self.strict = strict; self.units = "mm"; self.zero = "L"; self.units_declared = False
         self.fmt = CoordinateFormat(2, 4, "L"); self.tools = {}; self.tool = None; self.current = Point(0.0, 0.0)
         self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
+        self.geometry_enabled=True
+
+    def _disable_geometry(self,out:ExcellonResult):
+        self.geometry_enabled=False
+        out.drills.clear();out.slots.clear();out.routes.clear()
+        self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
 
     def _decode(self, raw):
         if raw is None:return None
@@ -265,7 +271,11 @@ class ExcellonParser:
                 if line == "ICI,OFF":
                     continue
                 if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: incremental Excellon coordinates are unsupported: {line}")
-                out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_INCREMENTAL",line,str(p),line_no));continue
+                out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_INCREMENTAL",line,str(p),line_no))
+                self._disable_geometry(out)
+                continue
+            if not self.geometry_enabled:
+                continue
             if "G85" in line:
                 if self.route.tool_down:
                     if self.strict:raise ParseError(f"{p}:{line_no}: G85 encountered while route tool is down")
