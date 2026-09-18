@@ -255,10 +255,14 @@ class ExcellonParser:
         try:pts=self.route.raise_tool()
         except RuntimeError as exc:
             if self.strict:raise ParseError(f"{p}:{line_no}: {exc}")
-            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no));return
+            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no))
+            self._disable_geometry(out)
+            return
         if len(pts)<2:
             if self.strict:raise ParseError(f"{p}:{line_no}: routed path has no linear segment")
-            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_EMPTY","route ended without a segment",str(p),line_no));return
+            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_EMPTY","route ended without a segment",str(p),line_no))
+            self._disable_geometry(out)
+            return
         if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: route before valid tool selection")
         rid=stable_id("route",p.name,pts,self.tool,self.tools[self.tool])
         prov=Provenance(list(self._route_sources),list(self._route_evidence))
@@ -295,11 +299,15 @@ class ExcellonParser:
             if "G85" in line:
                 if self.route.tool_down:
                     if self.strict:raise ParseError(f"{p}:{line_no}: G85 encountered while route tool is down")
-                    out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","G85 while route active",str(p),line_no));continue
+                    out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","G85 while route active",str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
                 try:x1r,y1r,x2r,y2r=parse_slot_command(line)
                 except ValueError:
                     if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: unsupported Excellon G85 slot syntax: {line}")
-                    out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_SLOT",line,str(p),line_no));continue
+                    out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_SLOT",line,str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: slot before valid tool selection")
                 x1,y1,x2,y2=(self._decode(v) for v in (x1r,y1r,x2r,y2r))
                 src=SourceRef(str(p),line_no,line);slot_id=stable_id("slot",p.name,line_no,x1,y1,x2,y2,self.tool)
@@ -312,22 +320,30 @@ class ExcellonParser:
                 try:cmd,xraw,yraw=parse_linear_route_command(line)
                 except ValueError:
                     if self.strict:raise ParseError(f"{p}:{line_no}: malformed linear route command: {line}")
-                    out.diagnostics.append(ParseDiagnostic("warning","MALFORMED_EXCELLON_ROUTE",line,str(p),line_no));continue
+                    out.diagnostics.append(ParseDiagnostic("warning","MALFORMED_EXCELLON_ROUTE",line,str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
                 x,y=self._route_xy(xraw,yraw);src=SourceRef(str(p),line_no,line)
                 if cmd=="G00":
                     try:self.route.position(x,y)
                     except RuntimeError as exc:
                         if self.strict:raise ParseError(f"{p}:{line_no}: {exc}")
-                        out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no));continue
+                        out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no))
+                        self._disable_geometry(out)
+                        continue
                     self.current=Point(x,y);self._route_sources=[src];self._route_evidence=[];continue
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: linear route before valid tool selection")
                 if not self.route.tool_down:
                     if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: standalone G01 routing is unsupported; use G00/M15/G01/M16 sequence")
-                    out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_SEQUENCE",line,str(p),line_no));continue
+                    out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_SEQUENCE",line,str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
                 try:self.route.line(x,y)
                 except RuntimeError as exc:
                     if self.strict:raise ParseError(f"{p}:{line_no}: {exc}")
-                    out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no));continue
+                    out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
                 self.current=Point(x,y);self._route_sources.append(src);continue
             control=classify_route_control(line)
             if control=="tool_down":
@@ -335,14 +351,18 @@ class ExcellonParser:
                 try:self.route.lower()
                 except RuntimeError as exc:
                     if self.strict:raise ParseError(f"{p}:{line_no}: {exc}")
-                    out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no));continue
+                    out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
                 self._route_sources.append(SourceRef(str(p),line_no,line));continue
             if control=="tool_up":
                 self._route_sources.append(SourceRef(str(p),line_no,line));self._finish_route(p,out,line_no,line);continue
             if control=="drill_mode":
                 if self.route.tool_down:
                     if self.strict:raise ParseError(f"{p}:{line_no}: G05 while route tool is down")
-                    out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","G05 while route active",str(p),line_no));continue
+                    out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","G05 while route active",str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
                 continue
             m=_TOOL_DEF.match(line)
             if m:
@@ -383,13 +403,17 @@ class ExcellonParser:
             if m:
                 if self.route.tool_down:
                     if self.strict:raise ParseError(f"{p}:{line_no}: tool change while route tool is down")
-                    out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","tool change while route active",str(p),line_no));continue
+                    out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","tool change while route active",str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
                 self.tool=m.group(1);continue
             m=_HIT.match(line)
             if m and (m.group(1) is not None or m.group(2) is not None):
                 if self.route.tool_down:
                     if self.strict:raise ParseError(f"{p}:{line_no}: drill hit while route tool is down")
-                    out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","drill hit while route active",str(p),line_no));continue
+                    out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","drill hit while route active",str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: drill hit before valid tool selection")
                 x=self._decode(m.group(1));y=self._decode(m.group(2));pt=Point(self.current.x if x is None else x,self.current.y if y is None else y)
                 src=SourceRef(str(p),line_no,line);obj_id=stable_id("drill",p.name,line_no,pt.x,pt.y,self.tool)
@@ -399,4 +423,5 @@ class ExcellonParser:
         if self.route.tool_down:
             if self.strict:raise ParseError(f"{p}: EOF while route tool is down")
             out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_UNTERMINATED","EOF while route tool is down",str(p),None))
+            self._disable_geometry(out)
         return out
