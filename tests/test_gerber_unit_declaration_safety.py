@@ -98,7 +98,7 @@ def test_legacy_g70_g71_are_explicit_unit_declarations(
     result = GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     assert len(result.pads) == 1
-    assert result.pads[0].x == pytest.approx(diameter_mm)
+    assert result.pads[0].size_x == pytest.approx(diameter_mm)
     assert result.pads[0].center.x == pytest.approx(x_mm)
 
 
