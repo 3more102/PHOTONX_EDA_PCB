@@ -87,3 +87,13 @@ def test_zip_path_traversal_is_rejected(tmp_path: Path):
     with pytest.raises(ValueError, match="unsafe archive member"):
         with prepare_input(archive):
             pass
+
+
+def test_compact_gerber_stream_does_not_require_line_breaks(tmp_path: Path):
+    compact = GERBER_LINEAR.replace("\n", "")
+    p = tmp_path / "top.gtl"
+    p.write_text(compact, encoding="utf-8")
+
+    result = reconstruct(p)
+
+    assert len(result.board.tracks) == 1
