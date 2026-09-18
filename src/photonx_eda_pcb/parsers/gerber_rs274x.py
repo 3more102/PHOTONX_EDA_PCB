@@ -609,6 +609,8 @@ class GerberRS274XParser:
                 f"invalid Gerber step-and-repeat ({exc})",
                 out,
             )
+            if not self.strict:
+                self._disable_image_geometry(out)
             return
 
         if x_count < 1 or y_count < 1:
@@ -621,6 +623,8 @@ class GerberRS274XParser:
                 "step-and-repeat counts must be positive",
                 out,
             )
+            if not self.strict:
+                self._disable_image_geometry(out)
             return
 
         instance_count = x_count * y_count
@@ -637,6 +641,8 @@ class GerberRS274XParser:
                 ),
                 out,
             )
+            if not self.strict:
+                self._disable_image_geometry(out)
             return
 
         self.step_repeat = StepRepeat(
