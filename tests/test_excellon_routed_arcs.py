@@ -129,6 +129,9 @@ def test_standard_xnc_radius_form_arc_is_supported(tmp_path: Path):
     route = result.routes[0]
     assert route.points[0] == pytest.approx((10.0, 0.0))
     assert route.points[-1] == pytest.approx((0.0, 10.0))
+    midpoint = route.points[len(route.points) // 2]
+    assert midpoint[0] > 5.0
+    assert midpoint[1] > 5.0
     assert any(
         evidence.kind == "excellon_route_arc_tessellation"
         and "encoding=radius" in evidence.detail
