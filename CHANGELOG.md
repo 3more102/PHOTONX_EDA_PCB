@@ -6,7 +6,7 @@
 - Expanded flashes, linear draws, and outline segments deterministically while preserving source provenance.
 - Added unit-aware repeat spacing, deterministic per-instance IDs, and explicit `gerber_step_repeat` evidence.
 - Added focused regression coverage for flash expansion, track expansion/termination, and inch-to-mm spacing.
-- Verified merged commit `9ad0627` on Python 3.11, 3.12, and 3.13 with 662 passing tests and 2 existing collection warnings.
+- Verified merged commit `d2258e4` on Python 3.11, 3.12, and 3.13 with 666 passing tests and 2 existing collection warnings.
 - Added production-path G75 multi-quadrant G02/G03 Gerber arc support using I/J center offsets with circular draw apertures.
 - Added coordinate-resolution-aware radius validation and deterministic arc tessellation with a 0.005 mm chord-error target.
 - Added explicit `gerber_arc_tessellation` provenance evidence and step-repeat composition for generated arc segments.
