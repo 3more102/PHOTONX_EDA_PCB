@@ -25,7 +25,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 
 ## Deliberately rejected instead of faked
 
-- ambiguous/invalid G74 center cases, Gerber regions, complex aperture macros, and aperture blocks;
+- ambiguous/invalid G74 center cases and complex aperture macros; Gerber regions and aperture blocks are rejected in strict mode and suppress file geometry in permissive mode so their bodies cannot leak as ordinary tracks/flashes;
 - standard C/R/O apertures with round-hole modifiers, because aperture-hole image subtraction is not yet represented by the reconstruction model;
 - linear D01 draws with rectangular or obround apertures, because PHOTONX does not flatten their swept geometry into an incorrect width-only track;
 - X2 `.FilePolarity,Negative` image inversion: strict mode rejects it, while permissive mode records the unsupported semantic and suppresses all geometry from that file rather than treating clearances as positive material;
