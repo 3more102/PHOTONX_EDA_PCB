@@ -348,7 +348,7 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Capability | Status | Current behavior |
 |---|---|---|
 | Gerber linear draws / flashes | **Implemented subset** | Strict RS-274X subset with provenance |
-| Gerber C/R/O apertures | **Implemented** | Used by the production geometry path |
+| Gerber C/R/O apertures | **Implemented** | Used by the production geometry path |\n| Gerber step-and-repeat | **Implemented subset** | Supported linear draws/flashes/outlines are expanded deterministically with source provenance |
 | Gerber arcs / regions / macros | **Not implemented** | Rejected or diagnosed instead of silently approximated |
 | Excellon point drill hits | **Implemented** | Metric/inch tools and drill hits |
 | Excellon G85 straight slots | **Implemented** | Straight canned slots reconstructed from explicit endpoints |
