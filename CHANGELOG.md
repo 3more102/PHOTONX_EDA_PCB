@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Verified merged commit `a2fd34c` on Python 3.11, 3.12, and 3.13 with 797 passing tests and 2 existing collection warnings.
 - Hardened Gerber step-and-repeat state handling so malformed, non-positive, or over-limit `%SR...%` commands suppress permissive file geometry instead of falling back to a single un-repeated copy.
 - Hardened Excellon linear-route and G85 failure handling so malformed commands, invalid routing state transitions, empty route termination, and unterminated routes suppress permissive file geometry instead of allowing partial routes or mixed drill/slot output.
 - Verified merged commit `de1a6a2` on Python 3.11, 3.12, and 3.13 with 778 passing tests and 2 existing collection warnings.
