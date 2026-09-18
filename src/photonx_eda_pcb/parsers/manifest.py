@@ -12,7 +12,7 @@ _GERBER_SUFFIXES = {
     ".gtl", ".gbl", ".gts", ".gbs", ".gto", ".gbo", ".gtp", ".gbp",
     ".gm1", ".gm2", ".gko", ".gml", ".cmp", ".sol",
 }
-_DRILL_SUFFIXES = {".drl", ".xnc", ".exc", ".tap"}
+_DRILL_SUFFIXES = {".drl", ".xln", ".xnc", ".exc", ".tap", ".drd"}
 
 
 @dataclass(frozen=True)
@@ -38,8 +38,13 @@ def _candidate_files(source: Path):
 
 
 def _sniff_text(path: Path, limit: int = 256 * 1024) -> str:
+    """Read only the bounded prefix needed for format/layer detection."""
     try:
-        return path.read_bytes()[:limit].decode("utf-8", errors="ignore")
+        with path.open("rb") as stream:
+            raw = stream.read(limit)
+        if b"\x00" in raw[:4096]:
+            return ""
+        return raw.decode("utf-8-sig", errors="ignore")
     except OSError:
         return ""
 
