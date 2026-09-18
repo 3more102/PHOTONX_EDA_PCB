@@ -54,10 +54,10 @@ PHOTONX is built around that distinction.
 | Package | **0.2.0** |
 | Python | **3.11+** |
 | Main dependencies | **NetworkX**, **Shapely** |
-| Verified commit | **`de1a6a2` — 18 Sep 2026** |
+| Verified commit | **`a2fd34c` — 18 Sep 2026** |
 | CI matrix | Python **3.11**, **3.12**, **3.13** |
-| Test result | **778 passed, 2 warnings** on each CI matrix job |
-| CI run | [GitHub Actions run 35392644274](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35392644274) |
+| Test result | **797 passed, 2 warnings** on each CI matrix job |
+| CI run | [GitHub Actions run 35393612495](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35393612495) |
 
 PHOTONX is an active engineering platform. It is **not** a complete CAM replacement, electrical sign-off tool, safety certification system, or fabrication guarantee.
 
@@ -590,15 +590,15 @@ The GitHub Actions matrix runs the regression suite on:
 - Python 3.12
 - Python 3.13
 
-For verified code commit **`de1a6a2`**, each matrix job completed successfully with:
+For verified code commit **`a2fd34c`**, each matrix job completed successfully with:
 
 ```text
-778 passed, 2 warnings
+797 passed, 2 warnings
 ```
 
 The two pytest warnings are collection warnings for a model class named `TestPointCandidate`; the CI jobs still complete successfully.
 
-[Open the verified workflow run](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35392644274).
+[Open the verified workflow run](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35393612495).
 
 ---
 
