@@ -1,10 +1,38 @@
 from pathlib import Path
 
-from photonx_eda_pcb.capabilities import CAPABILITIES
+import pytest
+
+from photonx_eda_pcb.capabilities import (
+    CAPABILITIES,
+    Capability,
+    capability_index,
+    validate_capability_catalog,
+)
 
 
 def _capabilities():
     return {item.name: item for item in CAPABILITIES}
+
+
+def test_capability_catalog_is_structurally_valid():
+    assert validate_capability_catalog() == ()
+    index = capability_index()
+    assert index["Excellon linear routing"].status == "partial"
+    assert index["Gerber arcs/regions/macros"].status == "not_implemented"
+
+
+def test_capability_catalog_detects_bad_entries():
+    items = [
+        Capability("Example", "implemented", "supported"),
+        Capability("Example", "invalid_status", ""),
+    ]
+
+    issues = validate_capability_catalog(items)
+    assert "CAPABILITY_NAME_DUPLICATE:Example" in issues
+    assert "CAPABILITY_STATUS_INVALID:Example:invalid_status" in issues
+    assert "CAPABILITY_NOTE_EMPTY:Example" in issues
+    with pytest.raises(ValueError, match="duplicate capability name: Example"):
+        capability_index(items)
 
 
 def test_excellon_capability_aliases_remain_consistent():
