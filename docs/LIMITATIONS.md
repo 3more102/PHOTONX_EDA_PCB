@@ -9,6 +9,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - G75 multi-quadrant G02/G03 circular arcs with signed I/J center offsets and circular draw apertures, tessellated with explicit approximation evidence;
 - bounded legacy G74 single-quadrant G02/G03 arcs using unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90 degrees;
 - single positive centered-circle aperture macros, including parameterized diameters, reduced exactly to circular apertures;
+- explicit X2 `.FilePolarity,Positive` metadata is recognized without changing positive-image geometry;
 - metric/inch units and coordinate formats for the supported subset;
 - point Excellon drill hits;
 - Excellon routed arcs using I/J center offsets and standard XNC X/Y/A radius form, tessellated with explicit approximation evidence;
@@ -23,6 +24,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 ## Deliberately rejected instead of faked
 
 - ambiguous/invalid G74 center cases, Gerber regions, complex aperture macros, and aperture blocks;
+- X2 `.FilePolarity,Negative` image inversion: strict mode rejects it, while permissive mode records the unsupported semantic and suppresses all geometry from that file rather than treating clearances as positive material;
 - Excellon routed-arc dialects outside the bounded I/J center-offset subset and the standard XNC X/Y/A radius form;
 - automatic original net names when source data does not prove them;
 - definite component references/values from pad geometry alone;
