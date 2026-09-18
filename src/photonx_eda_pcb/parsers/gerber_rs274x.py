@@ -195,10 +195,8 @@ class GerberRS274XParser:
         p = Path(path)
         out = GerberLayerResult()
 
-        for line_no, raw in enumerate(
-            p.read_text(encoding="utf-8", errors="strict").splitlines(), 1
-        ):
-            line = raw.strip()
+        text = p.read_text(encoding="utf-8", errors="strict")
+        for line_no, line in iter_gerber_statements(text):
             if not line or line.startswith("G04"):
                 continue
             if line in {"M02*", "%LPD*%"}:
