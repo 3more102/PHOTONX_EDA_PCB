@@ -1,9 +1,10 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+from math import hypot, pi, sqrt
 import re
 from pathlib import Path
 from ..errors import ParseError, UnsupportedFeatureError
-from ..gerber_geometry.arc import ArcSpec, arc_points, segments_for_chord_error, validate_arc
+from ..gerber_geometry.arc import ArcSpec, arc_points, segments_for_chord_error, sweep_radians, validate_arc
 from ..gerber_geometry.model import GeoPoint
 from ..ids import stable_id
 from ..models import Point, DrillHit, ParseDiagnostic
@@ -34,7 +35,8 @@ class ExcellonParser:
     """Strict point-drill/G85 parser with conservative linear route support.
 
     Supported route sequence: G00 position -> M15 -> G01 and/or bounded
-    G02/G03 I/J circular interpolation -> M16/M17. Routed arcs are converted
+    G02/G03 circular interpolation -> M16/M17. Routed arcs accept I/J center
+    offsets or an inline A# radius for <=180-degree geometry, then are converted
     to deterministic polyline points with explicit approximation evidence.
     """
     def __init__(self, strict: bool = True):
@@ -57,9 +59,64 @@ class ExcellonParser:
         resolution = to_mm(10 ** (-self.fmt.decimal), self.units)
         return max(1e-9, 0.25 * resolution)
 
+    def _resolve_radius_arc_center(self, end_x, end_y, radius_mm, clockwise):
+        """Resolve a unique <=180-degree center for an Excellon A# arc."""
+        if radius_mm <= 0:
+            raise ValueError("A# radius must be positive")
+
+        sx, sy = self.current.x, self.current.y
+        dx, dy = end_x - sx, end_y - sy
+        chord = hypot(dx, dy)
+        tolerance = self._route_arc_tolerance_mm()
+        if chord <= tolerance:
+            raise ValueError("A# radius arc requires a non-zero endpoint chord")
+        if chord > 2.0 * radius_mm + tolerance:
+            raise ValueError(
+                f"A# radius {radius_mm:.12g} mm is too small for chord "
+                f"{chord:.12g} mm"
+            )
+
+        half = chord / 2.0
+        h_sq = radius_mm * radius_mm - half * half
+        if h_sq < 0 and abs(h_sq) <= max(tolerance * radius_mm, tolerance * tolerance):
+            h_sq = 0.0
+        if h_sq < 0:
+            raise ValueError("A# radius does not define a real circular arc")
+
+        mx, my = (sx + end_x) / 2.0, (sy + end_y) / 2.0
+        h = sqrt(h_sq)
+        ux, uy = -dy / chord, dx / chord
+        centers = [(mx + h * ux, my + h * uy)]
+        if h > tolerance:
+            centers.append((mx - h * ux, my - h * uy))
+
+        candidates = []
+        for cx, cy in centers:
+            spec = ArcSpec(
+                GeoPoint(sx, sy),
+                GeoPoint(end_x, end_y),
+                GeoPoint(cx, cy),
+                clockwise=clockwise,
+            )
+            validate_arc(spec, rel_tol=1e-6, abs_tol=tolerance)
+            sweep = abs(
+                sweep_radians(spec, rel_tol=1e-6, abs_tol=tolerance)
+            )
+            if sweep <= pi + 1e-9:
+                candidates.append((sweep, cx, cy))
+
+        if not candidates:
+            raise ValueError("A# radius has no <=180-degree center for this direction")
+        candidates.sort(key=lambda item: (item[0], item[1], item[2]))
+        best_sweep = candidates[0][0]
+        best = [item for item in candidates if abs(item[0] - best_sweep) <= 1e-12]
+        if len(best) != 1:
+            raise ValueError("A# radius center is ambiguous")
+        return best[0][1], best[0][2]
+
     def _route_arc(self,p,out,line_no,line):
         try:
-            command,xraw,yraw,iraw,jraw=parse_arc_route_command(line)
+            command,xraw,yraw,iraw,jraw,araw=parse_arc_route_command(line)
         except ValueError:
             if self.strict:
                 raise UnsupportedFeatureError(
@@ -84,15 +141,40 @@ class ExcellonParser:
         if self.tool is None or self.tool not in self.tools:
             raise ParseError(f"{p}:{line_no}: routed arc before valid tool selection")
 
-        if iraw is None and jraw is None:
-            message="G02/G03 routed arc requires I/J center offsets"
+        if araw is not None and (iraw is not None or jraw is not None):
+            message="G02/G03 routed arc cannot mix A# radius with I/J center offsets"
+            if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}")
+            out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_ARC_DEFINITION",message,str(p),line_no));return
+
+        if araw is None and iraw is None and jraw is None:
+            message="G02/G03 routed arc requires I/J center offsets or inline A# radius"
             if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}")
             out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_ARC_CENTER",message,str(p),line_no));return
 
         x,y=self._route_xy(xraw,yraw)
-        i=0.0 if iraw is None else self._decode(iraw)
-        j=0.0 if jraw is None else self._decode(jraw)
-        center=(self.current.x+i,self.current.y+j)
+        radius_definition = araw is not None
+        requested_radius = None
+        if radius_definition:
+            if xraw is None and yraw is None:
+                message="inline A# routed arc requires an X and/or Y endpoint"
+                if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}")
+                out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_ARC_RADIUS",message,str(p),line_no));return
+            requested_radius=self._decode(araw)
+            try:
+                center=self._resolve_radius_arc_center(
+                    x,
+                    y,
+                    requested_radius,
+                    clockwise=command=="G02",
+                )
+            except ValueError as exc:
+                message=f"invalid Excellon routed arc ({exc})"
+                if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
+                out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_ARC_INVALID",message,str(p),line_no));return
+        else:
+            i=0.0 if iraw is None else self._decode(iraw)
+            j=0.0 if jraw is None else self._decode(jraw)
+            center=(self.current.x+i,self.current.y+j)
         spec=ArcSpec(
             GeoPoint(self.current.x,self.current.y),
             GeoPoint(x,y),
@@ -135,7 +217,12 @@ class ExcellonParser:
                 "excellon_route_arc_tessellation",
                 (
                     f"direction={'CW' if command=='G02' else 'CCW'}; "
-                    f"center_mm=({center[0]:.12g},{center[1]:.12g}); "
+                    f"definition={'radius' if radius_definition else 'center_offset'}; "
+                    + (
+                        f"requested_radius_mm={requested_radius:.12g}; "
+                        if radius_definition else ""
+                    )
+                    + f"center_mm=({center[0]:.12g},{center[1]:.12g}); "
                     f"radius_mm={radius:.12g}; segments={segment_count}; "
                     f"max_chord_error_mm={_ROUTE_ARC_MAX_CHORD_ERROR_MM:.12g}"
                 ),
