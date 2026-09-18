@@ -3,82 +3,144 @@
 [![CI](https://github.com/3more102/PHOTONX_EDA_PCB/actions/workflows/tests.yml/badge.svg)](https://github.com/3more102/PHOTONX_EDA_PCB/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![Version](https://img.shields.io/badge/version-0.2.0-informational)
+![Model](https://img.shields.io/badge/reconstruction-evidence--driven-6f42c1)
 
-PHOTONX is an **evidence-driven PCB manufacturing-data reconstruction and reverse-engineering platform**.
+**Evidence-driven PCB manufacturing-data reconstruction and reverse engineering.**
 
-It is designed to recover defensible physical structure, connectivity, manufacturing evidence, and higher-level engineering hypotheses from PCB manufacturing data without pretending that lost design intent is magically known.
+PHOTONX converts PCB manufacturing evidence into an auditable engineering model: geometry, drills and slots, physical connectivity, reconstructed nets, component and semantic hypotheses, validation evidence, review artifacts, and experimental KiCad output.
 
-> **Core rule:** unknown stays unknown.  
-> PHOTONX preserves provenance, confidence, assumptions, conflicts, and unresolved state instead of replacing missing information with plausible-looking guesses.
+> **Core rule: unknown stays unknown.**  
+> PHOTONX records provenance, confidence, assumptions, conflicts, omissions, and unresolved state instead of silently turning missing design intent into plausible-looking facts.
 
-## At a glance
+**Jump to:** [Quick start](#quick-start) · [Pipeline](#reconstruction-pipeline) · [Capabilities](#capability-matrix) · [Evidence model](#evidence-model) · [Outputs](#what-photonx-produces) · [Verification](#verification-and-ci) · [Limitations](#trust-boundaries-and-known-limitations) · [Documentation](#documentation)
 
-| Area | Current state |
+---
+
+## Why PHOTONX
+
+PCB manufacturing data preserves **physical implementation** much more reliably than it preserves **original design intent**. A Gerber or drill package can prove that copper, holes, pads, and mechanical features existed; it usually cannot prove the original schematic hierarchy, semantic net names, component values, firmware behavior, or engineering rationale.
+
+PHOTONX is built around that distinction.
+
+| Principle | PHOTONX behavior |
 |---|---|
-| Primary inputs | Gerber / Excellon manufacturing data, plus optional reference evidence such as BOM and pick-and-place data |
-| Physical reconstruction | Geometry, drills/slots, copper connectivity, physical nets, board material, and evidence-backed multilayer reasoning |
-| Higher-level reconstruction | Component/footprint hypotheses, semantic evidence, schematic graph, functional blocks, and review-oriented engineering analysis |
-| Outputs | Auditable JSON/reports, editable/review artifacts, and experimental KiCad board/schematic export |
-| Truth model | **Observed → Derived → Inferred → Unknown**; missing source facts are not silently invented |
-| Verified main snapshot | **18 Sep 2026 — `fcc9904`**; GitHub Actions passed on Python 3.11, 3.12, and 3.13 with **615 passed, 2 warnings** in each matrix job |
+| **Evidence before inference** | Source facts and deterministic derivations are kept separate from hypotheses. |
+| **Strict parsing** | Unsupported syntax is rejected or diagnosed rather than silently approximated. |
+| **Deterministic reconstruction** | Stable ordering and deterministic IDs make repeated runs auditable and diffable. |
+| **Conservative semantics** | Physical copper groups are not automatically promoted to original logical nets. |
+| **Explicit uncertainty** | Unknown plating, identity, layer span, values, and intent remain unknown until evidence supports them. |
+| **Reproducible validation** | Reconstruction, validation, regression evidence, round-trip checks, and release-readiness logic are kept testable. |
 
-[View the verified CI run](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35375960572).
+### Current verified snapshot
 
-## Project status
+| Item | Verified state |
+|---|---|
+| Package | **0.2.0** |
+| Python | **3.11+** |
+| Main dependencies | **NetworkX**, **Shapely** |
+| Verified commit | **`0e5a8cf` — 18 Sep 2026** |
+| CI matrix | Python **3.11**, **3.12**, **3.13** |
+| Test result | **615 passed, 2 warnings** on each CI matrix job |
+| CI run | [GitHub Actions run 35376367761](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35376367761) |
 
-- Package version: **0.2.0**
-- Python: **3.11+**
-- Main dependencies: **NetworkX** and **Shapely**
-- Verified main snapshot: **18 Sep 2026**, commit **`fcc9904`** — CI passed on Python **3.11, 3.12, and 3.13**, with **615 passed, 2 warnings** per matrix job
-- Development state: active engineering platform with strict parser boundaries, evidence tracking, reconstruction, analysis, GUI/schematic tooling, regression infrastructure, release governance, and milestone-readiness checks
-
-PHOTONX is **not** a complete CAM replacement, electrical sign-off tool, or fabrication guarantee.
-
----
-
-## What PHOTONX is trying to solve
-
-PCB manufacturing data often preserves geometry much better than design intent.
-
-Gerber, Excellon, fabrication artifacts, BOMs, pick-and-place files, IPC-style net evidence, and reconstructed geometry can reveal a great deal, but they do not automatically prove the original:
-
-- schematic hierarchy,
-- semantic net names,
-- component references,
-- values or part numbers,
-- firmware configuration,
-- stack-up material,
-- design-rule intent,
-- electrical function,
-- or engineering rationale.
-
-PHOTONX therefore treats reverse engineering as an **evidence pipeline**, not as image-to-BOM magic.
-
-### Evidence states used throughout PHOTONX
-
-| State | Meaning | Example |
-|---|---|---|
-| **Observed** | Present directly in a source artifact | Gerber flash geometry, Excellon drill coordinate, source attribute |
-| **Derived** | Deterministically computed from observed evidence | Copper contact, board bounds, connected physical island |
-| **Inferred** | A hypothesis supported by evidence and confidence | Component type, semantic net role, functional block |
-| **Unknown** | Not defensibly recoverable from the available evidence | Original design intent, missing value/MPN, unproven plating or layer span |
-
-This distinction is carried into provenance, review, validation, export, and readiness logic.
+PHOTONX is an active engineering platform. It is **not** a complete CAM replacement, electrical sign-off tool, safety certification system, or fabrication guarantee.
 
 ---
 
-## Reconstruction flow
+## Quick start
+
+### Install
+
+```bash
+python -m pip install -e ".[test]"
+```
+
+### Inspect declared parser capabilities
+
+```bash
+photonx capabilities
+```
+
+### Reconstruct a manufacturing-data directory
+
+```bash
+photonx reconstruct examples/PHOTONX_LED_TEST/input --output build/led
+```
+
+### Request experimental KiCad PCB output
+
+```bash
+photonx reconstruct examples/PHOTONX_LED_TEST/input \
+  --output build/led \
+  --kicad
+```
+
+### Use permissive parsing intentionally
+
+Strict behavior is preferred. Permissive mode exists for workflows where unsupported constructs should be preserved as diagnostics instead of immediately stopping reconstruction.
+
+```bash
+photonx reconstruct examples/PHOTONX_LED_TEST/input \
+  --output build/led \
+  --permissive
+```
+
+### Launch the model-backed GUI
+
+```bash
+photonx gui examples/PHOTONX_LED_TEST/input
+```
+
+### Run the full regression suite
+
+```bash
+pytest -q
+```
+
+---
+
+## What PHOTONX produces
+
+A standard CLI reconstruction writes an auditable reconstruction bundle.
+
+```text
+build/led/
+├── board.json             # reconstructed BoardModel
+├── validation.json        # validation state, issues, and summary
+├── reconstructed.json     # explicit JSON export of the BoardModel
+└── reconstructed.kicad_pcb  # only when --kicad is requested
+```
+
+The repository also contains library-level exporters and reporting infrastructure for additional machine-readable or review-oriented formats, including **SVG, CSV, GraphML, source manifests, JSON reports, Markdown reports, JUnit-style reporting, and KiCad-related artifacts**.
+
+Those library capabilities are not all exposed as top-level CLI switches.
+
+### Output semantics
+
+| Output | Meaning |
+|---|---|
+| `board.json` | Canonical reconstructed board data used by the project bundle. |
+| `validation.json` | Independent validation status, issues, and reconstruction summary. |
+| `reconstructed.json` | Explicit serialized BoardModel export. |
+| `reconstructed.kicad_pcb` | Experimental editable KiCad PCB representation when requested. |
+| Evidence / review artifacts | Provenance, confidence, diagnostics, review, regression, or release-readiness information depending on the workflow. |
+
+If `kicad-cli` is unavailable, PHOTONX records that state. It does not claim native KiCad validation occurred.
+
+---
+
+## Reconstruction pipeline
 
 ```mermaid
 flowchart TD
-    A[Manufacturing / reference files] --> B[Discovery and classification]
+    A[Manufacturing and reference evidence] --> B[Discovery and classification]
     B --> C[Strict Gerber / Excellon parsing]
     C --> D[Normalized geometry]
     D --> E[Shared geometry kernel]
     E --> F[Spatial candidate indexing]
     F --> G[Physical copper connectivity]
-    F --> H[Drill / via / mechanical association]
-    G --> I[Physical net reconstruction]
+    F --> H[Drill / via / slot / mechanical association]
+    G --> I[Physical-net reconstruction]
     H --> I
     I --> J[Component / footprint hypotheses]
     J --> K[Semantic evidence resolution]
@@ -86,8 +148,8 @@ flowchart TD
     K --> M[Protocols / buses / clocks / reset / power]
     L --> N[Schematic graph and functional blocks]
     M --> N
-    N --> O[Editable schematic workspace / auto-layout]
-    O --> P[KiCad / JSON / report export]
+    N --> O[Review / editing / auto-layout]
+    O --> P[JSON / report / KiCad export]
     E --> Q[DRC / ERC / manufacturing analysis]
     Q --> R[Evidence database / provenance / review]
     P --> S[Round-trip / regression / release audit]
@@ -95,75 +157,127 @@ flowchart TD
     S --> T[Release profiles and milestone readiness]
 ```
 
+### Architectural invariants
+
+- Spatial indexing narrows candidate pairs; **exact Shapely/Euclidean predicates remain authoritative**.
+- A physical copper island is a **physical net**, not automatically the original schematic net.
+- Drill or slot plating is not assumed when source evidence does not prove it.
+- Unsupported parser constructs are not silently discarded in strict mode.
+- Component identity, semantic net roles, schematic hierarchy, and engineering intent remain hypotheses unless evidence supports stronger claims.
+- Export omissions and unsupported semantics are surfaced rather than hidden.
+
 ---
 
-## Current capability summary
+## Evidence model
 
-### Parsing
+Every important reconstructed statement should fall into one of four states:
 
-| Capability | Current status | Notes |
+| State | Meaning | Example |
 |---|---|---|
-| Gerber linear draws and flashes | **Implemented subset** | Strict RS-274X subset with provenance |
+| **Observed** | Present directly in a source artifact | Gerber flash geometry, Excellon drill coordinate, source attribute |
+| **Derived** | Deterministically computed from observed evidence | Copper contact, board bounds, physical connected component |
+| **Inferred** | Hypothesis supported by evidence and confidence | Component type, semantic net role, functional block |
+| **Unknown** | Not defensibly recoverable from available evidence | Missing value/MPN, original intent, unproven plating or layer span |
+
+This distinction feeds provenance, conflict handling, review workflows, validation, exports, and readiness logic.
+
+### Examples of conservative interpretation
+
+- Connected copper does **not** prove an original logical net name.
+- A pad pattern match does **not** prove a BOM identity.
+- A likely clock or reset is a **candidate**, not proof of firmware behavior.
+- A generated schematic page is a **review view**, not proof of the original hierarchy.
+- A generated net class is a reconstructed engineering recommendation, not necessarily the original design rule.
+- A readiness pass is a software/evidence milestone, not electrical or fabrication certification.
+
+---
+
+## Capability matrix
+
+**Status legend:** **Implemented** = supported by the current production path; **Partial** = supported only for a declared subset; **Experimental** = usable but not presented as complete production equivalence; **Not inferable** = source data generally cannot prove it; **Not implemented** = intentionally unsupported in the production path.
+
+### Parsing and manufacturing geometry
+
+| Capability | Status | Current behavior |
+|---|---|---|
+| Gerber linear draws / flashes | **Implemented subset** | Strict RS-274X subset with provenance |
 | Gerber C/R/O apertures | **Implemented** | Used by the production geometry path |
-| Gerber arcs / regions / macros | **Not implemented in the production high-level parser** | Unsupported constructs are rejected or diagnosed instead of silently approximated |
+| Gerber arcs / regions / macros | **Not implemented** | Rejected or diagnosed instead of silently approximated |
 | Excellon point drill hits | **Implemented** | Metric/inch tools and drill hits |
-| Excellon G85 straight slots | **Implemented** | Explicit straight canned-slot reconstruction |
-| Excellon linear routing | **Partial** | G00/M15/G01/M16 linear routed paths are reconstructed |
-| Excellon routed arcs | **Not implemented** | G02/G03 routed arcs remain unsupported |
-| Strict/permissive parser modes | **Implemented** | Strict mode fails on unsupported syntax; permissive mode records diagnostics |
-| Parser conformance harness | **Implemented** | Executable support-boundary regression cases |
+| Excellon G85 straight slots | **Implemented** | Straight canned slots reconstructed from explicit endpoints |
+| Excellon linear routing | **Partial** | G00/M15/G01/M16 linear routed paths supported |
+| Excellon routed arcs | **Not implemented** | G02/G03 routed arcs unsupported |
+| Strict / permissive parser modes | **Implemented** | Strict fails on unsupported syntax; permissive records diagnostics |
+| Parser conformance harness | **Implemented** | Executable support-boundary regression coverage |
 
-### Geometry and physical reconstruction
+### Physical reconstruction
 
-- shared geometry kernel for tracks and reconstructed C/R/O pads;
-- deterministic coordinate/tolerance handling;
-- board-material reconstruction from closed outlines and cutouts;
-- spatial candidate indexing for geometry-heavy operations;
-- same-layer physical copper connectivity;
+PHOTONX contains infrastructure for:
+
+- shared geometry representation for tracks and reconstructed pads;
+- deterministic coordinate and tolerance handling;
+- board-material reconstruction from outlines and cutouts;
+- spatial candidate indexing;
+- same-layer copper connectivity;
 - drill-to-pad association;
-- via-span evidence and multilayer reasoning;
+- evidence-backed via-span and multilayer reasoning;
 - copper-zone contact analysis;
-- exact annular-ring checks;
-- drill-to-copper clearance checks;
-- board-edge and cutout-aware clearance checks;
-- mechanical slot/hole geometry and clearance analysis;
+- annular-ring checks;
+- drill-to-copper clearance;
+- board-edge and cutout-aware clearance;
+- mechanical hole/slot geometry and clearance;
 - deterministic physical-net grouping.
 
-Spatial indexing is used to reduce candidate pairs; **exact Shapely/Euclidean predicates remain authoritative**.
+### Semantic and component reconstruction
 
-### Component and semantic reconstruction
-
-PHOTONX can build and cross-check evidence for:
+PHOTONX contains evidence and inference layers for:
 
 - component and footprint hypotheses;
 - reference-designator recovery;
-- values, footprints, MPN candidates, and component identity;
+- component values, footprints, MPN candidates, and identity evidence;
 - BOM and pick-and-place reconciliation;
 - board variants and DNP handling;
 - net-name evidence;
-- bus grouping;
+- signal roles and bus grouping;
 - clock and reset candidates;
-- signal-role synthesis;
 - differential-pair candidates;
-- serial interfaces such as I2C, SPI, UART, and CAN;
+- I2C, SPI, UART, and CAN evidence;
 - connector pin-function hypotheses;
 - MCU / SoC peripheral mapping;
 - FPGA bank evidence;
 - SWD / JTAG debug-interface candidates;
 - DDR-style topology candidates;
-- repeated-circuit and functional-block analysis;
+- repeated circuits and functional blocks;
 - analog, power, protection, termination, bias, and conditioning hypotheses.
 
-These are **evidence-backed hypotheses**, not automatically recovered original design intent.
+These are **evidence-backed hypotheses**. They are not automatically the original design intent.
+
+### Schematic reconstruction and editing
+
+The repository includes infrastructure for:
+
+- schematic graph generation;
+- functional-block clustering;
+- generated schematic pages;
+- editable schematic state;
+- staged edits and human-review routing;
+- deterministic auto-layout;
+- page partitioning and wire routing;
+- undo/redo and command-bus integration;
+- confidence/provenance-aware editing;
+- structured KiCad schematic export;
+- deterministic export snapshots;
+- schematic round-trip checks.
+
+Generated hierarchy and layout remain review-oriented reconstructions.
 
 ### Engineering analysis
 
-The repository contains engineering-analysis layers for areas such as:
+Analysis layers include areas such as:
 
 - DRC and ERC;
 - copper width and clearance;
-- annular ring;
-- drill and mechanical clearance;
+- annular ring and mechanical clearance;
 - edge/cutout clearance;
 - return-path evidence;
 - power-tree and supply-domain reconstruction;
@@ -174,40 +288,51 @@ The repository contains engineering-analysis layers for areas such as:
 - fabrication-yield risk;
 - assembly manufacturability;
 - test-point and testability analysis;
-- length groups and generated candidate constraints;
-- net-class generation.
+- length groups;
+- generated candidate constraints and net classes.
 
-Risk scores and synthesized constraints are review aids. They are **not substitutes for dedicated SI/PI, thermal, safety, or manufacturer DFM tools**.
-
----
-
-## Schematic reconstruction and editing
-
-PHOTONX includes infrastructure for:
-
-- schematic graph generation;
-- functional-block clustering;
-- generated schematic pages;
-- editable schematic state;
-- staged edits and human-review routing;
-- deterministic auto-layout;
-- page partitioning;
-- wire routing;
-- undo/redo and command-bus integration;
-- confidence / provenance-aware editing workflows;
-- structured KiCad schematic export;
-- deterministic export snapshots;
-- schematic round-trip checks.
-
-Generated schematic hierarchy and layout are **review-oriented reconstructions**, not claims that the original design used the same page structure.
+Risk scores and synthesized constraints are review aids. They do **not** replace dedicated SI/PI, thermal, safety, EMC, regulatory, or manufacturer DFM tools.
 
 ---
 
-## Evidence, provenance, and governance
+## KiCad export policy
 
-Evidence handling is a first-class part of PHOTONX.
+KiCad export is intentionally conservative.
 
-The repository includes systems for:
+- Pads, tracks, nets, and board outlines can be represented in the experimental PCB export path.
+- NPTH slots can be exported when their semantics are known.
+- A plated slot requires evidence sufficient to infer a padstack.
+- A slot with unknown plating is skipped rather than guessed.
+- Arbitrary Excellon routed paths are explicitly omitted where equivalent KiCad semantics are not implemented.
+- Native KiCad validity is only claimed when `kicad-cli` actually runs.
+
+This policy is designed to make omissions visible instead of producing silently misleading CAD.
+
+---
+
+## Included end-to-end regression fixture
+
+`examples/PHOTONX_LED_TEST/` is intentionally **synthetic**. It is a compact regression fixture, not a claimed recovery of an unknown production PCB.
+
+Expected model:
+
+| Object | Expected count |
+|---|---:|
+| Pad candidates | 6 |
+| Copper tracks | 4 |
+| Drill hits | 6 |
+| Board-outline segments | 4 |
+| Physical copper islands | 3 |
+
+The fixture exercises Gerber flashes and linear copper draws, Excellon point drills, drill-to-pad evidence association, physical connectivity, component hypotheses, validation, JSON output, and KiCad export.
+
+Synthetic fixtures elsewhere in the repository are likewise test evidence, not recovered production boards. External/reference datasets should carry source, license, checksum, and admission metadata before being treated as ground truth.
+
+---
+
+## Evidence, provenance, review, and release governance
+
+The repository contains infrastructure for:
 
 - source and line provenance;
 - evidence records and confidence;
@@ -233,25 +358,68 @@ The repository includes systems for:
 
 ### Phase-70 readiness
 
-The current repository includes a Phase-70 readiness layer that aggregates release, manufacturing, change-control, compatibility, replay, benchmark, semantic, traceability, and round-trip evidence.
+The Phase-70 layer aggregates release, manufacturing, change-control, compatibility, replay, benchmark, semantic, traceability, and round-trip evidence.
 
-A Phase-70 pass is an **internal software/evidence milestone only**.
-
-It is **not**:
-
-- electrical certification,
-- safety certification,
-- regulatory approval,
-- fabrication approval,
-- or proof that unknown original design intent has been recovered.
+A Phase-70 pass is an **internal software/evidence milestone only**. It is not a safety certificate, electrical sign-off, regulatory approval, fabrication approval, or proof that unknown original design intent has been recovered.
 
 See [docs/PHASE70_READINESS.md](docs/PHASE70_READINESS.md).
 
 ---
 
-## Repository map
+## Verification and CI
 
-The codebase is intentionally modular. Major areas include:
+The GitHub Actions matrix runs the regression suite on:
+
+- Python 3.11
+- Python 3.12
+- Python 3.13
+
+For verified commit **`0e5a8cf`**, each matrix job completed successfully with:
+
+```text
+615 passed, 2 warnings
+```
+
+The two pytest warnings are collection warnings for a model class named `TestPointCandidate`; the CI jobs still complete successfully.
+
+[Open the verified workflow run](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35376367761).
+
+---
+
+## Trust boundaries and known limitations
+
+PHOTONX intentionally refuses to convert absence of evidence into certainty.
+
+### What PHOTONX can establish or reconstruct
+
+Depending on the source package and supported syntax, PHOTONX can establish or derive physical geometry, drills and supported slots/routes, copper contact, physical connected components, board features, evidence associations, validation issues, and bounded hypotheses.
+
+### What PHOTONX cannot automatically know
+
+Without independent evidence, manufacturing geometry generally cannot prove:
+
+- original semantic net names;
+- original schematic hierarchy;
+- exact component values or MPNs;
+- firmware configuration or behavior;
+- dielectric/material stack-up properties;
+- original design rules;
+- electrical function or engineering rationale;
+- plating or layer span where source evidence is absent;
+- safety, EMC, regulatory, or fabrication approval.
+
+### Important parser limitations
+
+- The production Gerber path is still a declared subset, not the full language.
+- Gerber arcs, regions, and aperture macros remain outside the declared production high-level parser.
+- Excellon routed arcs remain unsupported.
+- Some low-level helpers may recognize constructs that the high-level reconstruction path does not yet claim as production support.
+
+Before treating output as production evidence, review the current parser capabilities and the relevant domain documentation.
+
+---
+
+## Repository map
 
 ```text
 src/photonx_eda_pcb/
@@ -275,178 +443,47 @@ src/photonx_eda_pcb/
 ├── kicad_schematic_export/      # Structured schematic export
 ├── drc/                         # Design-rule checks
 ├── erc/                         # Electrical-rule checks
-├── production_board_validation/ # Production-readiness checks
 ├── evidence_database/           # Evidence storage
 ├── review_workflow/             # Human-review routing
 ├── regression_corpus/           # Regression datasets / expectations
-├── performance_profiles/        # Runtime evidence
-├── memory_metrics/              # Memory measurements
-├── incremental_pipeline/        # Cached recomputation
-├── quality_gate/                # Base quality gates
+├── production_board_validation/ # Production-readiness checks
 ├── production_release_profiles/ # Release profiles
 ├── release_candidate/           # Release assembly
 ├── milestone_readiness/         # Phase-70 readiness
-├── exporters/                   # JSON / KiCad board export
+├── exporters/                   # JSON / KiCad / SVG / CSV / GraphML and related exports
+├── reporting/                   # Structured reporting
+├── pipeline_stages/             # Reconstruction stage orchestration
+├── pipeline_dag/                # Dependency and impact model
 ├── gui/                         # Tkinter viewer
 └── ...
 ```
 
-The repository contains many additional domain packages. This map is intentionally thematic rather than exhaustive.
+The repository contains additional domain-specific packages; this map is intentionally thematic rather than exhaustive.
 
 ---
 
-## Quick start
+## Documentation
 
-### Install
+### Start here
 
-```bash
-python -m pip install -e ".[test]"
-```
-
-### Run the test suite
-
-```bash
-pytest -q
-```
-
-The GitHub CI matrix currently runs the suite on:
-
-- Python 3.11
-- Python 3.12
-- Python 3.13
-
-At the time of this README update, all three environments passed with:
-
-```text
-615 passed, 2 warnings
-```
-
-### Inspect declared production parser capabilities
-
-```bash
-photonx capabilities
-```
-
-### Reconstruct a manufacturing-data directory
-
-```bash
-photonx reconstruct examples/PHOTONX_LED_TEST/input --output build/led
-```
-
-Use permissive parser mode only when you intentionally want unsupported constructs recorded as diagnostics:
-
-```bash
-photonx reconstruct examples/PHOTONX_LED_TEST/input \
-  --output build/led \
-  --permissive
-```
-
-### Emit the experimental KiCad PCB reconstruction
-
-```bash
-photonx reconstruct examples/PHOTONX_LED_TEST/input \
-  --output build/led \
-  --kicad
-```
-
-If `kicad-cli` is unavailable, PHOTONX records that fact. It does not claim native KiCad validation occurred.
-
-### Launch the model-backed GUI
-
-```bash
-photonx gui examples/PHOTONX_LED_TEST/input
-```
-
-### Included regression fixture
-
-`examples/PHOTONX_LED_TEST/` is intentionally **synthetic**. It is a compact end-to-end regression fixture, not a claimed recovery of an unknown production PCB.
-
-Its expected model is:
-
-| Object | Expected count |
-|---|---:|
-| Pad candidates | 6 |
-| Copper tracks | 4 |
-| Drill hits | 6 |
-| Board-outline segments | 4 |
-| Physical copper islands | 3 |
-
-The fixture exercises Gerber flashes/linear draws, Excellon point drills, drill-to-pad evidence association, physical connectivity, component hypotheses, validation, JSON output, and KiCad export.
-
----
-
-## Synthetic data and ground truth
-
-The repository contains many synthetic fixtures and regression corpora.
-
-Synthetic datasets are intentionally labeled as synthetic. They are used to test:
-
-- parser support boundaries;
-- geometry;
-- connectivity;
-- drill/via association;
-- DRC/ERC;
-- schematic reconstruction;
-- semantic inference;
-- spatial parity;
-- deterministic replay;
-- release and readiness logic.
-
-Synthetic fixtures are **not** presented as recovered production boards.
-
-External/reference datasets should carry source, license, checksum, and admission metadata before being treated as ground-truth evidence.
-
----
-
-## Interpretation rules
-
-PHOTONX deliberately distinguishes between what is **observed**, **derived**, **inferred**, and **unknown**.
-
-Examples:
-
-- a connected copper island is a **physical net**, not automatically the original schematic net;
-- a geometric component match is a **hypothesis**, not automatically a BOM identity;
-- a likely clock or reset is a **candidate**, not proof of firmware behavior;
-- a generated net class is a **reconstructed engineering recommendation**, not the original design rule;
-- an inferred schematic page is a **review view**, not proof of original hierarchy;
-- unknown drill plating remains **unknown** until evidence proves otherwise;
-- a quality/readiness pass is a **software/evidence gate**, not electrical or fabrication certification.
-
----
-
-## Known limitations
-
-Important current limitations include:
-
-- the production high-level Gerber parser still does not support the full Gerber language;
-- Gerber arcs, regions, and aperture macros remain outside the declared production subset;
-- Excellon routed arcs remain unsupported;
-- some low-level syntax helpers recognize constructs that the high-level reconstruction path intentionally does not yet claim to support;
-- original semantic net names are generally not recoverable from manufacturing geometry alone;
-- exact component identity may remain unresolved without BOM, marking, or external evidence;
-- material stack-up and dielectric properties cannot be assumed from copper geometry;
-- generated schematic hierarchy and design constraints require review;
-- dedicated electrical, SI/PI, thermal, safety, EMC, and manufacturer sign-off remain outside PHOTONX's authority.
-
-See [docs/LIMITATIONS.md](docs/LIMITATIONS.md) and the relevant domain documentation before treating outputs as production evidence.
-
----
-
-## Recommended documentation
-
-Start with:
-
-- [Architecture](docs/ARCHITECTURE.md)
-- [Current limitations](docs/LIMITATIONS.md)
-- [Phase 59–70 roadmap](docs/CODING_ROADMAP_PHASE59_70.md)
-- [Phase-70 readiness](docs/PHASE70_READINESS.md)
-- [Production release profiles](docs/PRODUCTION_RELEASE_PROFILES.md)
-- [Parser conformance suite](docs/PARSER_CONFORMANCE_SUITE.md)
-- [Spatial integration](docs/SPATIAL_INTEGRATION.md)
-- [Geometry kernel](docs/GEOMETRY_KERNEL.md)
-- [Production-board validation](docs/PRODUCTION_BOARD_VALIDATION.md)
-- [KiCad schematic export](docs/KICAD_SCHEMATIC_EXPORT.md)
-- [Project health](docs/PROJECT_HEALTH.md)
+| Topic | Document |
+|---|---|
+| Architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Evidence model | [docs/EVIDENCE_MODEL.md](docs/EVIDENCE_MODEL.md) |
+| Connectivity evidence | [docs/CONNECTIVITY_EVIDENCE.md](docs/CONNECTIVITY_EVIDENCE.md) |
+| Copper connectivity solver | [docs/COPPER_CONNECTIVITY_SOLVER.md](docs/COPPER_CONNECTIVITY_SOLVER.md) |
+| Multilayer connectivity | [docs/MULTILAYER_CONNECTIVITY.md](docs/MULTILAYER_CONNECTIVITY.md) |
+| Parser architecture | [docs/PARSER_ARCHITECTURE.md](docs/PARSER_ARCHITECTURE.md) |
+| Parser conformance | [docs/PARSER_CONFORMANCE_SUITE.md](docs/PARSER_CONFORMANCE_SUITE.md) |
+| Parser diagnostics | [docs/PARSER_DIAGNOSTICS.md](docs/PARSER_DIAGNOSTICS.md) |
+| Production-board validation | [docs/PRODUCTION_BOARD_VALIDATION.md](docs/PRODUCTION_BOARD_VALIDATION.md) |
+| Review workflow | [docs/REVIEW_WORKFLOW.md](docs/REVIEW_WORKFLOW.md) |
+| KiCad schematic export | [docs/KICAD_SCHEMATIC_EXPORT.md](docs/KICAD_SCHEMATIC_EXPORT.md) |
+| KiCad slot round-trip | [docs/KICAD_SLOT_ROUNDTRIP.md](docs/KICAD_SLOT_ROUNDTRIP.md) |
+| Release profiles | [docs/PRODUCTION_RELEASE_PROFILES.md](docs/PRODUCTION_RELEASE_PROFILES.md) |
+| Phase-70 readiness | [docs/PHASE70_READINESS.md](docs/PHASE70_READINESS.md) |
+| Phase 59–70 roadmap | [docs/CODING_ROADMAP_PHASE59_70.md](docs/CODING_ROADMAP_PHASE59_70.md) |
+| Project health | [docs/PROJECT_HEALTH.md](docs/PROJECT_HEALTH.md) |
 
 ---
 
@@ -465,6 +502,14 @@ PHOTONX development is intended to remain grounded in authoritative format docum
 
 ---
 
+## Contributing
+
+Contributions should preserve PHOTONX's evidence boundaries: do not silently accept unsupported syntax, invent semantic facts, or replace explicit unknown state with convenience assumptions.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for repository contribution guidance.
+
+---
+
 ## Engineering philosophy
 
 PHOTONX favors:
@@ -473,10 +518,11 @@ PHOTONX favors:
 - deterministic output over accidental ordering;
 - evidence over guesses;
 - confidence and provenance over fake certainty;
-- parity tests before replacing reference algorithms;
-- synthetic regression fixtures over unverified anecdotes;
-- explicit unsupported states over partial hidden behavior;
+- exact predicates after spatial candidate filtering;
+- parity and regression tests before replacing reference algorithms;
+- synthetic fixtures over unverified anecdotes;
+- explicit unsupported states over hidden partial behavior;
 - compatibility bridges over abrupt API breakage;
 - reproducible release evidence over informal “looks good” sign-off.
 
-The project remains under active development. The goal is not to declare reverse engineering “finished,” but to make every reconstructed claim progressively more **auditable, reproducible, testable, and defensible**.
+The goal is not to declare reverse engineering “finished.” The goal is to make every reconstructed claim progressively more **auditable, reproducible, testable, reviewable, and defensible**.
