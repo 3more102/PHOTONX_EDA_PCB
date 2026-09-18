@@ -348,6 +348,7 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Capability | Status | Current behavior |
 |---|---|---|
 | Gerber linear draws / flashes | **Partial** | Circular-aperture D01 draws and solid C/R/O flashes are exact; non-circular draws and holed apertures fail closed |
+| Gerber unit declaration | **Required** | `MO` or supported legacy `G70/G71` must establish units before dimensional data; conflicting unit switches fail closed |
 | Gerber X2 file polarity | **Partial** | Explicit `Positive` is accepted; `Negative` fails closed because absence-of-material image inversion is not yet modeled |
 | Gerber layer polarity | **Partial** | `LPD` dark objects are supported; `LPC` clear objects fail closed because ordered image subtraction is not yet modeled |
 | Gerber aperture transforms | **Partial** | Identity `LM/LR/LS` states are accepted; non-identity mirror/rotate/scale fails closed to avoid distorted geometry |
@@ -627,6 +628,7 @@ Without independent evidence, manufacturing geometry generally cannot prove:
 ### Important parser limitations
 
 - The production Gerber path is still a declared subset, not the full language.
+- Gerber dimensional data requires an explicit `MO` declaration or supported legacy `G70/G71`; permissive parsing suppresses the file when units are missing or later conflict instead of assuming millimeters or mixing unit systems.
 - Gerber incremental coordinates are not modeled yet, whether selected by `G91` or legacy FS `I` notation such as `%FSLIX...*%`: strict parsing rejects them, permissive parsing suppresses affected file geometry, and preflight blocks strict reconstruction rather than treating increments as absolute coordinates.
 - X2 `.FilePolarity,Negative` is not treated as ordinary metadata: strict parsing rejects it, while permissive parsing suppresses geometry to avoid interpreting clearance as material.
 - Gerber `%LPC*%` clear layer polarity is also fail-closed: clear objects erase earlier image material, so permissive parsing suppresses that file instead of flattening clear objects into dark geometry.
