@@ -357,6 +357,7 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Gerber simple aperture macros | **Partial** | Single positive centered circle macros, including parameterized diameters, are reduced exactly to circular apertures |
 | Gerber regions / complex macros | **Not implemented** | Regions and aperture blocks fail closed and suppress permissive file geometry; complex aperture macros remain unsupported |
 | Excellon point drill hits | **Implemented** | Metric/inch tools and drill hits |
+| Excellon coordinate mode | **Partial** | Absolute coordinates are supported; legacy `G91` / `ICI,ON` incremental mode fails closed and suppresses permissive file geometry |
 | Excellon G85 straight slots | **Implemented** | Straight canned slots reconstructed from explicit endpoints |
 | Excellon linear routing | **Implemented** | G00/M15/G01/M16 linear routed paths supported |
 | Excellon routed arcs | **Partial** | G02/G03 I/J center-offset arcs and standard XNC X/Y/A radius arcs (<=180°) are supported with deterministic tessellation and provenance |
@@ -632,6 +633,7 @@ Without independent evidence, manufacturing geometry generally cannot prove:
 - Non-default legacy `AS/IP/MI/OF` transforms are fail-closed as well; permissive parsing suppresses affected file geometry rather than emitting coordinates or image semantics without the required transform.
 - G75 multi-quadrant circular arcs are supported only for I/J center offsets with circular draw apertures and are represented by explicitly evidenced tessellation.
 - Single positive centered-circle Gerber aperture macros are supported. Legacy G74 single-quadrant arcs are supported only for unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90°. Gerber regions and aperture blocks remain outside the declared production high-level parser and suppress file geometry in permissive mode; complex aperture macros remain unsupported.
+- Legacy Excellon `G91` / `ICI,ON` incremental coordinates are not modeled: strict parsing rejects them, permissive parsing suppresses file geometry, and preflight blocks strict reconstruction.
 - Excellon G02/G03 routed arcs are supported for the bounded I/J center-offset subset and standard XNC X/Y/A radius form with <=180° sweep; other vendor dialects remain unsupported.
 - Some low-level helpers may recognize constructs that the high-level reconstruction path does not yet claim as production support.
 
