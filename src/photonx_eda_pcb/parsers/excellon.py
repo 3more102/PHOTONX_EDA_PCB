@@ -1,9 +1,16 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+from math import hypot, pi, sqrt
 import re
 from pathlib import Path
 from ..errors import ParseError, UnsupportedFeatureError
-from ..gerber_geometry.arc import ArcSpec, arc_points, segments_for_chord_error, validate_arc
+from ..gerber_geometry.arc import (
+    ArcSpec,
+    arc_points,
+    segments_for_chord_error,
+    sweep_radians,
+    validate_arc,
+)
 from ..gerber_geometry.model import GeoPoint
 from ..ids import stable_id
 from ..models import Point, DrillHit, ParseDiagnostic
@@ -11,7 +18,10 @@ from ..mechanical_features.model import SlotFeature
 from ..excellon_routing.model import RoutedPath
 from ..excellon_routing.state import LinearRouteState
 from ..excellon_routing.commands import parse_linear_route_command,classify_route_control
-from ..excellon_routing.arc_commands import parse_arc_route_command
+from ..excellon_routing.arc_commands import (
+    parse_arc_route_command,
+    parse_radius_arc_route_command,
+)
 from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
 from .excellon_parts.slots import parse_slot_command
@@ -34,8 +44,9 @@ class ExcellonParser:
     """Strict point-drill/G85 parser with conservative linear route support.
 
     Supported route sequence: G00 position -> M15 -> G01 and/or bounded
-    G02/G03 I/J circular interpolation -> M16/M17. Routed arcs are converted
-    to deterministic polyline points with explicit approximation evidence.
+    G02/G03 circular interpolation -> M16/M17. Routed arcs support the
+    existing I/J center-offset subset plus standard XNC X/Y/A radius form,
+    and are converted to deterministic polyline points with explicit evidence.
     """
     def __init__(self, strict: bool = True):
         self.strict = strict; self.units = "mm"; self.zero = "L"; self.units_declared = False
@@ -57,24 +68,94 @@ class ExcellonParser:
         resolution = to_mm(10 ** (-self.fmt.decimal), self.units)
         return max(1e-9, 0.25 * resolution)
 
+    def _resolve_radius_arc_center(self, x, y, radius, clockwise):
+        """Resolve the unique <=180-degree center for standard XNC A-radius arcs."""
+        tolerance = self._route_arc_tolerance_mm()
+        if radius <= tolerance:
+            raise ValueError("radius-form arc radius must be positive")
+
+        dx = x - self.current.x
+        dy = y - self.current.y
+        chord = hypot(dx, dy)
+        if chord <= tolerance:
+            raise ValueError(
+                "radius-form arc start/end points coincide; center is indeterminate"
+            )
+        if chord > (2.0 * radius) + tolerance:
+            raise ValueError(
+                f"arc chord {chord:.12g} exceeds diameter {2.0 * radius:.12g}"
+            )
+
+        midpoint_x = (self.current.x + x) / 2.0
+        midpoint_y = (self.current.y + y) / 2.0
+        half_chord = chord / 2.0
+        h_sq = radius * radius - half_chord * half_chord
+        if h_sq < 0.0:
+            # Allow only the coordinate-resolution rounding already admitted
+            # by the chord-vs-diameter tolerance above.
+            h_sq = 0.0
+        height = sqrt(h_sq)
+        perp_x = -dy / chord
+        perp_y = dx / chord
+
+        candidates = []
+        seen = set()
+        for sign in (-1.0, 1.0):
+            center = (
+                midpoint_x + sign * height * perp_x,
+                midpoint_y + sign * height * perp_y,
+            )
+            key = (round(center[0], 15), round(center[1], 15))
+            if key in seen:
+                continue
+            seen.add(key)
+            spec = ArcSpec(
+                GeoPoint(self.current.x, self.current.y),
+                GeoPoint(x, y),
+                GeoPoint(center[0], center[1]),
+                clockwise=clockwise,
+            )
+            try:
+                validate_arc(spec, rel_tol=1e-6, abs_tol=tolerance)
+                sweep = abs(
+                    sweep_radians(spec, rel_tol=1e-6, abs_tol=tolerance)
+                )
+            except ValueError:
+                continue
+            if sweep <= pi + 1e-9:
+                candidates.append((sweep, center))
+
+        if len(candidates) != 1:
+            raise ValueError(
+                "radius-form arc does not resolve to one <=180-degree center"
+            )
+        return candidates[0][1]
+
     def _route_arc(self,p,out,line_no,line):
+        encoding="ij"
+        araw=None
         try:
             command,xraw,yraw,iraw,jraw=parse_arc_route_command(line)
         except ValueError:
-            if self.strict:
-                raise UnsupportedFeatureError(
-                    f"{p}:{line_no}: unsupported Excellon routed-arc syntax: {line}"
+            try:
+                command,xraw,yraw,araw=parse_radius_arc_route_command(line)
+                iraw=jraw=None
+                encoding="radius"
+            except ValueError:
+                if self.strict:
+                    raise UnsupportedFeatureError(
+                        f"{p}:{line_no}: unsupported Excellon routed-arc syntax: {line}"
+                    )
+                out.diagnostics.append(
+                    ParseDiagnostic(
+                        "warning",
+                        "UNSUPPORTED_EXCELLON_ROUTE_ARC_SYNTAX",
+                        line,
+                        str(p),
+                        line_no,
+                    )
                 )
-            out.diagnostics.append(
-                ParseDiagnostic(
-                    "warning",
-                    "UNSUPPORTED_EXCELLON_ROUTE_ARC_SYNTAX",
-                    line,
-                    str(p),
-                    line_no,
-                )
-            )
-            return
+                return
 
         if not self.route.tool_down:
             message="routed arc requires G00/M15 before G02/G03"
@@ -84,24 +165,33 @@ class ExcellonParser:
         if self.tool is None or self.tool not in self.tools:
             raise ParseError(f"{p}:{line_no}: routed arc before valid tool selection")
 
-        if iraw is None and jraw is None:
-            message="G02/G03 routed arc requires I/J center offsets"
-            if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}")
-            out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_ARC_CENTER",message,str(p),line_no));return
-
         x,y=self._route_xy(xraw,yraw)
-        i=0.0 if iraw is None else self._decode(iraw)
-        j=0.0 if jraw is None else self._decode(jraw)
-        center=(self.current.x+i,self.current.y+j)
-        spec=ArcSpec(
-            GeoPoint(self.current.x,self.current.y),
-            GeoPoint(x,y),
-            GeoPoint(center[0],center[1]),
-            clockwise=command=="G02",
-        )
         tolerance=self._route_arc_tolerance_mm()
 
         try:
+            if encoding=="ij":
+                if iraw is None and jraw is None:
+                    message="G02/G03 I/J routed arc requires center offsets"
+                    if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}")
+                    out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_ARC_CENTER",message,str(p),line_no));return
+                i=0.0 if iraw is None else self._decode(iraw)
+                j=0.0 if jraw is None else self._decode(jraw)
+                center=(self.current.x+i,self.current.y+j)
+            else:
+                declared_radius=self._decode(araw)
+                center=self._resolve_radius_arc_center(
+                    x,
+                    y,
+                    declared_radius,
+                    clockwise=command=="G02",
+                )
+
+            spec=ArcSpec(
+                GeoPoint(self.current.x,self.current.y),
+                GeoPoint(x,y),
+                GeoPoint(center[0],center[1]),
+                clockwise=command=="G02",
+            )
             radius=validate_arc(spec,rel_tol=1e-6,abs_tol=tolerance)
             segment_count=segments_for_chord_error(
                 spec,
@@ -134,6 +224,7 @@ class ExcellonParser:
             Evidence(
                 "excellon_route_arc_tessellation",
                 (
+                    f"encoding={encoding}; "
                     f"direction={'CW' if command=='G02' else 'CCW'}; "
                     f"center_mm=({center[0]:.12g},{center[1]:.12g}); "
                     f"radius_mm={radius:.12g}; segments={segment_count}; "
