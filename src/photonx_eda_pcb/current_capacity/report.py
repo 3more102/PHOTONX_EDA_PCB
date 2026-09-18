@@ -1,0 +1,1 @@
+def capacity_report(items):return [{"net_id":x.net_id,"width_mm":x.width_mm,"copper_um":x.copper_um,"temperature_rise_c":x.temperature_rise_c,"estimated_current_a":x.estimated_current_a,"confidence":x.confidence,"assumptions":list(x.assumptions)} for x in items]

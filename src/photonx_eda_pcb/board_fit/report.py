@@ -1,0 +1,1 @@
+def board_fit_report(x):return {"fits":x.fits,"board_bounds":list(x.board_bounds),"enclosure_bounds":list(x.enclosure_bounds),"edge_margins":list(x.edge_margins),"confidence":x.confidence,"notes":list(x.notes)}

@@ -1,0 +1,1 @@
+def pair_quality_report(items):return [{"p":x.positive_net,"n":x.negative_net,"score":x.score,"skew_mm":x.skew_mm,"spacing_variation_mm":x.spacing_variation_mm,"via_mismatch":x.via_mismatch,"confidence":x.confidence,"notes":list(x.notes)} for x in items]
