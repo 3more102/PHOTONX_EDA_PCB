@@ -391,6 +391,24 @@ class GerberRS274XParser:
             self.current_aperture is None
             or self.current_aperture not in self.apertures
         ):
+            if (
+                not self.strict
+                and self.current_aperture in self.unsupported_apertures
+            ):
+                out.diagnostics.append(
+                    ParseDiagnostic(
+                        "warning",
+                        "GERBER_APERTURE_GEOMETRY_SKIPPED",
+                        (
+                            "arc geometry skipped because the selected "
+                            "aperture macro is unsupported"
+                        ),
+                        str(path),
+                        line_no,
+                    )
+                )
+                self.current = nxt
+                return
             raise ParseError(
                 f"{path}:{line_no}: arc draw before valid aperture selection"
             )
