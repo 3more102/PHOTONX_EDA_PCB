@@ -3,7 +3,10 @@ from pathlib import Path
 import pytest
 
 from photonx_eda_pcb.errors import ParseError, UnsupportedFeatureError
-from photonx_eda_pcb.excellon_routing.arc_commands import parse_arc_route_command
+from photonx_eda_pcb.excellon_routing.arc_commands import (
+    parse_arc_route_command,
+    parse_radius_arc_route_command,
+)
 from photonx_eda_pcb.parsers.excellon import ExcellonParser
 from photonx_eda_pcb.preflight import preflight
 
@@ -29,6 +32,15 @@ def test_parse_supported_excellon_arc_command():
         "10000",
         "-10000",
         "0000",
+    )
+
+
+def test_parse_standard_xnc_radius_arc_command():
+    assert parse_radius_arc_route_command("G03X0000Y10000A10000") == (
+        "G03",
+        "0000",
+        "10000",
+        "10000",
     )
 
 
@@ -99,7 +111,7 @@ def test_routed_arc_requires_tool_down(tmp_path: Path):
         ExcellonParser(strict=True).parse(path)
 
 
-def test_radius_form_arc_remains_explicitly_unsupported(tmp_path: Path):
+def test_standard_xnc_radius_form_arc_is_supported(tmp_path: Path):
     path = _write(
         tmp_path,
         "G00X10000Y0000\n"
@@ -108,12 +120,65 @@ def test_radius_form_arc_remains_explicitly_unsupported(tmp_path: Path):
         "M16\n",
     )
 
-    result = ExcellonParser(strict=False).parse(path)
+    result = ExcellonParser(strict=True).parse(path)
 
+    assert len(result.routes) == 1
+    route = result.routes[0]
+    assert route.points[0] == pytest.approx((10.0, 0.0))
+    assert route.points[-1] == pytest.approx((0.0, 10.0))
     assert any(
-        d.code == "UNSUPPORTED_EXCELLON_ROUTE_ARC_SYNTAX"
-        for d in result.diagnostics
+        evidence.kind == "excellon_route_arc_tessellation"
+        and "encoding=radius" in evidence.detail
+        and "center_mm=(0,0)" in evidence.detail
+        for evidence in route.provenance.evidence
     )
+
+
+def test_standard_xnc_radius_form_cw_selects_other_center(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "G00X10000Y0000\n"
+        "M15\n"
+        "G02X0000Y10000A10000\n"
+        "M16\n",
+    )
+
+    result = ExcellonParser(strict=True).parse(path)
+
+    route = result.routes[0]
+    assert route.points[-1] == pytest.approx((0.0, 10.0))
+    assert any(
+        evidence.kind == "excellon_route_arc_tessellation"
+        and "encoding=radius" in evidence.detail
+        and "center_mm=(10,10)" in evidence.detail
+        for evidence in route.provenance.evidence
+    )
+
+
+def test_radius_form_arc_rejects_radius_smaller_than_half_chord(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "G00X0000Y0000\n"
+        "M15\n"
+        "G03X10000Y0000A4000\n"
+        "M16\n",
+    )
+
+    with pytest.raises(ParseError, match="exceeds diameter"):
+        ExcellonParser(strict=True).parse(path)
+
+
+def test_radius_form_arc_rejects_coincident_endpoints(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "G00X10000Y0000\n"
+        "M15\n"
+        "G03X10000Y0000A10000\n"
+        "M16\n",
+    )
+
+    with pytest.raises(ParseError, match="coincide"):
+        ExcellonParser(strict=True).parse(path)
 
 
 def test_invalid_routed_arc_geometry_is_not_silently_accepted(tmp_path: Path):
@@ -127,6 +192,21 @@ def test_invalid_routed_arc_geometry_is_not_silently_accepted(tmp_path: Path):
 
     with pytest.raises(ParseError, match="invalid Excellon routed arc"):
         ExcellonParser(strict=True).parse(path)
+
+
+def test_preflight_accepts_standard_xnc_radius_arc(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "G00X10000Y0000\n"
+        "M15\n"
+        "G03X0000Y10000A10000\n"
+        "M16\n",
+    )
+
+    report = preflight(path)
+
+    assert report.discovered_files == 1
+    assert report.ready_for_strict_reconstruction
 
 
 def test_preflight_accepts_supported_excellon_routed_arc(tmp_path: Path):
