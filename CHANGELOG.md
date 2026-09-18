@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Hardened legacy Gerber `AS/IP/MI/OF` transform handling so permissive parsing suppresses affected file geometry instead of continuing with untransformed coordinates or image semantics.
 - Verified merged commit `7721876` on Python 3.11, 3.12, and 3.13 with 722 passing tests and 2 existing collection warnings.
 - Completed positive outer-size validation for standard Gerber apertures by rejecting zero-diameter circle apertures in strict, permissive, and preflight paths.
 - Hardened Gerber `LM/LR/LS` aperture-transform handling: identity states remain supported, while non-identity or malformed transforms fail closed so mirrored, rotated, or scaled objects cannot be emitted with untransformed geometry.

@@ -1104,9 +1104,14 @@ class GerberRS274XParser:
                     line_no,
                     line,
                     "UNSUPPORTED_GERBER_TRANSFORM",
-                    "non-default legacy Gerber transform is not implemented",
+                    (
+                        "non-default legacy Gerber transform changes image geometry "
+                        "and is not implemented safely"
+                    ),
                     out,
                 )
+                if not self.strict:
+                    self._disable_image_geometry(out)
                 continue
 
             if line.startswith("%AM"):
