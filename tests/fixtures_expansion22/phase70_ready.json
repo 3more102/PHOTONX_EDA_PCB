@@ -1,0 +1,1 @@
+{"release_candidate_passed":true,"manufacturing_audit_passed":true,"change_control_passed":true,"compatibility_freeze_passed":true,"deterministic_replay_passed":true,"benchmark_governance_passed":true,"evidence_consistency_errors":0,"semantic_errors":0,"traceability_coverage":1.0,"roundtrip_fidelity":1.0}

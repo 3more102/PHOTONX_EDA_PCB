@@ -1,0 +1,1 @@
+def release_candidate_report(c,d=None):return {"name":c.name,"commit":c.commit,"artifacts":len(c.artifacts),"decision":None if d is None else {"passed":d.passed,"blockers":list(d.blockers),"warnings":list(d.warnings)}}

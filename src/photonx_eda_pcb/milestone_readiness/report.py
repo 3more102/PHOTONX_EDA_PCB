@@ -1,0 +1,1 @@
+def milestone_report(r):return {"phase":r.phase,"passed":r.passed,"score":r.score,"blockers":list(r.blockers),"warnings":list(r.warnings),"note":"software/evidence readiness only; not electrical certification"}
