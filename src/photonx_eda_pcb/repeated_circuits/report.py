@@ -1,0 +1,1 @@
+def repeated_report(groups):return [{"id":g.id,"instances":[{"id":i.id,"seed":i.seed,"components":list(i.components),"nets":list(i.nets),"similarity":i.similarity,"differences":list(i.differences)} for i in g.instances],"topology_fingerprint":g.topology_fingerprint,"similarity":g.similarity,"confidence":g.confidence,"evidence":list(g.evidence)} for g in groups]

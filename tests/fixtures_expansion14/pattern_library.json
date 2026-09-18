@@ -1,0 +1,1 @@
+[{"name":"led_resistor_channel","required_kinds":["led","resistor"],"min_components":2,"max_components":5,"required_roles":[]},{"name":"sensor_interface","required_kinds":["sensor"],"min_components":1,"max_components":null,"required_roles":["i2c"]}]

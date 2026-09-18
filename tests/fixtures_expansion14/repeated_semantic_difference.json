@@ -1,0 +1,1 @@
+{"synthetic":true,"description":"Topology-identical branches with different endpoint kinds","components":{"R1":"resistor","D1":"led","R2":"resistor","C1":"capacitor"},"expected":{"same_topology":true,"same_semantics":false},"intentionally_unknown":["functional_purpose"]}

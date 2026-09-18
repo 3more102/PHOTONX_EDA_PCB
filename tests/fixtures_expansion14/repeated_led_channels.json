@@ -1,0 +1,1 @@
+{"synthetic":true,"description":"Two structurally identical resistor+LED branches","components":{"R1":"resistor","D1":"led","R2":"resistor","D2":"led"},"edges":[["R1","N_A"],["D1","N_A"],["R2","N_B"],["D2","N_B"]],"expected":{"groups":1,"instances":2,"channel_kind":"led_driver"},"intentionally_unknown":["original_reference_meaning","supply_voltage","led_part_number"]}
