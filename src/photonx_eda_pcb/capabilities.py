@@ -10,7 +10,7 @@ class Capability:
 CAPABILITIES=[
     Capability("Gerber linear draws/flashes","implemented","Strict RS-274X subset; unsupported syntax is reported, not ignored."),
     Capability("Gerber step-and-repeat","implemented","Linear draws, flashes, and outlines are expanded deterministically with source provenance and unit-aware offsets."),
-    Capability("Gerber arcs/regions/macros","not_implemented","Rejected in strict mode to prevent silent geometry corruption."),
+    Capability("Gerber G75 circular arcs","partial","Multi-quadrant G02/G03 arcs with I/J center offsets and circular apertures are tessellated deterministically with explicit provenance."),\n    Capability("Gerber G74 arcs/regions/macros","not_implemented","Single-quadrant arcs, regions, aperture macros, and aperture blocks remain rejected in strict mode.")
     Capability("Excellon drill hits","implemented","Metric/inch tool definitions and point hits."),
     Capability("Excellon G85 slots","implemented","Straight canned slots with explicit endpoints are reconstructed."),
     Capability("Excellon linear routing","partial","G00/M15/G01/M16 linear routed paths are reconstructed; G02/G03 routed arcs remain unsupported."),
