@@ -161,12 +161,15 @@ class ExcellonParser:
                         line_no,
                     )
                 )
+                self._disable_geometry(out)
                 return
 
         if not self.route.tool_down:
             message="routed arc requires G00/M15 before G02/G03"
             if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}")
-            out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_SEQUENCE",message,str(p),line_no));return
+            out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_SEQUENCE",message,str(p),line_no))
+            self._disable_geometry(out)
+            return
 
         if self.tool is None or self.tool not in self.tools:
             raise ParseError(f"{p}:{line_no}: routed arc before valid tool selection")
@@ -179,7 +182,9 @@ class ExcellonParser:
                 if iraw is None and jraw is None:
                     message="G02/G03 I/J routed arc requires center offsets"
                     if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}")
-                    out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_ARC_CENTER",message,str(p),line_no));return
+                    out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ROUTE_ARC_CENTER",message,str(p),line_no))
+                    self._disable_geometry(out)
+                    return
                 i=0.0 if iraw is None else self._decode(iraw)
                 j=0.0 if jraw is None else self._decode(jraw)
                 center=(self.current.x+i,self.current.y+j)
@@ -215,14 +220,18 @@ class ExcellonParser:
         except ValueError as exc:
             message=f"invalid Excellon routed arc ({exc})"
             if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
-            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_ARC_INVALID",message,str(p),line_no));return
+            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_ARC_INVALID",message,str(p),line_no))
+            self._disable_geometry(out)
+            return
 
         try:
             for point in points[1:]:
                 self.route.line(point.x,point.y)
         except RuntimeError as exc:
             if self.strict:raise ParseError(f"{p}:{line_no}: {exc}")
-            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no));return
+            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no))
+            self._disable_geometry(out)
+            return
 
         src=SourceRef(str(p),line_no,line)
         self._route_sources.append(src)
