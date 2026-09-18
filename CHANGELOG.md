@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Validated standard Gerber rectangle/obround outer dimensions at parse time; zero X/Y sizes now fail closed instead of entering reconstruction as invalid geometry.
 - Hardened Gerber layer-polarity handling: `%LPD*%` remains supported, while `%LPC*%` fails closed in strict mode and suppresses file geometry in permissive mode so clear subtraction cannot be emitted as positive material.
 - Verified merged commit `273e153` on Python 3.11, 3.12, and 3.13 with 688 passing tests and 2 existing collection warnings.
 - Corrected standard Gerber aperture parsing so circle hole modifiers are never misread as Y dimensions; C/R/O apertures with hole modifiers now fail closed until aperture-hole subtraction is modeled.
