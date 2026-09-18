@@ -28,6 +28,7 @@ PHOTONX converts PCB manufacturing evidence into an auditable engineering model:
 | [Validation / release flow](#validation-stack) | Tests, round-trip checks, and readiness gates |
 | [Parser decision flow](#parsing-and-manufacturing-geometry) | Strict vs permissive handling of unsupported syntax |
 | [KiCad export flow](#kicad-export-policy) | Conservative export and native-validation decision path |
+| [CLI execution flow](#quick-start) | Command dispatch, bundle generation, optional KiCad export, and exit codes |
 
 ---
 
@@ -156,6 +157,10 @@ pytest -q
 ```
 
 The strict path is the default because a reconstruction that stops on unsupported syntax is easier to audit than one that silently loses geometry.
+
+<p align="center">
+  <img src="docs/assets/photonx_cli_flow.svg" alt="PHOTONX CLI execution flow" width="100%">
+</p>
 
 ---
 
