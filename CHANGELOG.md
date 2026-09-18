@@ -13,6 +13,7 @@
 - Added safe production support for single positive centered-circle Gerber aperture macros, including parameterized diameters and active-unit conversion.
 - Added bounded legacy G74 single-quadrant G02/G03 arc support using unsigned I/J distances, four-candidate center resolution, <=90-degree sweep enforcement, and fail-closed ambiguity handling.
 - Kept Gerber regions, complex aperture macros, and aperture blocks explicitly unsupported.
+- Added standard XNC G02/G03 X/Y/A-radius routed-arc support with <=180-degree center resolution, deterministic tessellation, and fail-closed invalid geometry.
 
 ## 0.2.0
 
