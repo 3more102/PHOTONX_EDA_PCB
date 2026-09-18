@@ -10,6 +10,7 @@ from ..models import OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
 from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
 from .gerber_parts.step_repeat import parse_step_repeat
+from .gerber_parts.tokenizer import iter_gerber_statements
 
 
 _FS = re.compile(r"^%FS([LT])A?X(\d)(\d)Y(\d)(\d)\*%$")
