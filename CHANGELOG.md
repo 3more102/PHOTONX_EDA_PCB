@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Hardened Gerber `G91` handling so permissive parsing suppresses file geometry and preflight reports a strict blocker instead of interpreting incremental coordinates as absolute.
 - Verified merged commit `5427c7a` on Python 3.11, 3.12, and 3.13 with 733 passing tests and 2 existing collection warnings.
 - Hardened legacy Gerber `AS/IP/MI/OF` transform handling so permissive parsing suppresses affected file geometry instead of continuing with untransformed coordinates or image semantics.
 - Verified merged commit `7721876` on Python 3.11, 3.12, and 3.13 with 722 passing tests and 2 existing collection warnings.

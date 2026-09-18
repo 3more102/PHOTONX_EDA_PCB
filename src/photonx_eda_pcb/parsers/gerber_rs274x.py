@@ -1088,9 +1088,14 @@ class GerberRS274XParser:
                     line_no,
                     line,
                     "GERBER_INCREMENTAL_COORDINATES_UNSUPPORTED",
-                    "G91 incremental coordinate mode is not implemented",
+                    (
+                        "G91 incremental coordinate mode is not implemented; "
+                        "interpreting subsequent coordinates as absolute would corrupt geometry"
+                    ),
                     out,
                 )
+                if not self.strict:
+                    self._disable_image_geometry(out)
                 continue
 
             # Older generators may emit explicit default transform statements.
