@@ -626,6 +626,7 @@ Without independent evidence, manufacturing geometry generally cannot prove:
 ### Important parser limitations
 
 - The production Gerber path is still a declared subset, not the full language.
+- Gerber `G91` incremental coordinates are not modeled yet: strict parsing rejects them, permissive parsing suppresses affected file geometry, and preflight blocks strict reconstruction rather than treating increments as absolute coordinates.
 - X2 `.FilePolarity,Negative` is not treated as ordinary metadata: strict parsing rejects it, while permissive parsing suppresses geometry to avoid interpreting clearance as material.
 - Gerber `%LPC*%` clear layer polarity is also fail-closed: clear objects erase earlier image material, so permissive parsing suppresses that file instead of flattening clear objects into dark geometry.
 - Non-default legacy `AS/IP/MI/OF` transforms are fail-closed as well; permissive parsing suppresses affected file geometry rather than emitting coordinates or image semantics without the required transform.
