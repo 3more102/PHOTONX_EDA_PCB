@@ -184,6 +184,25 @@ def test_standard_xnc_radius_form_cw_selects_other_center(tmp_path: Path):
     )
 
 
+def test_standard_xnc_radius_form_allows_180_degree_semicircle(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "G00X0000Y0000\n"
+        "M15\n"
+        "G03X10000Y0000A5000\n"
+        "M16\n",
+    )
+
+    result = ExcellonParser(strict=True).parse(path)
+
+    assert len(result.routes) == 1
+    route = result.routes[0]
+    assert route.points[0] == pytest.approx((0.0, 0.0))
+    assert route.points[-1] == pytest.approx((10.0, 0.0))
+    assert len(route.points) > 2
+    assert any(abs(point[1]) > 0.1 for point in route.points[1:-1])
+
+
 def test_radius_form_arc_rejects_radius_smaller_than_half_chord(tmp_path: Path):
     path = _write(
         tmp_path,
