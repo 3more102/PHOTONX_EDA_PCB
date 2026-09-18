@@ -352,7 +352,7 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Gerber layer polarity | **Partial** | `LPD` dark objects are supported; `LPC` clear objects fail closed because ordered image subtraction is not yet modeled |
 | Gerber aperture transforms | **Partial** | Identity `LM/LR/LS` states are accepted; non-identity mirror/rotate/scale fails closed to avoid distorted geometry |
 | Gerber C/R/O apertures | **Implemented subset** | Positive-size solid C/R/O apertures are modeled; zero-size outer geometry and round-hole modifiers fail closed |
-| Gerber step-and-repeat | **Implemented subset** | Supported linear draws/flashes/outlines are expanded deterministically with source provenance |
+| Gerber step-and-repeat | **Implemented subset** | Supported geometry expands deterministically; malformed/non-positive/over-limit SR state fails closed and suppresses permissive file geometry |
 | Gerber circular arcs | **Partial** | G75 multi-quadrant arcs use signed I/J offsets; bounded legacy G74 single-quadrant arcs resolve unsigned I/J distances only when one <=90° center candidate is unambiguous; deterministic tessellation with explicit provenance |
 | Gerber simple aperture macros | **Partial** | Single positive centered circle macros, including parameterized diameters, are reduced exactly to circular apertures |
 | Gerber regions / complex macros | **Not implemented** | Regions and aperture blocks fail closed and suppress permissive file geometry; complex aperture macros remain unsupported |
@@ -631,6 +631,7 @@ Without independent evidence, manufacturing geometry generally cannot prove:
 - X2 `.FilePolarity,Negative` is not treated as ordinary metadata: strict parsing rejects it, while permissive parsing suppresses geometry to avoid interpreting clearance as material.
 - Gerber `%LPC*%` clear layer polarity is also fail-closed: clear objects erase earlier image material, so permissive parsing suppresses that file instead of flattening clear objects into dark geometry.
 - Non-default legacy `AS/IP/MI/OF` transforms are fail-closed as well; permissive parsing suppresses affected file geometry rather than emitting coordinates or image semantics without the required transform.
+- Gerber step-and-repeat is fail-closed when the SR statement is malformed, has non-positive repeat counts, or exceeds the configured expansion limit; permissive parsing suppresses the file rather than flattening a panel to one instance.
 - G75 multi-quadrant circular arcs are supported only for I/J center offsets with circular draw apertures and are represented by explicitly evidenced tessellation.
 - Single positive centered-circle Gerber aperture macros are supported. Legacy G74 single-quadrant arcs are supported only for unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90°. Gerber regions and aperture blocks remain outside the declared production high-level parser and suppress file geometry in permissive mode; complex aperture macros remain unsupported.
 - Legacy Excellon `G91` / `ICI,ON` incremental coordinates are not modeled: strict parsing rejects them, permissive parsing suppresses file geometry, and preflight blocks strict reconstruction.
