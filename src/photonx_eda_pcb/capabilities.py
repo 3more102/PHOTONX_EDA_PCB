@@ -18,7 +18,7 @@ CAPABILITIES=[
     Capability("Excellon G85 slots","implemented","Straight canned slots with explicit endpoints are reconstructed."),
     Capability("Excellon linear routing","implemented","G00/M15/G01/M16 linear routed paths are reconstructed."),
     Capability("Excellon routed arcs","partial","G02/G03 routed arcs with I/J center offsets are tessellated deterministically with explicit provenance; radius/A-form arcs remain unsupported."),
-    Capability("Excellon slots/routes","partial","G85 straight slots plus mixed linear and bounded I/J circular routed paths are supported."),
+    Capability("Excellon slots/routes","partial","G85 straight slots plus G00/M15/G01 linear routing and bounded G02/G03 I/J circular routed paths are supported."),
     Capability("Physical copper connectivity","implemented","Geometry-overlap graph with deterministic IDs."),
     Capability("Logical net names","not_inferable","Manufacturing layers generally do not preserve original schematic net names."),
     Capability("Component hypotheses","implemented","Heuristic hypotheses only; never promoted to fact without evidence."),
