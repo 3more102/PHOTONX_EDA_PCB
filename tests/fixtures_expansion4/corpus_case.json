@@ -1,0 +1,1 @@
+{"id":"synthetic-led","input_paths":["examples/PHOTONX_LED_TEST"],"expected_metrics":{"components":3,"nets":3},"expected_nets":{},"notes":"Synthetic fixture, not a real-board benchmark."}

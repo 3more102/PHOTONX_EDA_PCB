@@ -1,0 +1,1 @@
+{"islands":[{"id":"p1","layer":"F.Cu","area_mm2":100,"net_id":"GND"},{"id":"p2","layer":"B.Cu","area_mm2":80,"net_id":"GND"}],"contacts":[["p1","p2"]]}
