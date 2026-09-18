@@ -351,7 +351,8 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Gerber C/R/O apertures | **Implemented** | Used by the production geometry path |
 | Gerber step-and-repeat | **Implemented subset** | Supported linear draws/flashes/outlines are expanded deterministically with source provenance |
 | Gerber G75 circular arcs | **Partial** | Multi-quadrant G02/G03 arcs with I/J center offsets and circular apertures; deterministic tessellation with explicit provenance |
-| Gerber G74 arcs / regions / macros | **Not implemented** | Single-quadrant arcs, regions, aperture macros, and aperture blocks remain fail-closed |
+| Gerber simple aperture macros | **Partial** | Single positive centered circle macros, including parameterized diameters, are reduced exactly to circular apertures |
+| Gerber G74 arcs / regions / complex macros | **Not implemented** | Single-quadrant arcs, regions, complex aperture macros, and aperture blocks remain fail-closed |
 | Excellon point drill hits | **Implemented** | Metric/inch tools and drill hits |
 | Excellon G85 straight slots | **Implemented** | Straight canned slots reconstructed from explicit endpoints |
 | Excellon linear routing | **Partial** | G00/M15/G01/M16 linear routed paths supported |
