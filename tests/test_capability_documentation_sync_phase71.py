@@ -25,7 +25,7 @@ def test_limitations_document_matches_excellon_capability_boundary():
 
     assert "Excellon G85 straight canned slots" in text
     assert "G00 -> M15 -> G01... -> M16/M17" in text
-    assert "Excellon routed arcs (\`G02/G03\`)" in text
+    assert "Excellon routed arcs (`G02/G03`)" in text
     assert "- Excellon routed slots/routes;" not in text
 
 
