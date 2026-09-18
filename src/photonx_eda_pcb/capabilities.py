@@ -17,7 +17,7 @@ CAPABILITIES=[
     Capability("Gerber step-and-repeat","implemented","Linear draws, flashes, and outlines are expanded deterministically with source provenance and unit-aware offsets."),
     Capability("Gerber G75 circular arcs","partial","Multi-quadrant G02/G03 arcs use signed I/J center offsets with circular apertures and deterministic tessellation with explicit provenance."),
     Capability("Gerber simple aperture macros","partial","Single positive centered circle macros, including parameterized diameter, are reduced safely to circular apertures; complex macro geometry remains fail-closed."),
-    Capability("Gerber G74 arcs/regions/macros","partial","Bounded G74 single-quadrant arcs are supported using unsigned I/J distances only when one <=90-degree center candidate is unambiguous; regions, complex aperture macros, and aperture blocks remain rejected in strict mode."),
+    Capability("Gerber G74 arcs/regions/macros","partial","Bounded G74 single-quadrant arcs are supported using unsigned I/J distances only when one <=90-degree center candidate is unambiguous; regions and aperture blocks remain fail-closed, with permissive file-geometry suppression, while complex aperture macros remain unsupported."),
     Capability("Excellon drill hits","implemented","Metric/inch tool definitions and point hits."),
     Capability("Excellon G85 slots","implemented","Straight canned slots with explicit endpoints are reconstructed."),
     Capability("Excellon linear routing","implemented","G00/M15/G01/M16 linear routed paths are reconstructed."),
