@@ -24,7 +24,7 @@ from .gerber_parts.step_repeat import parse_step_repeat
 from .gerber_parts.tokenizer import iter_gerber_statements
 
 
-_FS = re.compile(r"^%FS([LT])A?X(\d)(\d)Y(\d)(\d)\*%$")
+_FS = re.compile(r"^%FS([LT])([AI])?X(\d)(\d)Y(\d)(\d)\*%$")
 _MO = re.compile(r"^%MO(MM|IN)\*%$")
 _AD_STANDARD = re.compile(
     r"^%ADD(\d+)([CRO]),?([0-9.]+(?:X[0-9.]+)*)\*%$"
@@ -1059,9 +1059,23 @@ class GerberRS274XParser:
 
             m = _FS.match(line)
             if m:
-                zs, xi, xd, yi, yd = m.groups()
+                zs, notation, xi, xd, yi, yd = m.groups()
                 self.xfmt = CoordinateFormat(int(xi), int(xd), zs)
                 self.yfmt = CoordinateFormat(int(yi), int(yd), zs)
+                if notation == "I":
+                    self._fail_or_warn(
+                        p,
+                        line_no,
+                        line,
+                        "GERBER_INCREMENTAL_COORDINATES_UNSUPPORTED",
+                        (
+                            "FS incremental coordinate notation is not implemented; "
+                            "interpreting subsequent coordinates as absolute would corrupt geometry"
+                        ),
+                        out,
+                    )
+                    if not self.strict:
+                        self._disable_image_geometry(out)
                 continue
 
             m = _MO.match(line)
