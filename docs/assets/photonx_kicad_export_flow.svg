@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="760" viewBox="0 0 1500 760" role="img" aria-labelledby="title desc">
+<title id="title">PHOTONX KiCad Export Decision Flow</title>
+<desc id="desc">PHOTONX exports supported board semantics conservatively, omits unsupported routed-path semantics, validates with kicad-cli when available, and records the validation result explicitly.</desc>
+<defs>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0 0 L0 6 L9 3 z" fill="#64748b"/></marker>
+  <style>
+    .title{font:700 36px Inter,Segoe UI,Arial,sans-serif;fill:#111827}.sub{font:400 17px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+    .box{stroke-width:2;rx:16;ry:16}.t{font:700 18px Inter,Segoe UI,Arial,sans-serif;fill:#111827}.s{font:400 14px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+    .a{stroke:#64748b;stroke-width:3;fill:none;marker-end:url(#arrow)}.good{stroke:#059669;stroke-width:3;fill:none;marker-end:url(#arrow)}.warn{stroke:#ca8a04;stroke-width:3;fill:none;marker-end:url(#arrow)}
+  </style>
+</defs>
+<rect width="1500" height="760" fill="#fff"/>
+<text x="70" y="60" class="title">PHOTONX KiCad Export Decision Flow</text>
+<text x="70" y="94" class="sub">Export completeness never outranks semantic truthfulness.</text>
+
+<rect x="80" y="170" width="220" height="92" class="box" fill="#e0f2fe" stroke="#0284c7"/>
+<text x="190" y="205" text-anchor="middle" class="t">BoardModel</text>
+<text x="190" y="231" text-anchor="middle" class="s">physical + inferred evidence</text>
+
+<rect x="365" y="170" width="250" height="92" class="box" fill="#eef2ff" stroke="#4f46e5"/>
+<text x="490" y="205" text-anchor="middle" class="t">KiCad Semantics Known?</text>
+<text x="490" y="231" text-anchor="middle" class="s">can this object be represented?</text>
+
+<rect x="720" y="145" width="260" height="102" class="box" fill="#ecfdf5" stroke="#059669"/>
+<text x="850" y="182" text-anchor="middle" class="t">YES → Export</text>
+<text x="850" y="208" text-anchor="middle" class="s">pads · tracks · nets · outline</text>
+<text x="850" y="230" text-anchor="middle" class="s">supported slot semantics</text>
+
+<rect x="720" y="300" width="260" height="102" class="box" fill="#fefce8" stroke="#ca8a04"/>
+<text x="850" y="337" text-anchor="middle" class="t">NO → Omit Explicitly</text>
+<text x="850" y="363" text-anchor="middle" class="s">do not invent CAD semantics</text>
+<text x="850" y="385" text-anchor="middle" class="s">keep omission visible</text>
+
+<path d="M300 216 H365" class="a"/>
+<path d="M615 216 H720" class="good"/>
+<path d="M490 262 V351 H720" class="warn"/>
+
+<rect x="1070" y="170" width="270" height="92" class="box" fill="#f5f3ff" stroke="#7c3aed"/>
+<text x="1205" y="205" text-anchor="middle" class="t">Write .kicad_pcb</text>
+<text x="1205" y="231" text-anchor="middle" class="s">experimental editable representation</text>
+<path d="M980 196 H1070" class="a"/>
+
+<rect x="1035" y="355" width="340" height="100" class="box" fill="#fff7ed" stroke="#ea580c"/>
+<text x="1205" y="391" text-anchor="middle" class="t">kicad-cli Available?</text>
+<text x="1205" y="417" text-anchor="middle" class="s">native validation is a separate claim</text>
+<path d="M1205 262 V355" class="a"/>
+
+<rect x="700" y="565" width="270" height="105" class="box" fill="#ecfdf5" stroke="#059669"/>
+<text x="835" y="601" text-anchor="middle" class="t">YES → Run Validation</text>
+<text x="835" y="627" text-anchor="middle" class="s">record status + native detail</text>
+<text x="835" y="649" text-anchor="middle" class="s">in kicad_validation.txt</text>
+
+<rect x="1060" y="565" width="300" height="105" class="box" fill="#fefce8" stroke="#ca8a04"/>
+<text x="1210" y="601" text-anchor="middle" class="t">NO → Record Unavailable</text>
+<text x="1210" y="627" text-anchor="middle" class="s">do not claim native validation</text>
+<text x="1210" y="649" text-anchor="middle" class="s">preserve truthful status</text>
+
+<path d="M1205 455 C1205 510 835 510 835 565" class="good"/>
+<path d="M1205 455 V565" class="warn"/>
+
+<text x="70" y="725" class="sub">Arbitrary Excellon routed paths are omitted where equivalent KiCad semantics are not implemented. Exported geometry is review-oriented, not proof of original CAD intent.</text>
+</svg>
