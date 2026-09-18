@@ -62,3 +62,31 @@ The target behavior is therefore:
 > drop a manufacturing package into PHOTONX -> automatically discover it ->
 > reconstruct all supported evidence -> explicitly report every unsupported or
 > ambiguous feature.
+
+
+## Compatibility hardening
+
+The generic input path also handles several common real-world variations:
+
+- Gerber UTF-8 BOMs;
+- modal/omitted D01/D02/D03 operation codes after an operation is established;
+- standalone D01/D02/D03 modal operation selection;
+- legacy G70/G71 unit selection and explicit G90 absolute mode;
+- identity legacy Gerber transform statements;
+- Excellon M71/M72 metric/inch selection;
+- Excellon tool definitions with feed/spindle suffixes;
+- additional Protel/Altium/EAGLE-style layer/file extensions;
+- headerless Excellon-like packages are detected, but PHOTONX will not silently
+  guess their units.
+
+Discovery reads only a bounded prefix of each candidate file rather than loading
+entire files into memory. Binary-looking files containing NUL bytes in the
+sniff window are ignored by content detection.
+
+### Fail-closed boundaries
+
+PHOTONX still rejects or explicitly diagnoses semantics that would be unsafe to
+guess, including Gerber G91 incremental coordinates, non-identity legacy
+transforms, Gerber regions/aperture macros not supported by the production
+geometry path, and Excellon routed arcs. An input being discovered does not mean
+every construct inside it is automatically accepted.
