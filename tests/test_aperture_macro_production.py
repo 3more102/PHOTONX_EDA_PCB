@@ -69,13 +69,69 @@ def test_circle_macro_respects_active_inch_units(tmp_path: Path):
     assert result.pads[0].size_x == pytest.approx(0.254)
 
 
-def test_complex_macro_remains_fail_closed_in_strict_mode(tmp_path: Path):
+def test_center_line_rectangle_macro_flash_is_supported(tmp_path: Path):
     path = _write(
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
         "%AMBOX*21,1,$1,$2,0,0,0*%\n"
         "%ADD10BOX,1.0X2.0*%\n"
+        "D10*\n"
+        "X010000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.pads) == 1
+    pad = result.pads[0]
+    assert pad.shape == "R"
+    assert pad.center.x == pytest.approx(1.0)
+    assert pad.center.y == pytest.approx(2.0)
+    assert pad.size_x == pytest.approx(1.0)
+    assert pad.size_y == pytest.approx(2.0)
+
+
+def test_center_line_rectangle_macro_respects_active_inch_units(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOIN*%\n"
+        "%AMBOX*21,1,$1,$2,0,0,0*%\n"
+        "%ADD10BOX,0.010X0.020*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu").parse(path)
+
+    pad = result.pads[0]
+    assert pad.size_x == pytest.approx(0.254)
+    assert pad.size_y == pytest.approx(0.508)
+
+
+@pytest.mark.parametrize(
+    "macro_body",
+    [
+        "21,0,1.0,2.0,0,0,0",
+        "21,1,1.0,2.0,0.1,0,0",
+        "21,1,1.0,2.0,0,0.1,0",
+        "21,1,1.0,2.0,0,0,30",
+        "21,1,0,2.0,0,0,0",
+        "21,1,1.0,0,0,0,0",
+    ],
+)
+def test_center_line_rectangle_macro_non_exact_cases_fail_closed(
+    tmp_path: Path,
+    macro_body: str,
+):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        f"%AMBOX*{macro_body}*%\n"
+        "%ADD10BOX*%\n"
         "D10*\n"
         "X000000Y000000D03*\n"
         "M02*\n",
@@ -85,31 +141,29 @@ def test_complex_macro_remains_fail_closed_in_strict_mode(tmp_path: Path):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
-def test_complex_macro_is_diagnostic_in_permissive_mode(tmp_path: Path):
+def test_multi_primitive_macro_remains_fail_closed_in_strict_mode(tmp_path: Path):
     path = _write(
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
-        "%AMBOX*21,1,$1,$2,0,0,0*%\n"
-        "%ADD10BOX,1.0X2.0*%\n"
+        "%AMCOMPLEX*21,1,1.0,2.0,0,0,0*1,1,0.2,0,0*%\n"
+        "%ADD10COMPLEX*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
         "M02*\n",
     )
 
-    result = GerberRS274XParser("F.Cu", strict=False).parse(path)
-
-    assert any(
-        d.code == "UNSUPPORTED_GERBER_APERTURE_MACRO"
-        for d in result.diagnostics
-    )
+    with pytest.raises(UnsupportedFeatureError):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
-def test_permissive_complex_macro_skips_geometry_and_continues(tmp_path: Path):
+def test_permissive_unsupported_macro_skips_geometry_and_continues(tmp_path: Path):
     path = _write(
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
-        "%AMBOX*21,1,$1,$2,0,0,0*%\n"
-        "%ADD10BOX,1.0X2.0*%\n"
+        "%AMBOX*21,1,1.0,2.0,0,0,30*%\n"
+        "%ADD10BOX*%\n"
         "%ADD11C,0.300*%\n"
         "D10*\n"
         "X000000Y000000D03*\n"
@@ -122,6 +176,10 @@ def test_permissive_complex_macro_skips_geometry_and_continues(tmp_path: Path):
 
     assert len(result.pads) == 1
     assert result.pads[0].size_x == pytest.approx(0.3)
+    assert any(
+        d.code == "UNSUPPORTED_GERBER_APERTURE_MACRO"
+        for d in result.diagnostics
+    )
     assert any(
         d.code == "GERBER_APERTURE_GEOMETRY_SKIPPED"
         for d in result.diagnostics
