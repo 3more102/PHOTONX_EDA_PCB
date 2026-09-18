@@ -101,3 +101,28 @@ def test_complex_macro_is_diagnostic_in_permissive_mode(tmp_path: Path):
         d.code == "UNSUPPORTED_GERBER_APERTURE_MACRO"
         for d in result.diagnostics
     )
+
+
+def test_permissive_complex_macro_skips_geometry_and_continues(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMBOX*21,1,$1,$2,0,0,0*%\n"
+        "%ADD10BOX,1.0X2.0*%\n"
+        "%ADD11C,0.300*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "D11*\n"
+        "X010000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=False).parse(path)
+
+    assert len(result.pads) == 1
+    assert result.pads[0].size_x == pytest.approx(0.3)
+    assert any(
+        d.code == "GERBER_APERTURE_GEOMETRY_SKIPPED"
+        for d in result.diagnostics
+    )
