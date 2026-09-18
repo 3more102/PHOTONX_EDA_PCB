@@ -636,7 +636,29 @@ class GerberRS274XParser:
             line = raw.strip()
             if not line or line.startswith("G04"):
                 continue
-            if line in {"M02*", "%LPD*%"}:
+            if line == "M02*":
+                continue
+            if line == "%LPD*%":
+                continue
+            if line == "%LPC*%":
+                if self.region_state.active:
+                    self._region_fail(
+                        p,
+                        line_no,
+                        line,
+                        "GERBER_REGION_CLEAR_POLARITY_UNSUPPORTED",
+                        "clear-polarity regions are outside the supported subset",
+                        out,
+                    )
+                else:
+                    self._fail_or_warn(
+                        p,
+                        line_no,
+                        line,
+                        "GERBER_CLEAR_POLARITY_UNSUPPORTED",
+                        "clear polarity is not implemented safely",
+                        out,
+                    )
                 continue
             if (
                 line.startswith("%TF")
@@ -681,7 +703,25 @@ class GerberRS274XParser:
                 continue
 
             if line.startswith("%SR"):
-                self._configure_step_repeat(line, p, line_no, out)
+                if self.region_state.active:
+                    self._region_fail(
+                        p,
+                        line_no,
+                        line,
+                        "GERBER_REGION_STEP_REPEAT_TRANSITION_UNSUPPORTED",
+                        "step-repeat mode cannot change inside an active region",
+                        out,
+                    )
+                else:
+                    self._configure_step_repeat(line, p, line_no, out)
+                continue
+
+            if line in {"G36*", "G036*"}:
+                self._begin_region(p, line_no, line, out)
+                continue
+
+            if line in {"G37*", "G037*"}:
+                self._end_region(p, line_no, line, out)
                 continue
 
             if line in {"G75*", "G075*"}:
@@ -689,6 +729,16 @@ class GerberRS274XParser:
                 continue
 
             if line in {"G74*", "G074*"}:
+                if self.region_state.active:
+                    self._region_fail(
+                        p,
+                        line_no,
+                        line,
+                        "GERBER_REGION_ARC_UNSUPPORTED",
+                        "G74/G02/G03 arc semantics are not supported inside regions",
+                        out,
+                    )
+                    continue
                 self.quadrant_mode = "single"
                 self._fail_or_warn(
                     p,
@@ -705,6 +755,16 @@ class GerberRS274XParser:
                 continue
 
             if line in {"G02*", "G2*"}:
+                if self.region_state.active:
+                    self._region_fail(
+                        p,
+                        line_no,
+                        line,
+                        "GERBER_REGION_ARC_UNSUPPORTED",
+                        "circular interpolation is not supported inside regions",
+                        out,
+                    )
+                    continue
                 self.interpolation = "cw_arc"
                 if self.quadrant_mode != "multi":
                     self._fail_or_warn(
@@ -718,6 +778,16 @@ class GerberRS274XParser:
                 continue
 
             if line in {"G03*", "G3*"}:
+                if self.region_state.active:
+                    self._region_fail(
+                        p,
+                        line_no,
+                        line,
+                        "GERBER_REGION_ARC_UNSUPPORTED",
+                        "circular interpolation is not supported inside regions",
+                        out,
+                    )
+                    continue
                 self.interpolation = "ccw_arc"
                 if self.quadrant_mode != "multi":
                     self._fail_or_warn(
@@ -743,6 +813,22 @@ class GerberRS274XParser:
                     )
                 )
                 if arc_candidate:
+                    if self.region_state.active:
+                        x = self._decode(x_raw, "x")
+                        y = self._decode(y_raw, "y")
+                        self.current = Point(
+                            self.current.x if x is None else x,
+                            self.current.y if y is None else y,
+                        )
+                        self._region_fail(
+                            p,
+                            line_no,
+                            line,
+                            "GERBER_REGION_ARC_UNSUPPORTED",
+                            "arc interpolation or I/J offsets inside regions are not supported",
+                            out,
+                        )
+                        continue
                     if gcode in {"G02", "G2"}:
                         self.interpolation = "cw_arc"
                     elif gcode in {"G03", "G3"}:
@@ -795,20 +881,40 @@ class GerberRS274XParser:
                     )
                     continue
 
-            if line.startswith(("G36", "G37")) or line.startswith(
-                ("%AM", "%AB")
-            ):
-                self._fail_or_warn(
-                    p,
-                    line_no,
-                    line,
-                    "UNSUPPORTED_GERBER_CONSTRUCT",
-                    "Gerber construct not implemented safely",
-                    out,
-                )
+            if line.startswith(("%AM", "%AB")):
+                if self.region_state.active:
+                    self._region_fail(
+                        p,
+                        line_no,
+                        line,
+                        "GERBER_REGION_UNSUPPORTED_CONSTRUCT",
+                        "aperture macros or blocks cannot occur in the supported region subset",
+                        out,
+                    )
+                else:
+                    self._fail_or_warn(
+                        p,
+                        line_no,
+                        line,
+                        "UNSUPPORTED_GERBER_CONSTRUCT",
+                        "Gerber construct not implemented safely",
+                        out,
+                    )
                 continue
 
             m = _COORD.match(line)
+            if m and self.region_state.active:
+                x_raw, y_raw, op = m.groups()
+                self._region_coordinate(
+                    p,
+                    line_no,
+                    line,
+                    out,
+                    x_raw,
+                    y_raw,
+                    op,
+                )
+                continue
             if m:
                 x_raw, y_raw, op = m.groups()
                 x = self._decode(x_raw, "x")
@@ -940,13 +1046,37 @@ class GerberRS274XParser:
                 self.current = nxt
                 continue
 
-            self._fail_or_warn(
-                p,
-                line_no,
-                line,
-                "UNKNOWN_GERBER_STATEMENT",
-                "unrecognized Gerber statement",
-                out,
+            if self.region_state.active:
+                self._region_fail(
+                    p,
+                    line_no,
+                    line,
+                    "GERBER_REGION_UNSUPPORTED_STATEMENT",
+                    "unrecognized statement inside active region",
+                    out,
+                )
+            else:
+                self._fail_or_warn(
+                    p,
+                    line_no,
+                    line,
+                    "UNKNOWN_GERBER_STATEMENT",
+                    "unrecognized Gerber statement",
+                    out,
+                )
+
+        if self.region_state.active:
+            if self.strict:
+                raise ParseError(f"{p}: unterminated G36 region at end of file")
+            out.diagnostics.append(
+                ParseDiagnostic(
+                    "warning",
+                    "GERBER_REGION_UNTERMINATED",
+                    "unterminated G36 region at end of file",
+                    str(p),
+                    self.region_start_line,
+                )
             )
+            self._abort_region()
 
         return out
