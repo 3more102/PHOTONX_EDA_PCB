@@ -351,7 +351,7 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Gerber X2 file polarity | **Partial** | Explicit `Positive` is accepted; `Negative` fails closed because absence-of-material image inversion is not yet modeled |
 | Gerber layer polarity | **Partial** | `LPD` dark objects are supported; `LPC` clear objects fail closed because ordered image subtraction is not yet modeled |
 | Gerber aperture transforms | **Partial** | Identity `LM/LR/LS` states are accepted; non-identity mirror/rotate/scale fails closed to avoid distorted geometry |
-| Gerber C/R/O apertures | **Implemented subset** | Solid C/R/O apertures are modeled; round-hole modifiers fail closed until aperture-hole subtraction is represented |
+| Gerber C/R/O apertures | **Implemented subset** | Positive-size solid C/R/O apertures are modeled; zero-size outer geometry and round-hole modifiers fail closed |
 | Gerber step-and-repeat | **Implemented subset** | Supported linear draws/flashes/outlines are expanded deterministically with source provenance |
 | Gerber circular arcs | **Partial** | G75 multi-quadrant arcs use signed I/J offsets; bounded legacy G74 single-quadrant arcs resolve unsigned I/J distances only when one <=90° center candidate is unambiguous; deterministic tessellation with explicit provenance |
 | Gerber simple aperture macros | **Partial** | Single positive centered circle macros, including parameterized diameters, are reduced exactly to circular apertures |
