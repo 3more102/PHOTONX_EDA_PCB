@@ -224,6 +224,31 @@ If `kicad-cli` is unavailable, PHOTONX records that state. It does not claim nat
 
 ---
 
+## Reconstruction flow chart
+
+```mermaid
+flowchart LR
+    A[Manufacturing Files] --> B[Discovery]
+    B --> C[Strict Parsing]
+    C --> D[Normalized Geometry]
+    D --> E[Physical Connectivity]
+    E --> F[Physical Nets]
+    F --> G[Component Hypotheses]
+    G --> H[Semantic Evidence]
+    H --> I[Schematic / Functional Blocks]
+    D --> J[DRC / ERC / Engineering Checks]
+    I --> K[Review / Editing]
+    J --> L[Validation / Provenance]
+    K --> M[JSON / Reports / KiCad]
+    L --> N[Regression / Round-Trip]
+    M --> N
+    N --> O[Release / Readiness]
+```
+
+**Flow summary:** manufacturing evidence is parsed into normalized physical objects, converted into connectivity and physical-net evidence, enriched with bounded hypotheses, independently validated, then exported and audited. Unknown facts remain explicit instead of being silently invented.
+
+---
+
 ## Reconstruction pipeline
 
 ```mermaid
