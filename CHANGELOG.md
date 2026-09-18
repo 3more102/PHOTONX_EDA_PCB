@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Hardened Excellon routed-arc failure handling so unsupported syntax, missing centers, invalid arc geometry, or invalid route state suppresses permissive file geometry instead of allowing an incomplete route to be emitted; invalid arc geometry is now a strict preflight blocker.
 - Rejected zero-diameter Excellon tools and suppressed permissive file geometry so zero-width drills, slots, or routes cannot enter reconstruction.
 - Hardened Excellon unit handling so tool definitions before explicit `METRIC/INCH/M71/M72` units no longer inherit the parser's default millimeter state; permissive parsing suppresses file geometry instead.
 - Hardened legacy Excellon incremental coordinate modes (`G91` and `ICI,ON`): strict parsing rejects them, permissive parsing clears/suppresses file geometry, and explicit absolute `G90` / `ICI,OFF` remains supported.
