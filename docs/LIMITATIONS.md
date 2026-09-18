@@ -5,7 +5,8 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 ## Implemented now
 
 - strict linear Gerber draws and flashes using C/R/O apertures;
-- Gerber step-and-repeat expansion for supported linear geometry, with deterministic IDs and source provenance;\n- G75 multi-quadrant G02/G03 circular arcs with I/J center offsets and circular draw apertures, tessellated with explicit approximation evidence;
+- Gerber step-and-repeat expansion for supported linear geometry, with deterministic IDs and source provenance;
+- G75 multi-quadrant G02/G03 circular arcs with I/J center offsets and circular draw apertures, tessellated with explicit approximation evidence;
 - metric/inch units and coordinate formats for the supported subset;
 - point Excellon drill hits;
 - deterministic source provenance;
