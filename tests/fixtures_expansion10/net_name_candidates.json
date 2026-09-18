@@ -1,0 +1,1 @@
+[{"net_id":"N1","name":"GND","confidence":0.98,"source":"ipc356","evidence":"electrical_test_net"},{"net_id":"N1","name":"VSS","confidence":0.55,"source":"heuristic","evidence":"ground_topology"}]
