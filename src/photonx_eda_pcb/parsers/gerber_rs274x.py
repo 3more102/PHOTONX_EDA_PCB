@@ -41,6 +41,10 @@ _ARC_COORD = re.compile(
     r"(?:J([+-]?[0-9.]+))?"
     r"(?:D0?([12]))?\*$"
 )
+_FILE_POLARITY = re.compile(
+    r"^%TF\.FilePolarity,(Positive|Negative)\*%$",
+    re.IGNORECASE,
+)
 
 _MAX_STEP_REPEAT_INSTANCES = 10_000
 _ARC_MAX_CHORD_ERROR_MM = 0.005
@@ -112,12 +116,86 @@ class GerberRS274XParser:
         self.interpolation = "linear"
         self.quadrant_mode: str | None = None
         self.current_operation: str | None = None
+        self.file_polarity: str | None = None
+        self.image_geometry_enabled = True
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
             raise UnsupportedFeatureError(f"{path}:{line_no}: {message}: {raw}")
         out.diagnostics.append(
             ParseDiagnostic("warning", code, message, str(path), line_no)
+        )
+
+    def _disable_image_geometry(self, out: GerberLayerResult) -> None:
+        """Prevent unsupported file-image semantics from leaking geometry."""
+        self.image_geometry_enabled = False
+        out.tracks.clear()
+        out.pads.clear()
+        out.outline.clear()
+
+    def _handle_file_polarity(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        match = _FILE_POLARITY.match(line)
+        if match is None:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_FILE_POLARITY",
+                "invalid X2 .FilePolarity attribute",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        polarity = match.group(1).lower()
+        if self.file_polarity is not None and self.file_polarity != polarity:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "CONFLICTING_GERBER_FILE_POLARITY",
+                (
+                    "conflicting X2 .FilePolarity values are not modeled safely "
+                    f"({self.file_polarity} -> {polarity})"
+                ),
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        self.file_polarity = polarity
+        if polarity == "negative":
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "UNSUPPORTED_GERBER_NEGATIVE_FILE_POLARITY",
+                (
+                    "negative Gerber file polarity represents absence of material "
+                    "and image inversion is not modeled safely"
+                ),
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        out.diagnostics.append(
+            ParseDiagnostic(
+                "info",
+                "GERBER_FILE_POLARITY_POSITIVE",
+                "positive X2 .FilePolarity uses presence-of-material image semantics",
+                str(path),
+                line_no,
+            )
         )
 
     def _decode(self, raw, axis):
@@ -731,6 +809,9 @@ class GerberRS274XParser:
                 continue
             if line in {"M02*", "%LPD*%"}:
                 continue
+            if line.startswith("%TF.FilePolarity"):
+                self._handle_file_polarity(line, p, line_no, out)
+                continue
             if (
                 line.startswith("%TF")
                 or line.startswith("%TA")
@@ -906,6 +987,10 @@ class GerberRS274XParser:
                         self.current.y if y is None else y,
                     )
 
+                    if not self.image_geometry_enabled:
+                        self.current = nxt
+                        continue
+
                     if operation == "2":
                         self.current = nxt
                         continue
@@ -969,6 +1054,10 @@ class GerberRS274XParser:
                     self.current.x if x is None else x,
                     self.current.y if y is None else y,
                 )
+
+                if not self.image_geometry_enabled:
+                    self.current = nxt
+                    continue
 
                 if operation is None:
                     self._parse_error_or_warn(
