@@ -19,6 +19,7 @@ from .gerber_parts.tokenizer import iter_gerber_statements
 _FS = re.compile(r"^%FS([LT])A?X(\d)(\d)Y(\d)(\d)\*%$")
 _MO = re.compile(r"^%MO(MM|IN)\*%$")
 _AD = re.compile(r"^%ADD(\d+)([CRO]),?([0-9.]+)(?:X([0-9.]+))?\*%$")
+_AD_MACRO = re.compile(r"^%ADD(\\d+)([A-Za-z_.$][A-Za-z0-9_.$-]*)(?:,([^*]*))?\\*%$")
 _SELECT = re.compile(r"^(?:G54)?D(\d+)\*$")
 _OP_SELECT = re.compile(r"^D0?([123])\*$")
 _COORD = re.compile(
