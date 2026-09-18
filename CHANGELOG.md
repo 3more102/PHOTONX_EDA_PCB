@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Corrected standard Gerber aperture parsing so circle hole modifiers are never misread as Y dimensions; C/R/O apertures with hole modifiers now fail closed until aperture-hole subtraction is modeled.
 - Hardened X2 `.FilePolarity` handling: explicit positive polarity is accepted, negative polarity fails closed in strict mode, and permissive parsing suppresses geometry instead of emitting inverted material semantics.
 - Added production-path Gerber step-and-repeat support for the currently supported linear geometry subset.
 - Expanded flashes, linear draws, and outline segments deterministically while preserving source provenance.
