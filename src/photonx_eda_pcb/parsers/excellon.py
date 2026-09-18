@@ -352,7 +352,24 @@ class ExcellonParser:
                     )
                     self._disable_geometry(out)
                     continue
-                tool,diameter=m.groups();self.tools[tool]=to_mm(float(diameter),self.units);continue
+                tool,diameter=m.groups()
+                diameter_value=float(diameter)
+                if diameter_value <= 0:
+                    message="Excellon tool diameter must be positive"
+                    if self.strict:
+                        raise ParseError(f"{p}:{line_no}: {message}: {line}")
+                    out.diagnostics.append(
+                        ParseDiagnostic(
+                            "warning",
+                            "INVALID_EXCELLON_TOOL_DIAMETER",
+                            message,
+                            str(p),
+                            line_no,
+                        )
+                    )
+                    self._disable_geometry(out)
+                    continue
+                self.tools[tool]=to_mm(diameter_value,self.units);continue
             m=_TOOL_SEL.match(line)
             if m:
                 if self.route.tool_down:

@@ -18,7 +18,7 @@ CAPABILITIES=[
     Capability("Gerber G75 circular arcs","partial","Multi-quadrant G02/G03 arcs use signed I/J center offsets with circular apertures and deterministic tessellation with explicit provenance."),
     Capability("Gerber simple aperture macros","partial","Single positive centered circle macros, including parameterized diameter, are reduced safely to circular apertures; complex macro geometry remains fail-closed."),
     Capability("Gerber G74 arcs/regions/macros","partial","Bounded G74 single-quadrant arcs are supported using unsigned I/J distances only when one <=90-degree center candidate is unambiguous; regions and aperture blocks remain fail-closed, with permissive file-geometry suppression, while complex aperture macros remain unsupported."),
-    Capability("Excellon drill hits","implemented","Point hits with explicitly declared metric/inch units and tool diameters; tool definitions before unit declaration fail closed instead of assuming mm."),
+    Capability("Excellon drill hits","implemented","Point hits with explicitly declared metric/inch units and positive tool diameters; tool definitions before unit declaration or zero-diameter tools fail closed."),
     Capability("Excellon coordinate mode","partial","Absolute coordinates, including explicit G90/ICI,OFF, are supported; incremental G91/ICI,ON fails closed and suppresses permissive file geometry."),
     Capability("Excellon G85 slots","implemented","Straight canned slots with explicit endpoints are reconstructed."),
     Capability("Excellon linear routing","implemented","G00/M15/G01/M16 linear routed paths are reconstructed."),
