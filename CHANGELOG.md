@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Recognized deprecated incremental FS notation (`%FSLI...*%` / `%FSTI...*%`) explicitly and routed it through the same fail-closed geometry suppression and preflight blocker used for `G91`.
 - Verified merged commit `c457cf8` on Python 3.11, 3.12, and 3.13 with 739 passing tests and 2 existing collection warnings.
 - Hardened Gerber `G91` handling so permissive parsing suppresses file geometry and preflight reports a strict blocker instead of interpreting incremental coordinates as absolute.
 - Verified merged commit `5427c7a` on Python 3.11, 3.12, and 3.13 with 733 passing tests and 2 existing collection warnings.
