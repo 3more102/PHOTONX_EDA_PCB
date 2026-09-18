@@ -1,0 +1,1 @@
+{"pages":[{"id":"root","title":"Root","symbol_ids":["s1"],"wire_ids":[],"label_ids":[],"bus_ids":[]}],"symbols":[{"id":"s1","component_id":"U1","library_id":"Device:R","reference":"R1","value":"10k","x":10,"y":20,"rotation":0,"page_id":"root","confidence":0.8}],"wires":[],"labels":[],"buses":[],"metadata":{}}

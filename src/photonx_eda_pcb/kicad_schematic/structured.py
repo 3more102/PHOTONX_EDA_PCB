@@ -1,0 +1,3 @@
+from photonx_eda_pcb.kicad_schematic_export import export_document_from_editor,write_export_document
+def write_editor_schematic(editor_document,project_name="PHOTONX"):
+    return write_export_document(export_document_from_editor(editor_document,project_name))
