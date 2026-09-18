@@ -1295,9 +1295,14 @@ class GerberRS274XParser:
                     line_no,
                     line,
                     "UNSUPPORTED_GERBER_CONSTRUCT",
-                    "Gerber construct not implemented safely",
+                    (
+                        "Gerber regions/aperture blocks are not implemented safely; "
+                        "interpreting their body as ordinary draws/flashes would corrupt geometry"
+                    ),
                     out,
                 )
+                if not self.strict:
+                    self._disable_image_geometry(out)
                 continue
 
             m = _COORD.match(line)
