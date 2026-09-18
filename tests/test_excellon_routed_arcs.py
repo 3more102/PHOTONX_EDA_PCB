@@ -133,6 +133,28 @@ def test_standard_xnc_radius_form_arc_is_supported(tmp_path: Path):
     )
 
 
+def test_standard_xnc_decimal_radius_example_is_supported(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "G00X5.05Y2.6\n"
+        "M15\n"
+        "G03X6.0Y1.6A1.0\n"
+        "M16\n",
+    )
+
+    result = ExcellonParser(strict=True).parse(path)
+
+    assert len(result.routes) == 1
+    route = result.routes[0]
+    assert route.points[0] == pytest.approx((5.05, 2.6))
+    assert route.points[-1] == pytest.approx((6.0, 1.6))
+    assert any(
+        evidence.kind == "excellon_route_arc_tessellation"
+        and "encoding=radius" in evidence.detail
+        for evidence in route.provenance.evidence
+    )
+
+
 def test_standard_xnc_radius_form_cw_selects_other_center(tmp_path: Path):
     path = _write(
         tmp_path,
