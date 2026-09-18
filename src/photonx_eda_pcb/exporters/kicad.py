@@ -30,7 +30,7 @@ def _slot_lines(board,report):
     for slot in getattr(board,"slots",()):
         status=slot_export_status(slot)
         if status!="export-npth":
-            report.skipped_slots+=1
+            report.skipped_slots+=1;report.skipped_slot_ids.append(slot.id)
             code="KICAD_SLOT_PLATED_UNSUPPORTED" if status=="skip-plated-no-copper-stack" else "KICAD_SLOT_PLATING_UNKNOWN"
             msg="plated slot lacks reconstructed copper pad-stack geometry" if "plated-no" in status else "slot plating is unknown"
             report.issues.append(KicadExportIssue("warning",code,slot.id,msg));continue
@@ -42,7 +42,7 @@ def _slot_lines(board,report):
           f'    (pad "" np_thru_hole oval (at 0 0 {angle:.6f}) (size {long_dim:.6f} {short_dim:.6f}) (drill oval {long_dim:.6f} {short_dim:.6f}) (layers "*.Cu" "*.Mask") (uuid {_u("slot-pad:"+slot.id)}))',
           '  )'
         ]
-        report.exported_slots+=1
+        report.exported_slots+=1;report.exported_slot_ids.append(slot.id)
     return lines
 
 def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadExportReport]:
@@ -56,8 +56,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
     for seg in board.outline:lines.append(f'  (gr_line (start {seg.start.x:.6f} {seg.start.y:.6f}) (end {seg.end.x:.6f} {seg.end.y:.6f}) (stroke (width 0.1) (type default)) (layer "Edge.Cuts") (uuid {_u("edge:"+seg.id)}))')
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
 
-def export_kicad(board:BoardModel,path:str|Path)->Path:
-    return export_kicad_with_report(board,path)[0]
+def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]
 
 def validate_with_kicad_cli(path:str|Path)->tuple[bool|None,str]:
     exe=shutil.which("kicad-cli")

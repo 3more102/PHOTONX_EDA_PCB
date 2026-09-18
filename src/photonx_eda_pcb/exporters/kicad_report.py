@@ -10,5 +10,7 @@ class KicadExportReport:
     exported_slots:int=0
     skipped_slots:int=0
     issues:list[KicadExportIssue]=field(default_factory=list)
+    exported_slot_ids:list[str]=field(default_factory=list)
+    skipped_slot_ids:list[str]=field(default_factory=list)
     @property
     def ok(self):return not any(x.severity=="error" for x in self.issues)
