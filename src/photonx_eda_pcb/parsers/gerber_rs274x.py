@@ -1245,10 +1245,15 @@ class GerberRS274XParser:
                             line_no,
                             line,
                             "NON_CIRCULAR_DRAW",
-                            "non-circular draw aperture not modeled exactly",
+                            (
+                                "non-circular draw aperture is not modeled exactly; "
+                                "geometry is skipped rather than approximated"
+                            ),
                             out,
                         )
-                    width = max(ap.x, ap.y)
+                        self.current = nxt
+                        continue
+                    width = ap.x
 
                     for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
                         start = Point(
