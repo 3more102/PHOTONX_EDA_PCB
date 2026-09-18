@@ -1,0 +1,1 @@
+{"components":{"U1":"ldo","R1":"resistor"},"nets":{"p":"+3V3"},"edges":[["U1","OUT","p"],["R1","1","p"]]}

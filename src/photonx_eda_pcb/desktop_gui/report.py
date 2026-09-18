@@ -1,0 +1,1 @@
+def desktop_summary(s):return {"panels":len(s.panels),"visible_panels":sum(p.visible for p in s.panels.values()),"tabs":len(s.tabs),"dirty_tabs":sum(t.dirty for t in s.tabs),"active_tab":s.active_tab}
