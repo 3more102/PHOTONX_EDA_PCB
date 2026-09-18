@@ -92,6 +92,23 @@ def test_center_line_rectangle_macro_flash_is_supported(tmp_path: Path):
     assert pad.size_y == pytest.approx(2.0)
 
 
+def test_center_line_rectangle_macro_draw_remains_fail_closed(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMBOX*21,1,1.0,2.0,0,0,0*%\n"
+        "%ADD10BOX*%\n"
+        "D10*\n"
+        "X000000Y000000D02*\n"
+        "X010000Y000000D01*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(UnsupportedFeatureError):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
 def test_center_line_rectangle_macro_respects_active_inch_units(tmp_path: Path):
     path = _write(
         tmp_path,
