@@ -26,7 +26,9 @@ from .gerber_parts.tokenizer import iter_gerber_statements
 
 _FS = re.compile(r"^%FS([LT])A?X(\d)(\d)Y(\d)(\d)\*%$")
 _MO = re.compile(r"^%MO(MM|IN)\*%$")
-_AD = re.compile(r"^%ADD(\d+)([CRO]),?([0-9.]+)(?:X([0-9.]+))?\*%$")
+_AD_STANDARD = re.compile(
+    r"^%ADD(\d+)([CRO]),?([0-9.]+(?:X[0-9.]+)*)\*%$"
+)
 _AD_MACRO = re.compile(r"^%ADD(\d+)([A-Za-z_.$][A-Za-z0-9_.$-]*)(?:,([^*]*))?\*%$")
 _SELECT = re.compile(r"^(?:G54)?D(\d+)\*$")
 _OP_SELECT = re.compile(r"^D0?([123])\*$")
@@ -204,6 +206,76 @@ class GerberRS274XParser:
         fmt = self.xfmt if axis == "x" else self.yfmt
         value = float(raw) if "." in raw else fmt.decode(raw)
         return to_mm(value, self.units)
+
+    def _instantiate_standard_aperture(
+        self,
+        code: int,
+        shape: str,
+        modifier_text: str,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+    ) -> None:
+        try:
+            values = [float(value) for value in modifier_text.split("X")]
+        except ValueError:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_STANDARD_APERTURE",
+                "standard aperture modifiers must be numeric",
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
+        solid_parameter_count = 1 if shape == "C" else 2
+        if len(values) == solid_parameter_count + 1:
+            hole_diameter = values[-1]
+            if hole_diameter <= 0:
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_HOLE",
+                    "standard aperture hole diameter must be positive",
+                    out,
+                )
+            else:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_HOLE",
+                    (
+                        f"{shape} standard aperture contains a {hole_diameter:.12g} "
+                        "hole; holed aperture image subtraction is not modeled safely"
+                    ),
+                    out,
+                )
+            self.unsupported_apertures.add(code)
+            return
+
+        if len(values) != solid_parameter_count:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_STANDARD_APERTURE",
+                (
+                    f"{shape} standard aperture requires "
+                    f"{solid_parameter_count} solid modifier(s)"
+                ),
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
+        ax = to_mm(values[0], self.units)
+        ay = ax if shape == "C" else to_mm(values[1], self.units)
+        self.apertures[code] = Aperture(code, shape, ax, ay)
 
     def _register_aperture_macro(
         self,
@@ -885,12 +957,18 @@ class GerberRS274XParser:
                 self._register_aperture_macro(line, p, line_no, out)
                 continue
 
-            m = _AD.match(line)
+            m = _AD_STANDARD.match(line)
             if m:
-                code, shape, a, b = m.groups()
-                ax = to_mm(float(a), self.units)
-                ay = to_mm(float(b), self.units) if b else ax
-                self.apertures[int(code)] = Aperture(int(code), shape, ax, ay)
+                code, shape, modifiers = m.groups()
+                self._instantiate_standard_aperture(
+                    int(code),
+                    shape,
+                    modifiers,
+                    p,
+                    line_no,
+                    line,
+                    out,
+                )
                 continue
 
             m = _AD_MACRO.match(line)
