@@ -11,6 +11,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - single positive centered-circle aperture macros, including parameterized diameters, reduced exactly to circular apertures;
 - metric/inch units and coordinate formats for the supported subset;
 - point Excellon drill hits;
+- Excellon routed arcs using I/J center offsets and standard XNC X/Y/A radius form, tessellated with explicit approximation evidence;
 - deterministic source provenance;
 - geometry-based same-layer connectivity;
 - physical-net groups;
@@ -22,7 +23,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 ## Deliberately rejected instead of faked
 
 - ambiguous/invalid G74 center cases, Gerber regions, complex aperture macros, and aperture blocks;
-- Excellon routed arcs outside the bounded G02/G03 I/J center-offset subset, including radius/A-form dialects;
+- Excellon routed-arc dialects outside the bounded I/J center-offset subset and the standard XNC X/Y/A radius form;
 - automatic original net names when source data does not prove them;
 - definite component references/values from pad geometry alone;
 - plated-vs-non-plated claims without source evidence;
