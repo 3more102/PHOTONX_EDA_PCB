@@ -203,59 +203,115 @@ class GerberRS274XParser:
             self.unsupported_apertures.add(code)
             return
 
-        if len(evaluated) != 1 or evaluated[0]["kind"] != "circle":
+        if len(evaluated) != 1:
             self._fail_or_warn(
                 path,
                 line_no,
                 line,
                 "UNSUPPORTED_GERBER_APERTURE_MACRO",
-                (
-                    f"aperture macro {name!r} is not a single positive "
-                    "centered circle"
-                ),
+                f"aperture macro {name!r} contains multiple primitives",
                 out,
             )
             self.unsupported_apertures.add(code)
             return
 
-        values = evaluated[0]["values"]
-        if len(values) < 4:
-            self._fail_or_warn(
-                path,
-                line_no,
-                line,
-                "INVALID_GERBER_APERTURE_MACRO",
-                f"circle aperture macro {name!r} has too few modifiers",
-                out,
-            )
-            self.unsupported_apertures.add(code)
+        primitive = evaluated[0]
+        values = primitive["values"]
+
+        if primitive["kind"] == "circle":
+            if len(values) < 4:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"circle aperture macro {name!r} has too few modifiers",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            exposure, diameter, center_x, center_y = values[:4]
+            rotation = values[4] if len(values) > 4 else 0.0
+            if (
+                exposure != 1
+                or diameter <= 0
+                or abs(center_x) > 1e-12
+                or abs(center_y) > 1e-12
+                or abs(rotation) > 1e-12
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    (
+                        f"aperture macro {name!r} requires unsupported exposure, "
+                        "offset, rotation, or diameter semantics"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            diameter_mm = to_mm(float(diameter), self.units)
+            self.apertures[code] = Aperture(code, "C", diameter_mm, diameter_mm)
             return
 
-        exposure, diameter, center_x, center_y = values[:4]
-        rotation = values[4] if len(values) > 4 else 0.0
-        if (
-            exposure != 1
-            or diameter <= 0
-            or abs(center_x) > 1e-12
-            or abs(center_y) > 1e-12
-            or abs(rotation) > 1e-12
-        ):
-            self._fail_or_warn(
-                path,
-                line_no,
-                line,
-                "UNSUPPORTED_GERBER_APERTURE_MACRO",
-                (
-                    f"aperture macro {name!r} requires unsupported exposure, "
-                    "offset, rotation, or diameter semantics"
-                ),
-                out,
-            )
-            self.unsupported_apertures.add(code)
+        if primitive["kind"] == "center_line":
+            if len(values) != 6:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"center-line aperture macro {name!r} requires six modifiers",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            exposure, width, height, center_x, center_y, rotation = values
+            if (
+                exposure != 1
+                or width <= 0
+                or height <= 0
+                or abs(center_x) > 1e-12
+                or abs(center_y) > 1e-12
+                or abs(rotation) > 1e-12
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    (
+                        f"center-line aperture macro {name!r} requires positive "
+                        "exposure, positive size, origin-centered geometry, and "
+                        "zero rotation"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            width_mm = to_mm(float(width), self.units)
+            height_mm = to_mm(float(height), self.units)
+            self.apertures[code] = Aperture(code, "R", width_mm, height_mm)
             return
 
-        diameter_mm = to_mm(float(diameter), self.units)
-        self.apertures[code] = Aperture(code, "C", diameter_mm, diameter_mm)
+        self._fail_or_warn(
+            path,
+            line_no,
+            line,
+            "UNSUPPORTED_GERBER_APERTURE_MACRO",
+            (
+                f"aperture macro {name!r} primitive {primitive['kind']!r} "
+                "is not implemented in the production geometry path"
+            ),
+            out,
+        )
+        self.unsupported_apertures.add(code)
 
     def _step_repeat_provenance(
         self,
