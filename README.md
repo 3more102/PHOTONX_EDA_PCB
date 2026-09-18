@@ -360,7 +360,7 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Excellon coordinate mode | **Partial** | Absolute coordinates are supported; legacy `G91` / `ICI,ON` incremental mode fails closed and suppresses permissive file geometry |
 | Excellon G85 straight slots | **Implemented** | Straight canned slots reconstructed from explicit endpoints |
 | Excellon linear routing | **Implemented** | G00/M15/G01/M16 linear routed paths supported |
-| Excellon routed arcs | **Partial** | G02/G03 I/J center-offset arcs and standard XNC X/Y/A radius arcs (<=180°) are supported with deterministic tessellation and provenance |
+| Excellon routed arcs | **Partial** | Bounded I/J and standard XNC X/Y/A radius arcs (<=180°) are supported; invalid/unsupported arcs fail closed and suppress permissive file geometry |
 | Strict / permissive parser modes | **Implemented** | Strict fails on unsupported syntax; permissive records diagnostics |
 | Parser conformance harness | **Implemented** | Executable support-boundary regression coverage |
 
@@ -636,7 +636,7 @@ Without independent evidence, manufacturing geometry generally cannot prove:
 - Legacy Excellon `G91` / `ICI,ON` incremental coordinates are not modeled: strict parsing rejects them, permissive parsing suppresses file geometry, and preflight blocks strict reconstruction.
 - Excellon tool diameters require explicit units before their definition; permissive parsing suppresses the file after an undeclared-unit violation rather than guessing millimeters.
 - Excellon tool diameters must also be positive; zero-diameter tools are rejected in strict mode and suppress permissive file geometry instead of creating zero-width physical features.
-- Excellon G02/G03 routed arcs are supported for the bounded I/J center-offset subset and standard XNC X/Y/A radius form with <=180° sweep; other vendor dialects remain unsupported.
+- Excellon G02/G03 routed arcs are supported for the bounded I/J center-offset subset and standard XNC X/Y/A radius form with <=180° sweep; invalid geometry or unsupported arc dialects fail closed, and permissive parsing suppresses file geometry rather than outputting a route with the failed arc omitted.
 - Some low-level helpers may recognize constructs that the high-level reconstruction path does not yet claim as production support.
 
 Before treating output as production evidence, review the current parser capabilities and the relevant domain documentation.
