@@ -4,6 +4,9 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![Version](https://img.shields.io/badge/version-0.2.0-informational)
 ![Model](https://img.shields.io/badge/reconstruction-evidence--driven-6f42c1)
+[![Docs](https://img.shields.io/badge/docs-architecture%20%26%20evidence-0969da)](docs/ARCHITECTURE.md)
+[![Contributing](https://img.shields.io/badge/contributions-regression--first-2da44e)](CONTRIBUTING.md)
+[![Changelog](https://img.shields.io/badge/changelog-0.2.0-8250df)](CHANGELOG.md)
 
 **Evidence-driven PCB manufacturing-data reconstruction and reverse engineering.**
 
@@ -12,7 +15,7 @@ PHOTONX converts PCB manufacturing evidence into an auditable engineering model:
 > **Core rule: unknown stays unknown.**  
 > PHOTONX records provenance, confidence, assumptions, conflicts, omissions, and unresolved state instead of silently turning missing design intent into plausible-looking facts.
 
-**Jump to:** [Quick start](#quick-start) · [Pipeline](#reconstruction-pipeline) · [Capabilities](#capability-matrix) · [Evidence model](#evidence-model) · [Outputs](#what-photonx-produces) · [Verification](#verification-and-ci) · [Limitations](#trust-boundaries-and-known-limitations) · [Documentation](#documentation)
+**Jump to:** [Quick start](#quick-start) · [Use cases](#where-photonx-fits) · [Pipeline](#reconstruction-pipeline) · [Capabilities](#capability-matrix) · [Evidence model](#evidence-model) · [Python API](#python-api) · [Verification](#verification-and-ci) · [Roadmap](#roadmap) · [Limitations](#trust-boundaries-and-known-limitations) · [Documentation](#documentation)
 
 ---
 
@@ -44,6 +47,29 @@ PHOTONX is built around that distinction.
 | CI run | [GitHub Actions run 35376367761](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35376367761) |
 
 PHOTONX is an active engineering platform. It is **not** a complete CAM replacement, electrical sign-off tool, safety certification system, or fabrication guarantee.
+
+---
+
+## Where PHOTONX fits
+
+PHOTONX is most useful when the available evidence is **manufacturing-centric** and the goal is to recover an auditable engineering model without overstating certainty.
+
+| Workflow | What PHOTONX contributes | Boundary |
+|---|---|---|
+| **Legacy PCB analysis** | Reconstructs geometry, physical connectivity, board features, and evidence-backed hypotheses | Does not recreate unavailable original intent by assumption |
+| **Repair / obsolescence investigation** | Helps expose physical nets, component neighborhoods, interfaces, power evidence, and candidate functions | Exact identity still requires markings, BOM, measurements, or other evidence |
+| **Design recovery / migration** | Produces structured board data, review artifacts, and experimental KiCad representations | Generated CAD must be reviewed before production use |
+| **Manufacturing-data QA** | Surfaces parser diagnostics, geometry issues, validation findings, omissions, and source provenance | Not a fabrication-house sign-off |
+| **Research and benchmarking** | Supports deterministic replay, regression fixtures, ground-truth governance, and explicit confidence | Synthetic fixtures remain synthetic evidence |
+| **EDA experimentation** | Provides modular parsers, geometry/connectivity APIs, inference layers, exports, and review infrastructure | Production support is limited to declared syntax and semantics |
+
+### PHOTONX is deliberately not
+
+- an automatic “Gerber to perfect schematic” converter;
+- a substitute for original source CAD when that source still exists;
+- a guarantee that a guessed component, net role, or functional block is correct;
+- an SI/PI, EMC, safety, regulatory, or fabrication-certification authority;
+- a reason to discard uncertainty that the source package cannot resolve.
 
 ---
 
@@ -96,6 +122,57 @@ photonx gui examples/PHOTONX_LED_TEST/input
 ```bash
 pytest -q
 ```
+
+### Typical end-to-end CLI workflow
+
+```bash
+# 1. Inspect the declared syntax boundary
+photonx capabilities
+
+# 2. Run a strict reconstruction
+photonx reconstruct path/to/manufacturing_data --output build/board
+
+# 3. Review board.json + validation.json before trusting higher-level hypotheses
+
+# 4. Optionally request an editable KiCad PCB representation
+photonx reconstruct path/to/manufacturing_data \
+  --output build/board \
+  --kicad
+
+# 5. Run regression tests before changing parser/reconstruction behavior
+pytest -q
+```
+
+The strict path is the default because a reconstruction that stops on unsupported syntax is easier to audit than one that silently loses geometry.
+
+---
+
+## Python API
+
+The package also exposes a small programmatic surface for reconstruction, validation, and export.
+
+```python
+from photonx_eda_pcb import (
+    ReconstructionConfig,
+    reconstruct,
+    export_json,
+)
+
+config = ReconstructionConfig(
+    strict_parsing=True,
+    connectivity_tolerance_mm=0.03,
+    drill_attach_tolerance_mm=0.15,
+)
+
+result = reconstruct("examples/PHOTONX_LED_TEST/input", config)
+
+print(result.validation)
+print(len(result.board.physical_nets))
+
+export_json(result.board, "build/led/reconstructed.json")
+```
+
+The public package surface currently includes `ReconstructionConfig`, `ReconstructionResult`, `reconstruct`, `load_project`, `validate_board`, `export_json`, `export_kicad`, and `validate_with_kicad_cli`.
 
 ---
 
@@ -366,6 +443,32 @@ See [docs/PHASE70_READINESS.md](docs/PHASE70_READINESS.md).
 
 ---
 
+## Validation stack
+
+PHOTONX separates different kinds of confidence instead of collapsing them into one “pass/fail” claim.
+
+```mermaid
+flowchart LR
+    A[Parser acceptance] --> B[Geometry / model validation]
+    B --> C[Connectivity / inference checks]
+    C --> D[Regression and fault injection]
+    D --> E[Round-trip / export checks]
+    E --> F[Release / readiness aggregation]
+```
+
+| Layer | Question answered |
+|---|---|
+| **Parser validation** | Did PHOTONX understand the source syntax it claims to support? |
+| **Model validation** | Is the reconstructed internal model structurally consistent? |
+| **Engineering checks** | Are there geometry, clearance, connectivity, DRC/ERC, or evidence issues to review? |
+| **Regression tests** | Did a code change preserve previously asserted behavior? |
+| **Round-trip checks** | Did an export/import path preserve the semantics that path claims to support? |
+| **Readiness gates** | Is the software/evidence package internally ready for the declared profile or milestone? |
+
+A pass at one layer does not imply a pass at the others.
+
+---
+
 ## Verification and CI
 
 The GitHub Actions matrix runs the regression suite on:
@@ -459,6 +562,35 @@ src/photonx_eda_pcb/
 ```
 
 The repository contains additional domain-specific packages; this map is intentionally thematic rather than exhaustive.
+
+---
+
+## Roadmap
+
+The current roadmap keeps the highest-risk gaps explicit rather than masking them behind permissive behavior.
+
+**Primary future work includes:**
+
+- broader Gerber support, including regions, arcs, and aperture macros;
+- richer Gerber X2 attribute handling;
+- broader Excellon route/slot support, especially routed arcs;
+- stronger multilayer via-span reasoning;
+- stronger footprint clustering and component evidence;
+- more validation against boards with independently known ground truth.
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) and the detailed [Phase 59–70 roadmap](docs/CODING_ROADMAP_PHASE59_70.md).
+
+### What “done” means for a new capability
+
+A feature is not considered mature merely because one example works. The intended path is:
+
+1. declare the supported syntax/semantic boundary;
+2. preserve provenance and diagnostics;
+3. add focused regression fixtures;
+4. validate deterministic behavior;
+5. test failure/unsupported cases;
+6. document export or inference limitations;
+7. only then promote the capability in the README matrix.
 
 ---
 
