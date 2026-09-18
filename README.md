@@ -15,7 +15,7 @@ PHOTONX converts PCB manufacturing evidence into an auditable engineering model:
 > **Core rule: unknown stays unknown.**  
 > PHOTONX records provenance, confidence, assumptions, conflicts, omissions, and unresolved state instead of silently turning missing design intent into plausible-looking facts.
 
-**Jump to:** [Quick start](#quick-start) · [Use cases](#where-photonx-fits) · [Pipeline](#reconstruction-pipeline) · [Capabilities](#capability-matrix) · [Evidence model](#evidence-model) · [Python API](#python-api) · [Verification](#verification-and-ci) · [Roadmap](#roadmap) · [Limitations](#trust-boundaries-and-known-limitations) · [Documentation](#documentation)
+**Jump to:** [Quick start](#quick-start) · [Use cases](#where-photonx-fits) · [Pipeline](#reconstruction-pipeline) · [Architecture](#architecture-layers) · [Evidence model](#evidence-model) · [Capabilities](#capability-matrix) · [Python API](#python-api) · [Review checklist](#how-to-review-a-reconstruction) · [Verification](#verification-and-ci) · [Roadmap](#roadmap) · [Documentation](#documentation)
 
 ---
 
@@ -41,10 +41,10 @@ PHOTONX is built around that distinction.
 | Package | **0.2.0** |
 | Python | **3.11+** |
 | Main dependencies | **NetworkX**, **Shapely** |
-| Verified commit | **`fb3cda4` — 18 Sep 2026** |
+| Verified commit | **`9ebc88c` — 18 Sep 2026** |
 | CI matrix | Python **3.11**, **3.12**, **3.13** |
 | Test result | **615 passed, 2 warnings** on each CI matrix job |
-| CI run | [GitHub Actions run 35376678032](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35376678032) |
+| CI run | [GitHub Actions run 35376998055](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35376998055) |
 
 PHOTONX is an active engineering platform. It is **not** a complete CAM replacement, electrical sign-off tool, safety certification system, or fabrication guarantee.
 
@@ -147,6 +147,24 @@ The strict path is the default because a reconstruction that stops on unsupporte
 
 ---
 
+## Failure behavior is a feature
+
+PHOTONX is designed to fail visibly when evidence or supported semantics are insufficient.
+
+| Situation | Behavior |
+|---|---|
+| Unsupported syntax in default strict mode | Reconstruction stops instead of silently discarding the construct |
+| Unsupported syntax in `--permissive` mode | The condition is retained as a diagnostic for review |
+| Reconstructed model contains validation errors | CLI completes the reconstruction bundle and returns exit code **2** |
+| Reconstructed model has no validation errors | CLI returns exit code **0** |
+| `--kicad` requested | PHOTONX writes the KiCad output and a separate `kicad_validation.txt` result |
+| `kicad-cli` unavailable | The missing native validator is reported; PHOTONX does not present that as successful native validation |
+| Unknown semantic fact | The model keeps it unresolved rather than fabricating a convenient value |
+
+This behavior is intentional: a visible limitation is safer and more auditable than a plausible but unsupported reconstruction.
+
+---
+
 ## Python API
 
 The package also exposes a small programmatic surface for reconstruction, validation, and export.
@@ -242,6 +260,43 @@ flowchart TD
 - Unsupported parser constructs are not silently discarded in strict mode.
 - Component identity, semantic net roles, schematic hierarchy, and engineering intent remain hypotheses unless evidence supports stronger claims.
 - Export omissions and unsupported semantics are surfaced rather than hidden.
+
+---
+
+## Architecture layers
+
+PHOTONX is organized so that lower-confidence interpretation cannot silently rewrite higher-confidence source evidence.
+
+| Layer | Responsibility | Typical outputs |
+|---|---|---|
+| **1. Discovery** | Identify manufacturing files and infer known/unknown roles | classified source files, unknown-layer diagnostics |
+| **2. Parsing** | Convert declared Gerber/Excellon subsets into normalized objects | tracks, pads, drills, slots, routes, outline segments |
+| **3. Provenance** | Preserve where reconstructed facts came from | source path, source line/raw evidence, inference evidence |
+| **4. Geometry** | Represent physical objects in normalized units | deterministic physical geometry |
+| **5. Connectivity** | Build contact relationships from copper geometry | physical graph and connected islands |
+| **6. Physical nets** | Assign deterministic groups to connected copper | `NetGroup` objects and object back-references |
+| **7. Inference** | Build bounded hypotheses from physical/evidence context | component, role, protocol, and functional candidates |
+| **8. Validation** | Check model invariants independently of reconstruction | errors, warnings, validation status |
+| **9. Export / review** | Emit machine-readable and human-review artifacts | JSON, reports, GUI views, experimental KiCad data |
+| **10. Regression / readiness** | Check repeatability, compatibility, round-trip, and release evidence | CI results, baselines, readiness findings |
+
+### Canonical core model
+
+The top-level reconstruction path centers on a `BoardModel` containing these core object families:
+
+| Model object | Role |
+|---|---|
+| `Track` | Copper line segment with width, layer, provenance, and optional physical-net back-reference |
+| `PadCandidate` | Reconstructed pad-like copper feature |
+| `DrillHit` | Drill evidence with diameter, tool information, provenance, and plating state |
+| `SlotFeature` | Reconstructed mechanical/plated-slot evidence |
+| `RoutedPath` | Supported Excellon routed-path geometry |
+| `OutlineSegment` | Board-outline geometry |
+| `NetGroup` | Deterministic physical connectivity group with confidence and provenance |
+| `ComponentHypothesis` | Evidence-backed component grouping with confidence and explicit evidence |
+| `ParseDiagnostic` | Structured parser warning/error information |
+
+The model is intentionally narrower than the full set of higher-level analysis packages: domain inference is layered on top of physical evidence rather than embedded into raw parser objects.
 
 ---
 
@@ -443,6 +498,38 @@ See [docs/PHASE70_READINESS.md](docs/PHASE70_READINESS.md).
 
 ---
 
+## How to review a reconstruction
+
+A PHOTONX result should be reviewed from the **lowest-level evidence upward**. Do not start by trusting the most semantic output.
+
+1. **Check parser diagnostics.** Confirm that no important source constructs were rejected, skipped, or only accepted permissively.
+2. **Check the outline and geometry.** Confirm board bounds, copper objects, drills, slots, and routed geometry against the source package.
+3. **Check physical connectivity.** Review copper islands and drill/via associations before accepting any semantic net interpretation.
+4. **Check unresolved evidence.** Unknown plating, layer spans, component identity, values, and semantic roles should remain visible.
+5. **Check validation errors and warnings.** A warning is not automatically harmless; it means the reviewer must decide whether it matters for the intended use.
+6. **Check inference confidence and evidence.** Treat component, protocol, functional-block, and schematic hypotheses according to their supporting evidence.
+7. **Check export omissions.** Confirm what the chosen exporter could not represent.
+8. **Check native-tool validation where relevant.** For KiCad, distinguish PHOTONX structural export from an actual `kicad-cli` validation run.
+9. **Check regression/readiness evidence.** A green CI run proves the asserted software tests passed; it does not certify the reconstructed board electrically.
+
+### Evidence escalation rule
+
+```text
+Source artifact
+    ↓
+Observed fact
+    ↓ deterministic transformation
+Derived physical fact
+    ↓ bounded reasoning + evidence
+Inference / hypothesis
+    ↓ independent corroboration
+Higher-confidence engineering claim
+```
+
+At no point should a missing source fact move upward merely because a plausible answer exists.
+
+---
+
 ## Validation stack
 
 PHOTONX separates different kinds of confidence instead of collapsing them into one “pass/fail” claim.
@@ -477,7 +564,7 @@ The GitHub Actions matrix runs the regression suite on:
 - Python 3.12
 - Python 3.13
 
-For verified commit **`fb3cda4`**, each matrix job completed successfully with:
+For verified commit **`9ebc88c`**, each matrix job completed successfully with:
 
 ```text
 615 passed, 2 warnings
@@ -485,7 +572,7 @@ For verified commit **`fb3cda4`**, each matrix job completed successfully with:
 
 The two pytest warnings are collection warnings for a model class named `TestPointCandidate`; the CI jobs still complete successfully.
 
-[Open the verified workflow run](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35376678032).
+[Open the verified workflow run](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35376998055).
 
 ---
 
@@ -631,6 +718,33 @@ PHOTONX development is intended to remain grounded in authoritative format docum
   https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/
 - KiCad S-expression syntax  
   https://dev-docs.kicad.org/en/file-formats/sexpr-intro/index.html
+
+---
+
+## Developer workflow
+
+A safe change to PHOTONX should normally follow this sequence:
+
+```text
+Reproduce → Add fixture/test → Implement → Validate provenance →
+Run focused tests → Run full pytest → Inspect changed outputs → Push → Verify CI
+```
+
+Recommended local loop:
+
+```bash
+python -m pip install -e ".[test]"
+
+# focused test while developing
+pytest -q tests/path_to_relevant_test.py
+
+# full regression before proposing the change
+pytest -q
+```
+
+For parser changes, add a regression fixture **before** relaxing behavior. For inference changes, preserve confidence/evidence boundaries. For exporters, do not turn unknown semantics into definite CAD constructs merely to make an output file look complete.
+
+See [docs/TESTING.md](docs/TESTING.md), [docs/QUALITY_GATES.md](docs/QUALITY_GATES.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
