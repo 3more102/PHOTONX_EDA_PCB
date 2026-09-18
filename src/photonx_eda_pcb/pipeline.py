@@ -25,7 +25,7 @@ def reconstruct(directory:str|Path,config:ReconstructionConfig|None=None)->Recon
         if layer is None:
             board.diagnostics.append(ParseDiagnostic("warning","UNKNOWN_LAYER","Gerber file skipped because layer could not be inferred",str(item.path)));continue
         r=GerberRS274XParser(layer,strict=cfg.strict_parsing).parse(item.path)
-        board.tracks.extend(r.tracks);board.pads.extend(r.pads);board.outline.extend(r.outline);board.diagnostics.extend(r.diagnostics)
+        board.tracks.extend(r.tracks);board.pads.extend(r.pads);board.regions.extend(r.regions);board.outline.extend(r.outline);board.diagnostics.extend(r.diagnostics)
     attach_drills(board,cfg.drill_attach_tolerance_mm)
     graph=build_physical_graph(board,cfg.connectivity_tolerance_mm)
     assign_physical_nets(board,graph)
