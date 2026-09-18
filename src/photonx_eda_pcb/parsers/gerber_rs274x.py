@@ -373,6 +373,18 @@ class GerberRS274XParser:
             self.unsupported_apertures.add(code)
             return
 
+        if shape == "C" and values[0] <= 0:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_STANDARD_APERTURE_SIZE",
+                "C standard aperture diameter must be positive",
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
         if shape in {"R", "O"} and (values[0] <= 0 or values[1] <= 0):
             self._parse_error_or_warn(
                 path,
