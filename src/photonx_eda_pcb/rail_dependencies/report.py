@@ -1,0 +1,1 @@
+def dependency_report(items):return [{"upstream":x.upstream,"downstream":x.downstream,"via_component":x.via_component,"relation":x.relation,"confidence":x.confidence,"evidence":list(x.evidence)} for x in items]

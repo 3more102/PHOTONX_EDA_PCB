@@ -1,0 +1,1 @@
+def decoupling_group_report(items):return [{"power_net":x.power_net,"components":list(x.components),"total_capacitance_f":x.total_capacitance_f,"bulk_components":list(x.bulk_components),"quality_score":x.quality_score,"confidence":x.confidence} for x in items]

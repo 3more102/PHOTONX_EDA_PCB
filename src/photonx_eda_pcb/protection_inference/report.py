@@ -1,0 +1,1 @@
+def protection_report(items):return [{"component_id":x.component_id,"kind":x.kind,"protected_nets":list(x.protected_nets),"confidence":x.confidence,"evidence":list(x.evidence),"assumptions":list(x.assumptions)} for x in items]

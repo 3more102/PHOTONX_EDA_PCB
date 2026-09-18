@@ -1,0 +1,1 @@
+def pin_function_report(items):return [{"connector_id":x.connector_id,"pin":x.pin,"net_id":x.net_id,"function":x.function,"confidence":x.confidence,"evidence":list(x.evidence),"conflicts":list(x.conflicts)} for x in items]

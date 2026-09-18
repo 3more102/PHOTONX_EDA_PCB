@@ -1,0 +1,1 @@
+def esd_report(items):return [{"interface_net":x.interface_net,"protection_components":list(x.protection_components),"ground_nets":list(x.ground_nets),"confidence":x.confidence,"evidence":list(x.evidence)} for x in items]

@@ -1,0 +1,1 @@
+def regulator_report(items):return [{"component_id":x.component_id,"kind":x.kind,"input_nets":list(x.input_nets),"output_nets":list(x.output_nets),"enable_nets":list(x.enable_nets),"feedback_nets":list(x.feedback_nets),"confidence":x.confidence,"evidence":list(x.evidence)} for x in items]

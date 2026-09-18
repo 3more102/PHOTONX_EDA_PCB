@@ -1,0 +1,1 @@
+{"connector":"J3","pins":{"1":"GND","2":"VBUS","3":"SDA","4":"SCL"},"expected_ports":["power","i2c"],"synthetic":true}

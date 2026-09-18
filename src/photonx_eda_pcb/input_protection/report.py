@@ -1,0 +1,1 @@
+def input_protection_report(items):return [{"connector_id":x.connector_id,"target_id":x.target_id,"protection_components":list(x.protection_components),"kinds":list(x.kinds),"confidence":x.confidence,"evidence":list(x.evidence)} for x in items]
