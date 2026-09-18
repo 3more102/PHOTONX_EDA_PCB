@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Verified merged commit `de1a6a2` on Python 3.11, 3.12, and 3.13 with 778 passing tests and 2 existing collection warnings.
 - Hardened Excellon routed-arc failure handling so unsupported syntax, missing centers, invalid arc geometry, or invalid route state suppresses permissive file geometry instead of allowing an incomplete route to be emitted; invalid arc geometry is now a strict preflight blocker.
 - Rejected zero-diameter Excellon tools and suppressed permissive file geometry so zero-width drills, slots, or routes cannot enter reconstruction.
 - Hardened Excellon unit handling so tool definitions before explicit `METRIC/INCH/M71/M72` units no longer inherit the parser's default millimeter state; permissive parsing suppresses file geometry instead.
