@@ -17,6 +17,16 @@ PHOTONX converts PCB manufacturing evidence into an auditable engineering model:
 
 **Jump to:** [Quick start](#quick-start) · [Use cases](#where-photonx-fits) · [Flow charts](#reconstruction-flow-chart) · [Pipeline](#reconstruction-pipeline) · [Architecture](#architecture-layers) · [Evidence model](#evidence-model) · [Capabilities](#capability-matrix) · [Python API](#python-api) · [Review checklist](#how-to-review-a-reconstruction) · [Verification](#verification-and-ci) · [Roadmap](#roadmap) · [Documentation](#documentation)
 
+### Visual maps
+
+| Map | Purpose |
+|---|---|
+| [Reconstruction flow](#reconstruction-flow-chart) | End-to-end manufacturing-data reconstruction |
+| [Architecture map](#architecture-layers) | Software and evidence-layer organization |
+| [Evidence escalation](#evidence-model) | Observed → derived → inferred → corroborated claims |
+| [Human review flow](#how-to-review-a-reconstruction) | Decision path for ambiguous findings |
+| [Validation / release flow](#validation-stack) | Tests, round-trip checks, and readiness gates |
+
 ---
 
 ## Why PHOTONX
@@ -41,10 +51,10 @@ PHOTONX is built around that distinction.
 | Package | **0.2.0** |
 | Python | **3.11+** |
 | Main dependencies | **NetworkX**, **Shapely** |
-| Verified commit | **`9ebc88c` — 18 Sep 2026** |
+| Verified commit | **`96cbda6` — 18 Sep 2026** |
 | CI matrix | Python **3.11**, **3.12**, **3.13** |
 | Test result | **615 passed, 2 warnings** on each CI matrix job |
-| CI run | [GitHub Actions run 35376998055](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35376998055) |
+| CI run | [GitHub Actions run 35378099287](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35378099287) |
 
 PHOTONX is an active engineering platform. It is **not** a complete CAM replacement, electrical sign-off tool, safety certification system, or fabrication guarantee.
 
@@ -252,6 +262,10 @@ The rendered flow chart above shows the complete end-to-end path. The key implem
 ## Architecture layers
 
 PHOTONX is organized so that lower-confidence interpretation cannot silently rewrite higher-confidence source evidence.
+
+<p align="center">
+  <img src="docs/assets/photonx_architecture_map.svg" alt="PHOTONX layered architecture map" width="100%">
+</p>
 
 | Layer | Responsibility | Typical outputs |
 |---|---|---|
@@ -492,6 +506,10 @@ See [docs/PHASE70_READINESS.md](docs/PHASE70_READINESS.md).
 
 A PHOTONX result should be reviewed from the **lowest-level evidence upward**. Do not start by trusting the most semantic output.
 
+<p align="center">
+  <img src="docs/assets/photonx_review_flow.svg" alt="PHOTONX human review decision flow" width="100%">
+</p>
+
 1. **Check parser diagnostics.** Confirm that no important source constructs were rejected, skipped, or only accepted permissively.
 2. **Check the outline and geometry.** Confirm board bounds, copper objects, drills, slots, and routed geometry against the source package.
 3. **Check physical connectivity.** Review copper islands and drill/via associations before accepting any semantic net interpretation.
@@ -550,7 +568,7 @@ The GitHub Actions matrix runs the regression suite on:
 - Python 3.12
 - Python 3.13
 
-For verified commit **`9ebc88c`**, each matrix job completed successfully with:
+For verified commit **`96cbda6`**, each matrix job completed successfully with:
 
 ```text
 615 passed, 2 warnings
@@ -558,7 +576,7 @@ For verified commit **`9ebc88c`**, each matrix job completed successfully with:
 
 The two pytest warnings are collection warnings for a model class named `TestPointCandidate`; the CI jobs still complete successfully.
 
-[Open the verified workflow run](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35376998055).
+[Open the verified workflow run](https://github.com/3more102/PHOTONX_EDA_PCB/actions/runs/35378099287).
 
 ---
 
