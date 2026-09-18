@@ -19,6 +19,7 @@ _FS = re.compile(r"^%FS([LT])A?X(\d)(\d)Y(\d)(\d)\*%$")
 _MO = re.compile(r"^%MO(MM|IN)\*%$")
 _AD = re.compile(r"^%ADD(\d+)([CRO]),?([0-9.]+)(?:X([0-9.]+))?\*%$")
 _SELECT = re.compile(r"^(?:G54)?D(\d+)\*$")
+_OP_SELECT = re.compile(r"^D0?([123])\*$")
 _COORD = re.compile(
     r"^(?:G0?1)?(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?(?:D0?([123]))?\*$"
 )
