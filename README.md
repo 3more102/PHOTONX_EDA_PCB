@@ -348,6 +348,7 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Capability | Status | Current behavior |
 |---|---|---|
 | Gerber linear draws / flashes | **Implemented subset** | Strict RS-274X subset with provenance |
+| Gerber X2 file polarity | **Partial** | Explicit `Positive` is accepted; `Negative` fails closed because absence-of-material image inversion is not yet modeled |
 | Gerber C/R/O apertures | **Implemented** | Used by the production geometry path |
 | Gerber step-and-repeat | **Implemented subset** | Supported linear draws/flashes/outlines are expanded deterministically with source provenance |
 | Gerber circular arcs | **Partial** | G75 multi-quadrant arcs use signed I/J offsets; bounded legacy G74 single-quadrant arcs resolve unsigned I/J distances only when one <=90° center candidate is unambiguous; deterministic tessellation with explicit provenance |
@@ -623,6 +624,7 @@ Without independent evidence, manufacturing geometry generally cannot prove:
 ### Important parser limitations
 
 - The production Gerber path is still a declared subset, not the full language.
+- X2 `.FilePolarity,Negative` is not treated as ordinary metadata: strict parsing rejects it, while permissive parsing suppresses geometry to avoid interpreting clearance as material.
 - G75 multi-quadrant circular arcs are supported only for I/J center offsets with circular draw apertures and are represented by explicitly evidenced tessellation.
 - Single positive centered-circle Gerber aperture macros are supported. Legacy G74 single-quadrant arcs are supported only for unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90°. Gerber regions, complex aperture macros, and aperture blocks remain outside the declared production high-level parser.
 - Excellon G02/G03 routed arcs are supported for the bounded I/J center-offset subset and standard XNC X/Y/A radius form with <=180° sweep; other vendor dialects remain unsupported.
