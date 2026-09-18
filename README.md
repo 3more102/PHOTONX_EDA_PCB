@@ -351,7 +351,7 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Gerber C/R/O apertures | **Implemented** | Used by the production geometry path |
 | Gerber step-and-repeat | **Implemented subset** | Supported linear draws/flashes/outlines are expanded deterministically with source provenance |
 | Gerber circular arcs | **Partial** | G75 multi-quadrant arcs use signed I/J offsets; bounded legacy G74 single-quadrant arcs resolve unsigned I/J distances only when one <=90° center candidate is unambiguous; deterministic tessellation with explicit provenance |
-| Gerber simple aperture macros | **Partial** | Single positive centered circle macros, including parameterized diameters, are reduced exactly to circular apertures |
+| Gerber simple aperture macros | **Partial** | Single positive origin-centered circles and zero-rotation Code-21 center-line rectangles are reduced exactly to C/R apertures |
 | Gerber regions / complex macros | **Not implemented** | Regions, complex aperture macros, and aperture blocks remain fail-closed |
 | Excellon point drill hits | **Implemented** | Metric/inch tools and drill hits |
 | Excellon G85 straight slots | **Implemented** | Straight canned slots reconstructed from explicit endpoints |
@@ -624,7 +624,7 @@ Without independent evidence, manufacturing geometry generally cannot prove:
 
 - The production Gerber path is still a declared subset, not the full language.
 - G75 multi-quadrant circular arcs are supported only for I/J center offsets with circular draw apertures and are represented by explicitly evidenced tessellation.
-- Single positive centered-circle Gerber aperture macros are supported. Legacy G74 single-quadrant arcs are supported only for unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90°. Gerber regions, complex aperture macros, and aperture blocks remain outside the declared production high-level parser.
+- Single positive origin-centered circle macros and zero-rotation Code-21 center-line rectangle macros are supported as exact C/R apertures. Legacy G74 single-quadrant arcs are supported only for unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90°. Gerber regions, other complex aperture macros, and aperture blocks remain outside the declared production high-level parser.
 - Excellon G02/G03 routed arcs are supported for the bounded I/J center-offset subset and standard XNC X/Y/A radius form with <=180° sweep; other vendor dialects remain unsupported.
 - Some low-level helpers may recognize constructs that the high-level reconstruction path does not yet claim as production support.
 
