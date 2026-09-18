@@ -7,10 +7,12 @@ import re
 from ..errors import ParseError, UnsupportedFeatureError
 from ..gerber_geometry.arc import ArcSpec, arc_points, segments_for_chord_error, validate_arc
 from ..gerber_geometry.model import GeoPoint
+from ..geometry_kernel import region_shape
 from ..ids import stable_id
-from ..models import OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
+from ..models import CopperRegion, OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
 from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
+from .gerber_parts.region_state import RegionState
 from .gerber_parts.step_repeat import parse_step_repeat
 
 
@@ -70,6 +72,7 @@ class StepRepeat:
 class GerberLayerResult:
     tracks: list[Track] = field(default_factory=list)
     pads: list[PadCandidate] = field(default_factory=list)
+    regions: list[CopperRegion] = field(default_factory=list)
     outline: list[OutlineSegment] = field(default_factory=list)
     diagnostics: list[ParseDiagnostic] = field(default_factory=list)
 
@@ -79,8 +82,9 @@ class GerberRS274XParser:
 
     Supported: FS, MO, ADD(C/R/O), Dnn selection, G01/D01/D02/D03,
     G75 multi-quadrant G02/G03 circular interpolation with I/J center
-    offsets and circular apertures, G04, M02, and standard linear
-    step-and-repeat (%SR...*% / %SR*%).
+    offsets and circular apertures, single-contour dark linear G36/G37
+    regions, G04, M02, and standard linear step-and-repeat
+    (%SR...*% / %SR*%).
 
     Unsupported constructs are never silently discarded in strict mode.
     """
@@ -97,6 +101,9 @@ class GerberRS274XParser:
         self.step_repeat: StepRepeat | None = None
         self.interpolation = "linear"
         self.quadrant_mode: str | None = None
+        self.region_state = RegionState()
+        self.region_sources: list[SourceRef] = []
+        self.region_start_line: int | None = None
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -226,6 +233,230 @@ class GerberRS274XParser:
         x_resolution = to_mm(10 ** (-self.xfmt.decimal), self.units)
         y_resolution = to_mm(10 ** (-self.yfmt.decimal), self.units)
         return max(1e-6, 2.0 * max(x_resolution, y_resolution))
+
+    def _abort_region(self) -> None:
+        self.region_state.abort()
+        self.region_sources.clear()
+        self.region_start_line = None
+
+    def _region_fail(
+        self,
+        path: Path,
+        line_no: int,
+        raw: str,
+        code: str,
+        message: str,
+        out: GerberLayerResult,
+    ) -> None:
+        self._fail_or_warn(path, line_no, raw, code, message, out)
+        self._abort_region()
+
+    def _begin_region(
+        self,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+    ) -> None:
+        if self.layer == "Edge.Cuts":
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_EDGE_CUTS_UNSUPPORTED",
+                "filled Gerber regions are not supported on Edge.Cuts",
+                out,
+            )
+            return
+        if self.region_state.active:
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_NESTED",
+                "nested G36 region start is invalid",
+                out,
+            )
+            return
+        self.region_state.begin()
+        self.region_sources = [SourceRef(str(path), line_no, line)]
+        self.region_start_line = line_no
+
+    def _region_coordinate(
+        self,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+        x_raw: str | None,
+        y_raw: str | None,
+        op: str | None,
+    ) -> None:
+        x = self._decode(x_raw, "x")
+        y = self._decode(y_raw, "y")
+        nxt = Point(
+            self.current.x if x is None else x,
+            self.current.y if y is None else y,
+        )
+        src = SourceRef(str(path), line_no, line)
+
+        if op == "2":
+            if self.region_state.vertices:
+                self._region_fail(
+                    path,
+                    line_no,
+                    line,
+                    "GERBER_REGION_MULTICONTOUR_UNSUPPORTED",
+                    "multiple contours or holes inside one region are not supported",
+                    out,
+                )
+                self.current = nxt
+                return
+            self.region_state.add(nxt.x, nxt.y)
+            self.region_sources.append(src)
+            self.current = nxt
+            return
+
+        if op == "1":
+            if self.interpolation != "linear":
+                self._region_fail(
+                    path,
+                    line_no,
+                    line,
+                    "GERBER_REGION_ARC_UNSUPPORTED",
+                    "only linear interpolation is supported inside regions",
+                    out,
+                )
+                self.current = nxt
+                return
+            if not self.region_state.vertices:
+                self.region_state.add(self.current.x, self.current.y)
+            self.region_state.add(nxt.x, nxt.y)
+            self.region_sources.append(src)
+            self.current = nxt
+            return
+
+        if op == "3":
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_FLASH_UNSUPPORTED",
+                "D03 flashes are not valid in the supported region subset",
+                out,
+            )
+            self.current = nxt
+            return
+
+        self._region_fail(
+            path,
+            line_no,
+            line,
+            "GERBER_REGION_DCODE_REQUIRED",
+            "region coordinates require explicit D01 or D02",
+            out,
+        )
+        self.current = nxt
+
+    def _end_region(
+        self,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+    ) -> None:
+        if not self.region_state.active:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_END_WITHOUT_START",
+                "G37 encountered without an active G36 region",
+                out,
+            )
+            return
+
+        raw_vertices = self.region_state.end()
+        sources = [*self.region_sources, SourceRef(str(path), line_no, line)]
+        start_line = self.region_start_line
+        self.region_sources = []
+        self.region_start_line = None
+
+        points = [Point(float(x), float(y)) for x, y in raw_vertices]
+        unique={(p.x,p.y) for p in points}
+        if len(unique) < 3:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_VERTEX_COUNT_INVALID",
+                "region needs at least three unique vertices",
+                out,
+            )
+            return
+        if points[-1] != points[0]:
+            points.append(points[0])
+
+        base_region = CopperRegion(
+            "validation",
+            tuple(points),
+            self.layer,
+            provenance=Provenance(list(sources), []),
+        )
+        shape = region_shape(base_region)
+        if shape.is_empty or float(shape.area) <= 0 or not shape.is_valid:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_GEOMETRY_INVALID",
+                "region polygon is empty, zero-area, or self-intersecting",
+                out,
+            )
+            return
+
+        coords = tuple((p.x, p.y) for p in points)
+        end_src = sources[-1]
+        for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
+            shifted = tuple(Point(p.x + dx_mm, p.y + dy_mm) for p in points)
+            id_parts = [
+                path.name,
+                start_line,
+                line_no,
+                self.layer,
+                coords,
+            ]
+            if self.step_repeat is not None:
+                id_parts.extend(["sr", x_index, y_index])
+            obj_id = stable_id("reg", *id_parts)
+            prov = self._step_repeat_provenance(
+                end_src,
+                x_index or 0,
+                y_index or 0,
+                dx_mm,
+                dy_mm,
+            )
+            for source in sources:
+                prov.add_source(source)
+            prov.add_evidence(
+                Evidence(
+                    "gerber_region",
+                    (
+                        f"linear_single_contour_dark; vertices={len(unique)}; "
+                        f"area_mm2={float(shape.area):.12g}"
+                    ),
+                    1.0,
+                    end_src,
+                )
+            )
+            out.regions.append(
+                CopperRegion(
+                    obj_id,
+                    shifted,
+                    self.layer,
+                    provenance=prov,
+                )
+            )
 
     def _emit_arc(
         self,
