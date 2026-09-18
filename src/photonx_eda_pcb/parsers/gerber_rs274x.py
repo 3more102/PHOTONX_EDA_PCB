@@ -96,6 +96,7 @@ class GerberRS274XParser:
         self.yfmt = CoordinateFormat(2, 4, "L")
         self.apertures: dict[int, Aperture] = {}
         self.aperture_macros: dict[str, str] = {}
+        self.unsupported_apertures: set[int] = set()
         self.current_aperture: int | None = None
         self.current = Point(0.0, 0.0)
         self.step_repeat: StepRepeat | None = None
@@ -169,6 +170,7 @@ class GerberRS274XParser:
                 f"aperture macro {name!r} is not defined",
                 out,
             )
+            self.unsupported_apertures.add(code)
             return
 
         try:
@@ -189,6 +191,7 @@ class GerberRS274XParser:
                 f"aperture macro {name!r} could not be evaluated ({exc})",
                 out,
             )
+            self.unsupported_apertures.add(code)
             return
 
         if len(evaluated) != 1 or evaluated[0]["kind"] != "circle":
@@ -203,6 +206,7 @@ class GerberRS274XParser:
                 ),
                 out,
             )
+            self.unsupported_apertures.add(code)
             return
 
         values = evaluated[0]["values"]
@@ -215,6 +219,7 @@ class GerberRS274XParser:
                 f"circle aperture macro {name!r} has too few modifiers",
                 out,
             )
+            self.unsupported_apertures.add(code)
             return
 
         exposure, diameter, center_x, center_y = values[:4]
@@ -237,6 +242,7 @@ class GerberRS274XParser:
                 ),
                 out,
             )
+            self.unsupported_apertures.add(code)
             return
 
         diameter_mm = to_mm(float(diameter), self.units)
@@ -802,6 +808,24 @@ class GerberRS274XParser:
                     self.current_aperture is None
                     or self.current_aperture not in self.apertures
                 ):
+                    if (
+                        not self.strict
+                        and self.current_aperture in self.unsupported_apertures
+                    ):
+                        out.diagnostics.append(
+                            ParseDiagnostic(
+                                "warning",
+                                "GERBER_APERTURE_GEOMETRY_SKIPPED",
+                                (
+                                    "geometry skipped because the selected "
+                                    "aperture macro is unsupported"
+                                ),
+                                str(p),
+                                line_no,
+                            )
+                        )
+                        self.current = nxt
+                        continue
                     raise ParseError(
                         f"{p}:{line_no}: draw/flash before valid aperture selection"
                     )
