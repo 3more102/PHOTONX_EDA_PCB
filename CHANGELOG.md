@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Hardened legacy Excellon incremental coordinate modes (`G91` and `ICI,ON`): strict parsing rejects them, permissive parsing clears/suppresses file geometry, and explicit absolute `G90` / `ICI,OFF` remains supported.
 - Hardened unsupported Gerber region (`G36/G37`) and aperture-block (`AB`) handling so permissive parsing suppresses file geometry instead of leaking region/block bodies as ordinary tracks or flashes.
 - Recognized deprecated incremental FS notation (`%FSLI...*%` / `%FSTI...*%`) explicitly and routed it through the same fail-closed geometry suppression and preflight blocker used for `G91`.
 - Verified merged commit `c457cf8` on Python 3.11, 3.12, and 3.13 with 739 passing tests and 2 existing collection warnings.
