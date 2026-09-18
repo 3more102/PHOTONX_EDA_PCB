@@ -6,9 +6,9 @@ Arc tessellation, region construction, aperture bounds, polarity and transforms 
 
 The high-level Gerber parser supports a deliberately bounded circular-arc subset:
 
-- explicit **G75 multi-quadrant** mode;
+- explicit **G75 multi-quadrant** mode with signed **I/J center offsets** relative to the current point;
+- bounded legacy **G74 single-quadrant** mode, where I/J are unsigned distances and PHOTONX selects the unique center candidate that matches direction, radius tolerance, and a sweep not greater than 90°;
 - **G02/G03** clockwise/counter-clockwise circular interpolation;
-- **I/J center offsets** relative to the current point;
 - circular draw apertures only;
 - metric/inch coordinate handling through the active Gerber format;
 - deterministic tessellation with a maximum chord-error target of **0.005 mm**;
@@ -22,7 +22,7 @@ Arc center/radius consistency is checked using the active coordinate resolution 
 
 The production parser still rejects or diagnoses:
 
-- **G74 single-quadrant** arc-center disambiguation;
+- ambiguous or invalid **G74 single-quadrant** center resolution;
 - non-circular apertures used for curved interpolation;
 - region fills (G36/G37);
 - aperture macros and aperture blocks;
