@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="790" viewBox="0 0 1500 790" role="img" aria-labelledby="title desc">
+<title id="title">PHOTONX CLI Execution Flow</title>
+<desc id="desc">PHOTONX CLI branches between capabilities, GUI, and reconstruct commands. Reconstruction writes a bundle and JSON, optionally exports KiCad, prints a summary, and returns zero for valid models or two when validation errors remain.</desc>
+<defs>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0 0 L0 6 L9 3 z" fill="#64748b"/></marker>
+  <style>
+    .title{font:700 36px Inter,Segoe UI,Arial,sans-serif;fill:#111827}.sub{font:400 17px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+    .box{stroke-width:2;rx:16;ry:16}.t{font:700 18px Inter,Segoe UI,Arial,sans-serif;fill:#111827}.s{font:400 14px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+    .a{stroke:#64748b;stroke-width:3;fill:none;marker-end:url(#arrow)}.good{stroke:#059669;stroke-width:3;fill:none;marker-end:url(#arrow)}.warn{stroke:#ca8a04;stroke-width:3;fill:none;marker-end:url(#arrow)}
+  </style>
+</defs>
+<rect width="1500" height="790" fill="#fff"/>
+<text x="70" y="60" class="title">PHOTONX CLI Execution Flow</text>
+<text x="70" y="94" class="sub">The command-line interface exposes three top-level workflows.</text>
+
+<rect x="590" y="135" width="320" height="80" class="box" fill="#e0f2fe" stroke="#0284c7"/>
+<text x="750" y="167" text-anchor="middle" class="t">photonx &lt;command&gt;</text>
+<text x="750" y="192" text-anchor="middle" class="s">capabilities · gui · reconstruct</text>
+
+<rect x="110" y="310" width="280" height="105" class="box" fill="#ecfeff" stroke="#0891b2"/>
+<text x="250" y="347" text-anchor="middle" class="t">capabilities</text>
+<text x="250" y="373" text-anchor="middle" class="s">print declared support matrix</text>
+<text x="250" y="395" text-anchor="middle" class="s">exit 0</text>
+
+<rect x="610" y="310" width="280" height="105" class="box" fill="#eef2ff" stroke="#4f46e5"/>
+<text x="750" y="347" text-anchor="middle" class="t">gui &lt;input&gt;</text>
+<text x="750" y="373" text-anchor="middle" class="s">launch model-backed viewer</text>
+<text x="750" y="395" text-anchor="middle" class="s">inspect reconstructed board</text>
+
+<rect x="1110" y="310" width="280" height="105" class="box" fill="#f5f3ff" stroke="#7c3aed"/>
+<text x="1250" y="347" text-anchor="middle" class="t">reconstruct</text>
+<text x="1250" y="373" text-anchor="middle" class="s">strict by default</text>
+<text x="1250" y="395" text-anchor="middle" class="s">--permissive changes parser policy</text>
+
+<path d="M690 215 C690 260 250 260 250 310" class="a"/>
+<path d="M750 215 V310" class="a"/>
+<path d="M810 215 C810 260 1250 260 1250 310" class="a"/>
+
+<rect x="1030" y="500" width="240" height="90" class="box" fill="#f8fafc" stroke="#64748b"/>
+<text x="1150" y="534" text-anchor="middle" class="t">Write Bundle + JSON</text>
+<text x="1150" y="560" text-anchor="middle" class="s">board / validation / export</text>
+
+<rect x="1300" y="500" width="150" height="90" class="box" fill="#fff7ed" stroke="#ea580c"/>
+<text x="1375" y="534" text-anchor="middle" class="t">--kicad?</text>
+<text x="1375" y="560" text-anchor="middle" class="s">optional</text>
+
+<path d="M1250 415 V455 H1150 V500" class="a"/>
+<path d="M1270 545 H1300" class="a"/>
+
+<rect x="980" y="665" width="240" height="82" class="box" fill="#ecfdf5" stroke="#059669"/>
+<text x="1100" y="696" text-anchor="middle" class="t">Validation OK</text>
+<text x="1100" y="720" text-anchor="middle" class="s">print summary → exit 0</text>
+
+<rect x="1260" y="665" width="240" height="82" class="box" fill="#fff1f2" stroke="#e11d48"/>
+<text x="1380" y="696" text-anchor="middle" class="t">Validation Errors</text>
+<text x="1380" y="720" text-anchor="middle" class="s">print summary → exit 2</text>
+
+<path d="M1150 590 V625 H1100 V665" class="good"/>
+<path d="M1150 590 V625 H1380 V665" class="warn"/>
+
+<rect x="680" y="500" width="280" height="90" class="box" fill="#fefce8" stroke="#ca8a04"/>
+<text x="820" y="534" text-anchor="middle" class="t">KiCad Export + Validation</text>
+<text x="820" y="560" text-anchor="middle" class="s">only when --kicad requested</text>
+<path d="M1375 590 C1375 625 820 625 820 590" class="a"/>
+
+<text x="70" y="770" class="sub">CLI success reflects PHOTONX model validation only; native KiCad validation remains a separate recorded result.</text>
+</svg>
