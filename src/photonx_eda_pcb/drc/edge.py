@@ -4,14 +4,14 @@ from photonx_eda_pcb.geometry_kernel import drill_shape
 from photonx_eda_pcb.board_material_geometry import board_material_shape
 
 def outline_geometry(board):
-    shape=board_material_shape(board)
-    return (None,shape)
+    material=board_material_shape(board)
+    return (None,None) if material is None else (material.boundary,material)
 
 def check_edge_presence(board,cfg):
     if not board.outline:return [DrcIssue("warning","BOARD_OUTLINE_MISSING","edge clearance cannot be evaluated without outline")]
-    material=board_material_shape(board)
+    boundary,material=outline_geometry(board)
     if material is None:return [DrcIssue("warning","BOARD_OUTLINE_NOT_CLOSED","edge clearance uses outline segments but outside-board detection is unavailable")]
-    out=[];boundary=material.boundary
+    out=[]
     for obj in [*board.tracks,*board.pads]:
         shape=copper_shape(obj);distance=shape.distance(boundary)
         if not material.covers(shape):
