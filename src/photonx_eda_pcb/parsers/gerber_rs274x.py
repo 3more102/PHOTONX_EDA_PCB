@@ -12,6 +12,7 @@ from ..models import OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
 from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
 from .gerber_parts.step_repeat import parse_step_repeat
+from .gerber_parts.tokenizer import iter_gerber_statements
 
 
 _FS = re.compile(r"^%FS([LT])A?X(\d)(\d)Y(\d)(\d)\*%$")
@@ -399,10 +400,8 @@ class GerberRS274XParser:
         p = Path(path)
         out = GerberLayerResult()
 
-        for line_no, raw in enumerate(
-            p.read_text(encoding="utf-8", errors="strict").splitlines(), 1
-        ):
-            line = raw.strip()
+        text = p.read_text(encoding="utf-8", errors="strict")
+        for line_no, line in iter_gerber_statements(text):
             if not line or line.startswith("G04"):
                 continue
             if line in {"M02*", "%LPD*%"}:
