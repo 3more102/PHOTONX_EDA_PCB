@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="760" viewBox="0 0 1500 760" role="img" aria-labelledby="title desc">
+<title id="title">PHOTONX Parser Decision Flow</title>
+<desc id="desc">PHOTONX discovers a manufacturing file, parses declared supported syntax, and either reconstructs normalized objects or reports unsupported syntax according to strict or permissive mode without silent data loss.</desc>
+<defs>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0 0 L0 6 L9 3 z" fill="#64748b"/></marker>
+  <style>
+    .title{font:700 36px Inter,Segoe UI,Arial,sans-serif;fill:#111827}.sub{font:400 17px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+    .box{stroke-width:2;rx:16;ry:16}.t{font:700 18px Inter,Segoe UI,Arial,sans-serif;fill:#111827}.s{font:400 14px Inter,Segoe UI,Arial,sans-serif;fill:#475569}
+    .a{stroke:#64748b;stroke-width:3;fill:none;marker-end:url(#arrow)}.bad{stroke:#dc2626;stroke-width:3;fill:none;marker-end:url(#arrow)}.good{stroke:#059669;stroke-width:3;fill:none;marker-end:url(#arrow)}
+  </style>
+</defs>
+<rect width="1500" height="760" fill="#fff"/>
+<text x="70" y="60" class="title">PHOTONX Parser Decision Flow</text>
+<text x="70" y="94" class="sub">Unsupported manufacturing syntax is never silently discarded.</text>
+
+<rect x="90" y="180" width="220" height="90" class="box" fill="#e0f2fe" stroke="#0284c7"/>
+<text x="200" y="214" text-anchor="middle" class="t">Manufacturing File</text>
+<text x="200" y="240" text-anchor="middle" class="s">Gerber / Excellon</text>
+
+<rect x="380" y="180" width="220" height="90" class="box" fill="#ecfeff" stroke="#0891b2"/>
+<text x="490" y="214" text-anchor="middle" class="t">Discovery / Role</text>
+<text x="490" y="240" text-anchor="middle" class="s">file type · layer role</text>
+
+<rect x="670" y="180" width="220" height="90" class="box" fill="#eef2ff" stroke="#4f46e5"/>
+<text x="780" y="214" text-anchor="middle" class="t">Parse Statement</text>
+<text x="780" y="240" text-anchor="middle" class="s">declared supported subset</text>
+
+<rect x="960" y="180" width="220" height="90" class="box" fill="#f5f3ff" stroke="#7c3aed"/>
+<text x="1070" y="214" text-anchor="middle" class="t">Supported?</text>
+<text x="1070" y="240" text-anchor="middle" class="s">syntax + semantics</text>
+
+<path d="M310 225 H380" class="a"/><path d="M600 225 H670" class="a"/><path d="M890 225 H960" class="a"/>
+
+<rect x="170" y="420" width="300" height="110" class="box" fill="#ecfdf5" stroke="#059669"/>
+<text x="320" y="456" text-anchor="middle" class="t">YES → Normalize Object</text>
+<text x="320" y="482" text-anchor="middle" class="s">geometry · drill · slot · route</text>
+<text x="320" y="504" text-anchor="middle" class="s">preserve provenance</text>
+
+<rect x="590" y="420" width="300" height="110" class="box" fill="#fff1f2" stroke="#e11d48"/>
+<text x="740" y="456" text-anchor="middle" class="t">NO → Strict Mode</text>
+<text x="740" y="482" text-anchor="middle" class="s">raise / stop reconstruction</text>
+<text x="740" y="504" text-anchor="middle" class="s">prevent silent corruption</text>
+
+<rect x="1010" y="420" width="330" height="110" class="box" fill="#fefce8" stroke="#ca8a04"/>
+<text x="1175" y="456" text-anchor="middle" class="t">NO → Permissive Mode</text>
+<text x="1175" y="482" text-anchor="middle" class="s">record explicit diagnostic</text>
+<text x="1175" y="504" text-anchor="middle" class="s">continue only with declared loss visible</text>
+
+<path d="M1070 270 C1070 340 320 340 320 420" class="good"/>
+<path d="M1070 270 C1070 360 740 360 740 420" class="bad"/>
+<path d="M1070 270 V360 H1175 V420" class="a"/>
+
+<rect x="435" y="620" width="630" height="90" class="box" fill="#f8fafc" stroke="#64748b"/>
+<text x="750" y="654" text-anchor="middle" class="t">Auditable Reconstruction State</text>
+<text x="750" y="680" text-anchor="middle" class="s">normalized objects + diagnostics + provenance + explicit unsupported boundaries</text>
+
+<path d="M320 530 V575 H650 V620" class="a"/>
+<path d="M1175 530 V575 H850 V620" class="a"/>
+
+<text x="70" y="735" class="sub">Strict mode is the default. Permissive mode records unsupported constructs instead of pretending they were reconstructed.</text>
+</svg>
