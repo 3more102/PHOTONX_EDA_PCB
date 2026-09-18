@@ -98,6 +98,7 @@ class GerberRS274XParser:
         self.step_repeat: StepRepeat | None = None
         self.interpolation = "linear"
         self.quadrant_mode: str | None = None
+        self.current_operation: str | None = None
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -400,7 +401,7 @@ class GerberRS274XParser:
         p = Path(path)
         out = GerberLayerResult()
 
-        text = p.read_text(encoding="utf-8", errors="strict")
+        text = p.read_text(encoding="utf-8-sig", errors="strict")
         for line_no, line in iter_gerber_statements(text):
             if not line or line.startswith("G04"):
                 continue
@@ -433,6 +434,46 @@ class GerberRS274XParser:
             m = _MO.match(line)
             if m:
                 self.units = "mm" if m.group(1) == "MM" else "inch"
+                continue
+
+            # Legacy RS-274-D/early RS-274X unit commands still appear in
+            # exported CAM jobs. Their semantics are unambiguous here.
+            if line in {"G70*", "G070*"}:
+                self.units = "inch"
+                continue
+            if line in {"G71*", "G071*"}:
+                self.units = "mm"
+                continue
+
+            # PHOTONX models absolute coordinates. Explicit absolute mode is
+            # therefore a safe no-op; incremental mode is rejected visibly.
+            if line in {"G90*", "G090*"}:
+                continue
+            if line in {"G91*", "G091*"}:
+                self._fail_or_warn(
+                    p,
+                    line_no,
+                    line,
+                    "GERBER_INCREMENTAL_COORDINATES_UNSUPPORTED",
+                    "G91 incremental coordinate mode is not implemented",
+                    out,
+                )
+                continue
+
+            # Older generators may emit explicit default transform statements.
+            # Only the identity forms are accepted; non-identity transforms
+            # remain unsupported rather than being silently ignored.
+            if line in {"%ASAXBY*%", "%IPPOS*%", "%MIA0B0*%", "%OFA0B0*%"}:
+                continue
+            if line.startswith(("%AS", "%IP", "%MI", "%OF")):
+                self._fail_or_warn(
+                    p,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_TRANSFORM",
+                    "non-default legacy Gerber transform is not implemented",
+                    out,
+                )
                 continue
 
             m = _AD.match(line)
@@ -501,13 +542,16 @@ class GerberRS274XParser:
             arc_match = _ARC_COORD.match(line)
             if arc_match:
                 gcode, x_raw, y_raw, i_raw, j_raw, op = arc_match.groups()
+                operation = op or self.current_operation
+                if op is not None:
+                    self.current_operation = op
                 arc_candidate = (
                     gcode is not None
                     or i_raw is not None
                     or j_raw is not None
                     or (
                         self.interpolation in {"cw_arc", "ccw_arc"}
-                        and op == "1"
+                        and operation == "1"
                     )
                 )
                 if arc_candidate:
@@ -523,11 +567,11 @@ class GerberRS274XParser:
                         self.current.y if y is None else y,
                     )
 
-                    if op == "2":
+                    if operation == "2":
                         self.current = nxt
                         continue
 
-                    if op != "1":
+                    if operation != "1":
                         self._parse_error_or_warn(
                             p,
                             line_no,
@@ -579,6 +623,9 @@ class GerberRS274XParser:
             m = _COORD.match(line)
             if m:
                 x_raw, y_raw, op = m.groups()
+                operation = op or self.current_operation
+                if op is not None:
+                    self.current_operation = op
                 x = self._decode(x_raw, "x")
                 y = self._decode(y_raw, "y")
                 nxt = Point(
@@ -586,7 +633,19 @@ class GerberRS274XParser:
                     self.current.y if y is None else y,
                 )
 
-                if op == "2" or op is None:
+                if operation is None:
+                    self._parse_error_or_warn(
+                        p,
+                        line_no,
+                        line,
+                        "GERBER_OPERATION_MODE_MISSING",
+                        "coordinate command has no D01/D02/D03 and no modal operation",
+                        out,
+                    )
+                    self.current = nxt
+                    continue
+
+                if operation == "2":
                     self.current = nxt
                     continue
 
@@ -601,7 +660,7 @@ class GerberRS274XParser:
                 ap = self.apertures[self.current_aperture]
                 src = SourceRef(str(p), line_no, line)
 
-                if op == "1":
+                if operation == "1":
                     if ap.shape != "C":
                         self._fail_or_warn(
                             p,
@@ -664,7 +723,7 @@ class GerberRS274XParser:
                                 )
                             )
 
-                elif op == "3":
+                elif operation == "3":
                     for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
                         center = Point(nxt.x + dx_mm, nxt.y + dy_mm)
                         if self.step_repeat is None:
