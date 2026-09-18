@@ -356,7 +356,7 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Excellon point drill hits | **Implemented** | Metric/inch tools and drill hits |
 | Excellon G85 straight slots | **Implemented** | Straight canned slots reconstructed from explicit endpoints |
 | Excellon linear routing | **Implemented** | G00/M15/G01/M16 linear routed paths supported |
-| Excellon routed arcs | **Partial** | G02/G03 I/J center-offset arcs supported with deterministic tessellation and provenance; radius/A-form dialects remain unsupported |
+| Excellon routed arcs | **Partial** | G02/G03 supports I/J center-offset arcs plus bounded inline A# radius arcs with sweeps <=180 degrees; deterministic tessellation and provenance are preserved |
 | Strict / permissive parser modes | **Implemented** | Strict fails on unsupported syntax; permissive records diagnostics |
 | Parser conformance harness | **Implemented** | Executable support-boundary regression coverage |
 
@@ -625,7 +625,7 @@ Without independent evidence, manufacturing geometry generally cannot prove:
 - The production Gerber path is still a declared subset, not the full language.
 - G75 multi-quadrant circular arcs are supported only for I/J center offsets with circular draw apertures and are represented by explicitly evidenced tessellation.
 - Single positive centered-circle Gerber aperture macros are supported. Legacy G74 single-quadrant arcs are supported only for unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90°. Gerber regions, complex aperture macros, and aperture blocks remain outside the declared production high-level parser.
-- Excellon G02/G03 routed arcs are supported for the bounded I/J center-offset subset; radius/A-form dialects remain unsupported.
+- Excellon G02/G03 routed arcs support the bounded I/J center-offset subset and inline A# radius arcs when a unique <=180-degree center can be resolved; modal A# state and broader vendor-specific radius dialects remain unsupported.
 - Some low-level helpers may recognize constructs that the high-level reconstruction path does not yet claim as production support.
 
 Before treating output as production evidence, review the current parser capabilities and the relevant domain documentation.
@@ -683,7 +683,7 @@ The current roadmap keeps the highest-risk gaps explicit rather than masking the
 
 - broader Gerber support, including regions, more aperture macro primitives/blocks, and additional legacy/vendor arc dialects;
 - richer Gerber X2 attribute handling;
-- broader Excellon route/slot dialect support, including radius/A-form routed arcs and additional vendor variants;
+- broader Excellon route/slot dialect support beyond the bounded inline A# radius subset, including modal radius state and additional vendor variants;
 - stronger multilayer via-span reasoning;
 - stronger footprint clustering and component evidence;
 - more validation against boards with independently known ground truth.
