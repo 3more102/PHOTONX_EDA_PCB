@@ -13,7 +13,7 @@ from ..provenance import Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
 from .excellon_parts.slots import parse_slot_command
 
-_TOOL_DEF = re.compile(r"^T(\d+)C([0-9.]+)$")
+_TOOL_DEF = re.compile(r"^T(\\d+)C([0-9.]+)(?:F[0-9.]+)?(?:S[0-9.]+)?$")
 _TOOL_SEL = re.compile(r"^T(\d+)$")
 _HIT = re.compile(r"^(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?$")
 
@@ -31,7 +31,7 @@ class ExcellonParser:
     G02/G03 routed arcs remain unsupported.
     """
     def __init__(self, strict: bool = True):
-        self.strict = strict; self.units = "mm"; self.zero = "L"
+        self.strict = strict; self.units = "mm"; self.zero = "L"; self.units_declared = False
         self.fmt = CoordinateFormat(2, 4, "L"); self.tools = {}; self.tool = None; self.current = Point(0.0, 0.0)
         self.route=LinearRouteState();self._route_sources=[]
 
@@ -60,13 +60,20 @@ class ExcellonParser:
 
     def parse(self,path:str|Path)->ExcellonResult:
         p=Path(path);out=ExcellonResult()
-        for line_no,raw in enumerate(p.read_text(encoding="utf-8",errors="strict").splitlines(),1):
+        for line_no,raw in enumerate(p.read_text(encoding="utf-8-sig",errors="strict").splitlines(),1):
             line=raw.strip().upper()
             if not line or line in {"M48","%","M30","M95"} or line.startswith(";"):continue
-            if line.startswith("METRIC"):
-                self.units="mm";self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(3,3,self.zero);continue
-            if line.startswith("INCH"):
-                self.units="inch";self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(2,4,self.zero);continue
+            if line.startswith("METRIC") or line == "M71":
+                self.units="mm";self.units_declared=True;self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(3,3,self.zero);continue
+            if line.startswith("INCH") or line == "M72":
+                self.units="inch";self.units_declared=True;self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(2,4,self.zero);continue
+            if line.startswith(("FMAT,", "VER,")):
+                continue
+            if line.startswith("ICI,"):
+                if line == "ICI,OFF":
+                    continue
+                if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: incremental Excellon coordinates are unsupported: {line}")
+                out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_INCREMENTAL",line,str(p),line_no));continue
             if "G85" in line:
                 if self.route.tool_down:
                     if self.strict:raise ParseError(f"{p}:{line_no}: G85 encountered while route tool is down")
@@ -122,6 +129,19 @@ class ExcellonParser:
                 continue
             m=_TOOL_DEF.match(line)
             if m:
+                if not self.units_declared:
+                    message = "tool diameter encountered before explicit METRIC/INCH/M71/M72 units"
+                    if self.strict:
+                        raise ParseError(f"{p}:{line_no}: {message}")
+                    out.diagnostics.append(
+                        ParseDiagnostic(
+                            "warning",
+                            "EXCELLON_UNITS_UNDECLARED",
+                            message,
+                            str(p),
+                            line_no,
+                        )
+                    )
                 tool,diameter=m.groups();self.tools[tool]=to_mm(float(diameter),self.units);continue
             m=_TOOL_SEL.match(line)
             if m:
