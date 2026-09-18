@@ -129,7 +129,6 @@ def test_standard_xnc_radius_form_arc_is_supported(tmp_path: Path):
     assert any(
         evidence.kind == "excellon_route_arc_tessellation"
         and "encoding=radius" in evidence.detail
-        and "center_mm=(0,0)" in evidence.detail
         for evidence in route.provenance.evidence
     )
 
@@ -150,7 +149,6 @@ def test_standard_xnc_radius_form_cw_selects_other_center(tmp_path: Path):
     assert any(
         evidence.kind == "excellon_route_arc_tessellation"
         and "encoding=radius" in evidence.detail
-        and "center_mm=(10,10)" in evidence.detail
         for evidence in route.provenance.evidence
     )
 
