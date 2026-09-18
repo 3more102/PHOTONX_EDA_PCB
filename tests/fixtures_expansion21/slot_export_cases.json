@@ -1,0 +1,1 @@
+{"cases":[{"id":"npth","plated":"non-plated","expected":"export"},{"id":"unknown","plated":"unknown","expected":"skip"},{"id":"plated-no-padstack","plated":"plated","expected":"skip"}],"synthetic":true}

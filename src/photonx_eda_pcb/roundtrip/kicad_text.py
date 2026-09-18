@@ -1,3 +1,10 @@
 import re
 def kicad_text_counts(text:str):
-    return {'segments':len(re.findall(r'\(segment\s',text)),'footprints':len(re.findall(r'\(footprint\s',text)),'vias':len(re.findall(r'\(via\s',text)),'gr_lines':len(re.findall(r'\(gr_line\s',text))}
+    return {
+      "segments":len(re.findall(r"\(segment\s",text)),
+      "footprints":len(re.findall(r"\(footprint\s",text)),
+      "vias":len(re.findall(r"\(via\s",text)),
+      "gr_lines":len(re.findall(r"\(gr_line\s",text)),
+      "oval_drills":len(re.findall(r"\(drill\s+oval\s",text)),
+      "npth_pads":len(re.findall(r"\(pad\s+\"\"\s+np_thru_hole\s",text)),
+    }

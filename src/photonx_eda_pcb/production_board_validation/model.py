@@ -6,6 +6,8 @@ class ProductionValidationConfig:
     min_provenance_coverage:float=.95
     max_drc_errors:int=0
     max_erc_errors:int=0
+    require_known_slot_plating:bool=True
+    require_kicad_exportable_slots:bool=False
 @dataclass
 class ProductionValidationResult:
     passed:bool
