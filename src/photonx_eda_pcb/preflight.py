@@ -74,6 +74,8 @@ def _is_strict_blocker(code: str) -> bool:
             "GERBER_INCREMENTAL_COORDINATES_UNSUPPORTED",
             "GERBER_UNITS_UNDECLARED",
             "CONFLICTING_GERBER_UNITS",
+            "GERBER_FORMAT_UNDECLARED",
+            "CONFLICTING_GERBER_FORMAT",
             "MALFORMED_EXCELLON_ROUTE",
             "EXCELLON_ROUTE_STATE",
             "EXCELLON_ROUTE_EMPTY",
