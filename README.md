@@ -105,7 +105,14 @@ export PHOTONX_NATIVE_LIBRARY="$PWD/build/native/lib/libphotonx_native.so"
 pytest -q
 ```
 
-`backend="auto"` uses the native backend when a compatible library is available and otherwise falls back to the Python reference implementation. See [Native acceleration](docs/NATIVE_ACCELERATION.md) for the ABI, safety contract, platform notes, and staged roadmap.
+For a self-contained platform wheel, install the `build` frontend and opt in during wheel creation:
+
+```bash
+python -m pip install build
+PHOTONX_BUILD_NATIVE=1 python -m build --wheel
+```
+
+A normal wheel/install remains Python-only and does not require a compiler. Native-enabled wheels embed the shared library inside the package, so `backend="auto"` can discover it without `PHOTONX_NATIVE_LIBRARY`. See [Native acceleration](docs/NATIVE_ACCELERATION.md) for Windows syntax, the ABI check, safety contract, and staged roadmap.
 
 ### Inspect declared parser capabilities
 
