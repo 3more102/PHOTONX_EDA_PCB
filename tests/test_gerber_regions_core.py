@@ -230,8 +230,7 @@ def test_incremental_modal_region_coordinates_are_supported(tmp_path: Path):
         "incremental_region.gtl",
         _region_file(
             "G36*\n"
-            "D02*\n"
-            "X010000Y010000*\n"
+            "X010000Y010000D02*\n"
             "D01*\n"
             "X010000Y000000*\n"
             "X000000Y010000*\n"
