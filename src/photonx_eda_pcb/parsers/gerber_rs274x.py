@@ -2448,11 +2448,51 @@ class GerberRS274XParser:
                 if line in {"G01*", "G1*"}:
                     self.interpolation = "linear"
                     continue
+                if line in {"G02*", "G2*"}:
+                    self.interpolation = "cw_arc"
+                    continue
+                if line in {"G03*", "G3*"}:
+                    self.interpolation = "ccw_arc"
+                    continue
 
                 op_match = _OP_SELECT.match(line)
                 if op_match:
                     self.current_operation = op_match.group(1)
                     continue
+
+                arc_match = _ARC_COORD.match(line)
+                if arc_match:
+                    gcode, x_raw, y_raw, i_raw, j_raw, op = arc_match.groups()
+                    operation = op or self.current_operation
+                    arc_candidate = (
+                        gcode is not None
+                        or i_raw is not None
+                        or j_raw is not None
+                        or (
+                            self.interpolation in {"cw_arc", "ccw_arc"}
+                            and operation == "1"
+                        )
+                    )
+                    if arc_candidate:
+                        if not self._require_units(p, line_no, line, out):
+                            self._abort_region()
+                            continue
+                        if gcode in {"G02", "G2"}:
+                            self.interpolation = "cw_arc"
+                        elif gcode in {"G03", "G3"}:
+                            self.interpolation = "ccw_arc"
+                        self._region_arc_coordinate(
+                            p,
+                            line_no,
+                            line,
+                            out,
+                            x_raw,
+                            y_raw,
+                            i_raw,
+                            j_raw,
+                            op,
+                        )
+                        continue
 
                 coord_match = _COORD.match(line)
                 if coord_match:
@@ -2471,34 +2511,15 @@ class GerberRS274XParser:
                     )
                     continue
 
-                arc_match = _ARC_COORD.match(line)
-                if arc_match:
-                    gcode, x_raw, y_raw, i_raw, j_raw, op = arc_match.groups()
-                    arc_candidate = (
-                        gcode is not None
-                        or i_raw is not None
-                        or j_raw is not None
-                        or self.interpolation in {"cw_arc", "ccw_arc"}
-                    )
-                    if arc_candidate:
-                        if self._require_units(p, line_no, line, out):
-                            self.current = self._coordinate_point(x_raw, y_raw)
-                        self._region_fail(
-                            p,
-                            line_no,
-                            line,
-                            "GERBER_REGION_ARC_UNSUPPORTED",
-                            "arc interpolation or I/J offsets inside regions are not supported",
-                            out,
-                        )
-                        continue
-
                 self._region_fail(
                     p,
                     line_no,
                     line,
                     "GERBER_REGION_UNSUPPORTED_STATEMENT",
-                    "statement is outside the supported linear single-contour region subset",
+                    (
+                        "only D01/D02 and G01/G02/G03 contour commands are "
+                        "supported inside the current region subset"
+                    ),
                     out,
                 )
                 continue
