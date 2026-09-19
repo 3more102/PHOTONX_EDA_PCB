@@ -57,16 +57,78 @@ def _plated_slot_lines(board,slot,net_num,report):
       '  )'
     ]
 
-def _record_region_skips(board,report):
+def _record_region_skip(report,region,code,msg):
+    report.skipped_regions+=1
+    report.skipped_region_ids.append(region.id)
+    report.issues.append(KicadExportIssue("warning",code,region.id,msg))
+
+def _region_points(region):
+    points=list(region.points)
+    if len(points)>1 and points[0].x==points[-1].x and points[0].y==points[-1].y:
+        points=points[:-1]
+    return points
+
+def _region_lines(board,net_num,report):
+    lines=[]
     for region in getattr(board,"regions",()):
-        report.skipped_regions+=1
-        report.skipped_region_ids.append(region.id)
-        report.issues.append(KicadExportIssue(
-            "warning",
-            "KICAD_COPPER_REGION_UNSUPPORTED",
-            region.id,
-            "copper region export as a KiCad zone is not implemented; region omitted",
-        ))
+        if getattr(region,"holes",()):
+            _record_region_skip(
+                report,
+                region,
+                "KICAD_COPPER_REGION_HOLES_UNSUPPORTED",
+                "copper region contains one or more holes; exact KiCad zone-hole export is not implemented",
+            )
+            continue
+        if region.layer not in {"F.Cu","B.Cu"}:
+            _record_region_skip(
+                report,
+                region,
+                "KICAD_COPPER_REGION_LAYER_UNSUPPORTED",
+                f"copper region layer {region.layer!r} is not declared by the current KiCad exporter",
+            )
+            continue
+        points=_region_points(region)
+        coords=[(float(point.x),float(point.y)) for point in points]
+        if len(set(coords))<3 or any(not isfinite(value) for pair in coords for value in pair):
+            _record_region_skip(
+                report,
+                region,
+                "KICAD_COPPER_REGION_INVALID_GEOMETRY",
+                "copper region must contain at least three distinct finite vertices",
+            )
+            continue
+        if region.net_id is None:
+            n=0;net_name=""
+        elif region.net_id not in net_num:
+            _record_region_skip(
+                report,
+                region,
+                "KICAD_COPPER_REGION_NET_UNRESOLVED",
+                f"copper region references unknown net {region.net_id!r}",
+            )
+            continue
+        else:
+            n=net_num[region.net_id]
+            net_name=next((net.label or net.id for net in board.nets if net.id==region.net_id),"")
+        pts=" ".join(f"(xy {x:.6f} {y:.6f})" for x,y in coords)
+        lines.extend([
+            "  (zone",
+            f"    (net {n})",
+            f"    (net_name {_q(net_name)})",
+            f"    (layer {_q(region.layer)})",
+            f'    (uuid {_u("region:"+region.id)})',
+            f'    (name {_q("PHOTONX:"+region.id)})',
+            "    (hatch edge 0.500000)",
+            "    (connect_pads (clearance 0.500000))",
+            "    (min_thickness 0.250000)",
+            "    (fill yes (thermal_gap 0.500000) (thermal_bridge_width 0.500000) (island_removal_mode 1))",
+            f"    (polygon (pts {pts}))",
+            f"    (filled_polygon (layer {_q(region.layer)}) (pts {pts}))",
+            "  )",
+        ])
+        report.exported_regions+=1
+        report.exported_region_ids.append(region.id)
+    return lines
 
 def _slot_lines(board,net_num,report):
     lines=[]
@@ -81,7 +143,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
     p=Path(path);p.parent.mkdir(parents=True,exist_ok=True);report=KicadExportReport();net_num={net.id:i+1 for i,net in enumerate(board.nets)}
     lines=['(kicad_pcb (version 20240108) (generator "photonx_eda_pcb")','  (general (thickness 1.6))','  (paper "A4")','  (layers','    (0 "F.Cu" signal)','    (31 "B.Cu" signal)','    (36 "B.SilkS" user "b.silkscreen")','    (37 "F.SilkS" user "f.silkscreen")','    (44 "Edge.Cuts" user)','  )','  (setup (pad_to_mask_clearance 0))','  (net 0 "")']
     for net in board.nets:lines.append(f'  (net {net_num[net.id]} {_q(net.label or net.id)})')
-    lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));_record_region_skips(board,report)
+    lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));lines.extend(_region_lines(board,net_num,report))
     for trk in board.tracks:
         n=net_num.get(trk.net_id,0);lines.append(f'  (segment (start {trk.start.x:.6f} {trk.start.y:.6f}) (end {trk.end.x:.6f} {trk.end.y:.6f}) (width {trk.width:.6f}) (layer {_q(trk.layer)}) (net {n}) (uuid {_u("track:"+trk.id)}))')
     for seg in board.outline:lines.append(f'  (gr_line (start {seg.start.x:.6f} {seg.start.y:.6f}) (end {seg.end.x:.6f} {seg.end.y:.6f}) (stroke (width 0.1) (type default)) (layer "Edge.Cuts") (uuid {_u("edge:"+seg.id)}))')
