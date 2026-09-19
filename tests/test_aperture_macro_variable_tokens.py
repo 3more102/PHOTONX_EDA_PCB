@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from photonx_eda_pcb.aperture_macros import evaluate_macro, parse_macro_body
 from photonx_eda_pcb.aperture_macros.variables import substitute
 from photonx_eda_pcb.errors import UnsupportedFeatureError
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
@@ -14,8 +15,8 @@ def _write(tmp_path: Path, text: str) -> Path:
     return path
 
 
-def test_substitute_keeps_undefined_longer_variable_intact():
-    assert substitute("$10+$1", {"1": 2.5}) == "$10+2.5"
+def test_substitute_uses_zero_for_undefined_longer_variable_without_aliasing():
+    assert substitute("$10+$1", {"1": 2.5}) == "0.0+2.5"
 
 
 def test_substitute_replaces_exact_overlapping_variable_tokens():
@@ -26,13 +27,102 @@ def test_substitute_accepts_dollar_prefixed_variable_keys():
     assert substitute("$1+$2", {"$1": 3.0, "$2": 4.0}) == "3.0+4.0"
 
 
-def test_undefined_longer_macro_variable_fails_closed_end_to_end(tmp_path: Path):
+def test_macro_variable_definition_is_evaluated_in_source_order():
+    statements = parse_macro_body("$3=$1x1.25*$4=$3+$2*1,1,$4,0,0")
+
+    evaluated = evaluate_macro(statements, {"1": 2.0, "2": 0.5})
+
+    assert len(evaluated) == 1
+    assert evaluated[0]["kind"] == "circle"
+    assert evaluated[0]["values"] == pytest.approx([1.0, 3.0, 0.0, 0.0])
+
+
+def test_undefined_macro_variables_default_to_zero():
+    statements = parse_macro_body("$4=$9+2*1,1,$4+$8,0,0")
+
+    evaluated = evaluate_macro(statements)
+
+    assert evaluated[0]["values"] == pytest.approx([1.0, 2.0, 0.0, 0.0])
+
+
+def test_macro_variable_definition_cannot_redefine_ad_parameter():
+    statements = parse_macro_body("$1=$1x2*1,1,$1,0,0")
+
+    with pytest.raises(ValueError, match=r"\$1 cannot be redefined"):
+        evaluate_macro(statements, {"1": 1.0})
+
+
+def test_macro_variable_definition_cannot_redefine_prior_definition():
+    statements = parse_macro_body("$4=1*$4=2*1,1,$4,0,0")
+
+    with pytest.raises(ValueError, match=r"\$4 cannot be redefined"):
+        evaluate_macro(statements)
+
+
+def test_macro_variable_zero_index_is_invalid():
+    with pytest.raises(ValueError, match="invalid macro variable definition"):
+        parse_macro_body("$0=1*1,1,1,0,0")
+
+
+def test_macro_variable_zero_index_reference_is_invalid():
+    statements = parse_macro_body("1,1,$0+1,0,0")
+
+    with pytest.raises(ValueError, match="positive integer"):
+        evaluate_macro(statements)
+
+
+def test_production_parser_uses_exact_variable_tokens(tmp_path: Path):
     path = _write(
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
-        "%AMROUND*1,1,$10,0,0*%\n"
+        "%AMROUND*1,1,$10+$1,0,0*%\n"
         "%ADD10ROUND,0.800*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.pads) == 1
+    assert result.pads[0].size_x == pytest.approx(0.8)
+
+    report = preflight(path)
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_production_parser_supports_macro_variable_definition(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMVARDIAM*$2=$1x1.25*1,1,$2,0,0*%\n"
+        "%ADD10VARDIAM,2.0*%\n"
+        "D10*\n"
+        "X010000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.pads) == 1
+    pad = result.pads[0]
+    assert pad.shape == "C"
+    assert pad.center.x == pytest.approx(1.0)
+    assert pad.center.y == pytest.approx(2.0)
+    assert pad.size_x == pytest.approx(2.5)
+    assert pad.size_y == pytest.approx(2.5)
+
+
+def test_production_parser_rejects_macro_variable_redefinition(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMBROKEN*$1=$1x2*1,1,$1,0,0*%\n"
+        "%ADD10BROKEN,1.0*%\n"
         "D10*\n"
         "X000000Y000000D03*\n"
         "M02*\n",
