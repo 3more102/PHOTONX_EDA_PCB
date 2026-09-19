@@ -134,6 +134,26 @@ photonx reconstruct examples/PHOTONX_LED_TEST/input \
   --kicad
 ```
 
+### Emit review artifacts
+
+```bash
+photonx reconstruct examples/PHOTONX_LED_TEST/input \
+  --output build/led \
+  --review-artifacts
+```
+
+This emits a cohesive `review/` bundle with Markdown, JSON, JUnit, SVG, GraphML, and CSV artifacts.
+
+### Request individual review exports
+
+```bash
+photonx reconstruct examples/PHOTONX_LED_TEST/input \
+  --output build/led \
+  --svg --graphml --csv
+```
+
+These flags emit `reconstructed.svg`, `reconstructed.graphml`, and CSV net/component tables independently.
+
 ### Use permissive parsing intentionally
 
 Strict behavior is preferred. Permissive mode exists for workflows where unsupported constructs should be preserved as diagnostics instead of immediately stopping reconstruction.
@@ -240,12 +260,26 @@ build/led/
 ├── board.json             # reconstructed BoardModel
 ├── validation.json        # validation state, issues, and summary
 ├── reconstructed.json     # explicit JSON export of the BoardModel
+├── reconstructed.svg      # only when --svg is requested
+├── reconstructed.graphml  # only when --graphml is requested
+├── csv/                    # only when --csv is requested
+│   ├── nets.csv
+│   └── components.csv
+├── review/                 # only when --review-artifacts is requested
+│   ├── report.md
+│   ├── summary.json
+│   ├── checks.junit.xml
+│   ├── board.svg
+│   ├── connectivity.graphml
+│   └── csv/
+│       ├── nets.csv
+│       └── components.csv
 └── reconstructed.kicad_pcb  # only when --kicad is requested
 ```
 
 The repository also contains library-level exporters and reporting infrastructure for additional machine-readable or review-oriented formats, including **SVG, CSV, GraphML, source manifests, JSON reports, Markdown reports, JUnit-style reporting, and KiCad-related artifacts**.
 
-Those library capabilities are not all exposed as top-level CLI switches.
+The main review-oriented SVG, GraphML, CSV, Markdown, JSON, and JUnit outputs are exposed through `--review-artifacts` and the granular `--svg`, `--graphml`, and `--csv` switches. Specialized/source-manifest reporting remains available through library APIs.
 
 ### Output semantics
 
