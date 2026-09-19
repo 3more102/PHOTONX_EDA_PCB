@@ -15,7 +15,7 @@ def check_edge_presence(board,cfg):
     boundary,material=outline_geometry(board)
     if material is None:return [DrcIssue("warning","BOARD_OUTLINE_NOT_CLOSED","edge clearance uses outline segments but outside-board detection is unavailable")]
     out=[]
-    for obj in [*board.tracks,*board.pads]:
+    for obj in [*board.tracks,*board.pads,*getattr(board,"regions",())]:
         shape=copper_shape(obj);distance=shape.distance(boundary)
         if not material.covers(shape):
             out.append(DrcIssue("error","COPPER_OUTSIDE_BOARD","copper extends outside board material or into a cutout",(obj.id,)))
