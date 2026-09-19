@@ -671,6 +671,32 @@ def test_general_outline_macro_d01_sweep_remains_fail_closed(tmp_path: Path):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
+def test_outline_macro_requires_exact_explicit_closure(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,3,0,0,1,0,0,1,0.0000000001,0,0*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="last vertex exactly equals its start vertex",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
+
+
 @pytest.mark.parametrize(
     "macro_body",
     [
