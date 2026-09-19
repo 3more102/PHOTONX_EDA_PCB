@@ -33,6 +33,12 @@ Point Python at the resulting shared library with `PHOTONX_NATIVE_LIBRARY`.
 
 The CI workflow builds the native library and executes the full pytest suite with it enabled so native/Python parity regressions are exercised continuously.
 
+## Stage 2: batch point-radius broad phase
+
+The native ABI also supports batched point-radius candidate generation. PHOTONX builds the center-point spatial hash once for a batch of queries and returns only square-window candidates. Python then recomputes the authoritative Euclidean distance with `math.hypot`, applies the exact `distance <= radius` predicate, and sorts by `(distance, id)`.
+
+The batch path is used by drill association, footprint clustering and metrics, and component-pair inference and metrics. This reduces repeated Python-to-native transitions while preserving the previous Python result contract.
+
 ## Safety contract
 
 The native backend:
@@ -49,9 +55,9 @@ Unsupported native inputs fall back to the Python reference path in `auto` mode.
 
 The next safe candidates are:
 
-1. point-radius neighbor queries used by drill association, footprint clustering, and component-pair inference;
-2. batch AABB insertion/query APIs to avoid repeated Python/ctypes transitions;
-3. benchmark-gated native connectivity candidate generation;
+1. persistent/batch AABB index handles to avoid rebuilding native grids across independent calls;
+2. benchmark-gated connectivity candidate acceleration and crossover thresholds;
+3. cross-platform packaging of the optional native library;
 4. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
 
 Gerber/Excellon parsing, provenance, fail-closed diagnostics, and semantic inference should not be migrated merely for language uniformity. They should move only when a measured bottleneck and a parity strategy exist.
