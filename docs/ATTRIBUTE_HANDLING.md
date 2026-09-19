@@ -24,14 +24,16 @@ or `Hatched`. Solder-mask and legend indices must be positive integers.
 
 If `.FileFunction` is present but malformed, internally inconsistent, or
 describes a function that PHOTONX does not map to a PCB layer, layer inference
-returns unknown instead of falling back to a suggestive filename. Filename
-inference is used only when no `.FileFunction` declaration is present. This
+returns unknown instead of falling back to a suggestive filename. Multiple
+`.FileFunction` declarations are also rejected because Gerber file attributes
+are immutable and attribute names are unique. Filename inference is used only
+when no `.FileFunction` declaration is present. This
 prevents metadata such as `Drillmap` or an invalid copper declaration from
 being silently reclassified as copper because the file happens to use a
 copper-looking extension.
 
 The historical non-standard `Outline` file-function alias remains accepted
-as `Edge.Cuts` for compatibility.
+as `Edge.Cuts` for compatibility, but only without additional fields.
 
 The field requirements above follow Ucamco's Gerber Layer Format Specification,
 Revision 2026.05, section 5.6.3 (`.FileFunction`).

@@ -52,7 +52,10 @@ def _positive_index(token: str) -> bool:
 
 
 def _x2_file_function_layer(text: str) -> str | None:
-    match = _FILE_FUNCTION.search(text or "")
+    source = text or ""
+    if len(list(_FILE_FUNCTION_PRESENT.finditer(source))) != 1:
+        return None
+    match = _FILE_FUNCTION.search(source)
     if not match:
         return None
 
@@ -109,7 +112,7 @@ def _x2_file_function_layer(text: str) -> str | None:
     # Preserve the historical non-standard alias rather than treating it as an
     # unrecognized FileFunction and falling back to filename inference.
     if function == "outline":
-        return "Edge.Cuts"
+        return "Edge.Cuts" if not tokens else None
 
     return None
 
