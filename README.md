@@ -134,6 +134,16 @@ photonx reconstruct examples/PHOTONX_LED_TEST/input \
   --kicad
 ```
 
+### Emit review artifacts
+
+```bash
+photonx reconstruct examples/PHOTONX_LED_TEST/input \
+  --output build/led \
+  --review-artifacts
+```
+
+This adds a `review/` bundle with a Markdown report, JSON summary, JUnit check report, SVG board view, GraphML connectivity graph, and CSV net/component tables.
+
 ### Use permissive parsing intentionally
 
 Strict behavior is preferred. Permissive mode exists for workflows where unsupported constructs should be preserved as diagnostics instead of immediately stopping reconstruction.
