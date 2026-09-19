@@ -43,10 +43,7 @@ def evaluate_macro(primitives, variables=None):
             continue
 
         values = [
-            _finite(
-                eval_expr(substitute(modifier, environment)),
-                context=f"macro primitive {statement.code} modifier",
-            )
+            eval_expr(substitute(modifier, environment))
             for modifier in statement.modifiers
         ]
         out.append(
