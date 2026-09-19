@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added bounded exact production reduction for single positive Gerber Code-4 outline aperture macros. Explicitly closed origin-centered rectangles reduce to standard `R` apertures, and centered regular 3–12 vertex outlines reduce to standard `P` apertures while preserving primitive rotation and the existing transform/flash/draw/LPD-LPC paths. Irregular, non-centered, non-closed, and larger outline forms remain fail-closed. Also aligned macro validation with the already-supported deprecated Code-2 and Code-22 primitives.
+
 - Extended exact single-primitive rectangular Gerber aperture-macro reduction to arbitrary finite rotation. Centered Code-20/Code-2 vector lines may now use non-axis-aligned segments, while Code-21 center-line and deprecated Code-22 lower-left rectangles preserve arbitrary primitive rotation; intrinsic macro orientation composes with LM/LR/LS and supported whole-image IR, with non-orthogonal material flashes/draws emitted as exact polygonal rectangle geometry.
 
 - Added exact production reduction for single positive origin-centered Gerber aperture-macro Polygon primitives (Code 5) to standard `P` apertures. The supported subset enforces integer vertex counts 3–12, positive circumscribed diameter, finite rotation, active-unit conversion, strict/preflight fail-closed validation, and reuses the existing exact P flash/D01/transform/LPD-LPC paths.
