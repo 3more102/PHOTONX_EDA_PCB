@@ -14,6 +14,8 @@ _BUFFER_TOO_SMALL = 1
 _INVALID_ARGUMENT = 2
 _UNSUPPORTED_RANGE = 3
 _INTERNAL_ERROR = 4
+_MAX_INITIAL_OUTPUT_CAPACITY = 65536
+_INITIAL_OUTPUT_FACTOR = 8
 
 
 class NativeBackendUnavailable(RuntimeError):
@@ -26,6 +28,15 @@ class NativeBackendLoadError(RuntimeError):
 
 class NativeBackendUnsupported(RuntimeError):
     pass
+
+
+def _initial_output_capacity(work_items: int) -> int:
+    if work_items <= 0:
+        return 0
+    return min(
+        _MAX_INITIAL_OUTPUT_CAPACITY,
+        max(64, int(work_items) * _INITIAL_OUTPUT_FACTOR),
+    )
 
 
 class _NativeAABB(ctypes.Structure):
@@ -193,26 +204,9 @@ def native_candidate_pairs(index, tolerance: float = 0.0):
         )
     )
 
-    required = ctypes.c_uint32(0)
-    status = int(
-        library.photonx_candidate_pairs(
-            native_boxes,
-            ctypes.c_uint32(len(ids)),
-            ctypes.c_double(tolerance_value),
-            ctypes.c_double(cell_size),
-            None,
-            ctypes.c_uint32(0),
-            ctypes.byref(required),
-        )
-    )
-
-    if status == _OK and required.value == 0:
-        return []
-    if status not in (_OK, _BUFFER_TOO_SMALL):
-        _raise_status(status)
-
-    out_type = _NativePair * required.value
-    out = out_type()
+    capacity = _initial_output_capacity(len(ids))
+    out_type = _NativePair * capacity
+    out = out_type() if capacity else None
     written = ctypes.c_uint32(0)
     status = int(
         library.photonx_candidate_pairs(
@@ -221,16 +215,46 @@ def native_candidate_pairs(index, tolerance: float = 0.0):
             ctypes.c_double(tolerance_value),
             ctypes.c_double(cell_size),
             out,
-            ctypes.c_uint32(required.value),
+            ctypes.c_uint32(capacity),
             ctypes.byref(written),
         )
     )
-    if status != _OK:
-        _raise_status(status)
-    if written.value != required.value:
-        raise NativeBackendUnavailable(
-            "native backend changed pair count between sizing and fill calls"
+
+    if status == _BUFFER_TOO_SMALL:
+        required = int(written.value)
+        if required <= capacity:
+            raise NativeBackendUnavailable(
+                "native backend reported an inconsistent pair capacity"
+            )
+        out_type = _NativePair * required
+        out = out_type()
+        written = ctypes.c_uint32(0)
+        status = int(
+            library.photonx_candidate_pairs(
+                native_boxes,
+                ctypes.c_uint32(len(ids)),
+                ctypes.c_double(tolerance_value),
+                ctypes.c_double(cell_size),
+                out,
+                ctypes.c_uint32(required),
+                ctypes.byref(written),
+            )
         )
+        if status != _OK:
+            _raise_status(status)
+        if written.value != required:
+            raise NativeBackendUnavailable(
+                "native backend changed pair count between sizing and fill calls"
+            )
+    elif status != _OK:
+        _raise_status(status)
+    elif written.value > capacity:
+        raise NativeBackendUnavailable(
+            "native backend reported more pairs than the provided capacity"
+        )
+
+    if written.value == 0:
+        return []
 
     pairs = []
     previous_pair = None
@@ -291,27 +315,9 @@ def native_radius_queries(index, queries):
         )
     )
 
-    required = ctypes.c_uint32(0)
-    status = int(
-        library.photonx_point_radius_candidates(
-            native_boxes,
-            ctypes.c_uint32(len(ids)),
-            native_queries,
-            ctypes.c_uint32(len(query_specs)),
-            ctypes.c_double(cell_size),
-            None,
-            ctypes.c_uint32(0),
-            ctypes.byref(required),
-        )
-    )
-
-    if status == _OK and required.value == 0:
-        return [[] for _ in query_specs]
-    if status not in (_OK, _BUFFER_TOO_SMALL):
-        _raise_status(status)
-
-    out_type = _NativeQueryMatch * required.value
-    out = out_type()
+    capacity = _initial_output_capacity(len(query_specs))
+    out_type = _NativeQueryMatch * capacity
+    out = out_type() if capacity else None
     written = ctypes.c_uint32(0)
     status = int(
         library.photonx_point_radius_candidates(
@@ -321,18 +327,50 @@ def native_radius_queries(index, queries):
             ctypes.c_uint32(len(query_specs)),
             ctypes.c_double(cell_size),
             out,
-            ctypes.c_uint32(required.value),
+            ctypes.c_uint32(capacity),
             ctypes.byref(written),
         )
     )
-    if status != _OK:
+
+    if status == _BUFFER_TOO_SMALL:
+        required = int(written.value)
+        if required <= capacity:
+            raise NativeBackendUnavailable(
+                "native backend reported an inconsistent radius-match capacity"
+            )
+        out_type = _NativeQueryMatch * required
+        out = out_type()
+        written = ctypes.c_uint32(0)
+        status = int(
+            library.photonx_point_radius_candidates(
+                native_boxes,
+                ctypes.c_uint32(len(ids)),
+                native_queries,
+                ctypes.c_uint32(len(query_specs)),
+                ctypes.c_double(cell_size),
+                out,
+                ctypes.c_uint32(required),
+                ctypes.byref(written),
+            )
+        )
+        if status != _OK:
+            _raise_status(status)
+        if written.value != required:
+            raise NativeBackendUnavailable(
+                "native backend changed radius-candidate count between sizing and fill calls"
+            )
+    elif status != _OK:
         _raise_status(status)
-    if written.value != required.value:
+    elif written.value > capacity:
         raise NativeBackendUnavailable(
-            "native backend changed radius-candidate count between sizing and fill calls"
+            "native backend reported more radius matches than the provided capacity"
         )
 
+    if written.value == 0:
+        return [[] for _ in query_specs]
+
     results = [[] for _ in query_specs]
+    previous_match = None
     for i in range(written.value):
         query_index = int(out[i].query)
         point_index = int(out[i].point)
@@ -340,6 +378,12 @@ def native_radius_queries(index, queries):
             raise NativeBackendUnavailable(
                 "native backend returned an out-of-range radius candidate"
             )
+        native_match = (query_index, point_index)
+        if previous_match is not None and native_match <= previous_match:
+            raise NativeBackendUnavailable(
+                "native backend returned unsorted or duplicate radius candidates"
+            )
+        previous_match = native_match
         x, y, radius = query_specs[query_index]
         obj_id = ids[point_index]
         box = index.box(obj_id)
