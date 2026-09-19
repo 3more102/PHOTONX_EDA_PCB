@@ -51,7 +51,7 @@ def test_code5_polygon_macro_flash_reduces_exactly_to_standard_polygon(tmp_path:
     assert any(
         evidence.kind == "gerber_polygon_flash"
         and "vertices=6" in evidence.detail
-        and "template_rotation_deg=30" in evidence.detail
+        and "template_rotation_deg_ccw=30" in evidence.detail
         for evidence in result.regions[0].provenance.evidence
     )
 
