@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import atan2, degrees, hypot, isclose, isfinite
+from math import atan2, cos, degrees, hypot, isclose, isfinite, pi, radians, sin
 from typing import Generic, Iterable, Literal, TypeVar
 
 from shapely.affinity import rotate
@@ -58,6 +58,22 @@ class HoledFlashPolygonization:
     shape: str
     hole_diameter: float
     outer_curved_segments: int
+    hole_curved_segments: int
+    max_chord_error_mm: float
+    approximated: bool
+
+
+@dataclass(frozen=True)
+class RegularPolygonFlashPolygonization:
+    """Exact regular-polygon flash with optional bounded round hole."""
+
+    geometry: Polygon
+    vertices: int
+    outer_diameter: float
+    base_rotation_deg: float
+    mirror: str
+    object_rotation_deg: float
+    hole_diameter: float | None
     hole_curved_segments: int
     max_chord_error_mm: float
     approximated: bool
@@ -566,6 +582,106 @@ def polygonize_holed_flash(
             hole_poly.max_chord_error_mm,
         ),
         approximated=outer.approximated or hole_poly.approximated,
+    )
+
+
+def polygonize_regular_polygon_flash(
+    center_x: float,
+    center_y: float,
+    outer_diameter: float,
+    vertices: int,
+    *,
+    base_rotation_deg: float = 0.0,
+    mirror: str = "N",
+    object_rotation_deg: float = 0.0,
+    hole_diameter: float | None = None,
+    max_chord_error_mm: float = 0.005,
+    max_arc_segments: int = 4096,
+) -> RegularPolygonFlashPolygonization:
+    """Return exact regular-polygon D03 geometry with optional round hole.
+
+    The polygon template rotation belongs to the original aperture. LM mirroring
+    is applied to that original shape before the modal LR/object rotation.
+    """
+
+    cx = float(center_x)
+    cy = float(center_y)
+    diameter = float(outer_diameter)
+    if diameter <= 0.0:
+        raise ValueError("Gerber polygon outer diameter must be positive")
+    if isinstance(vertices, bool) or int(vertices) != vertices:
+        raise ValueError("Gerber polygon vertex count must be an integer")
+    vertex_count = int(vertices)
+    if not 3 <= vertex_count <= 12:
+        raise ValueError("Gerber polygon vertex count must be in 3..12")
+
+    base_rotation = float(base_rotation_deg)
+    object_rotation = float(object_rotation_deg)
+    if not isfinite(base_rotation) or not isfinite(object_rotation):
+        raise ValueError("Gerber polygon rotation must be finite")
+    mirror_mode = str(mirror).upper()
+    if mirror_mode not in {"N", "X", "Y", "XY"}:
+        raise ValueError(f"invalid Gerber aperture mirror mode: {mirror_mode!r}")
+
+    radius = diameter / 2.0
+    points: list[tuple[float, float]] = []
+    for index in range(vertex_count):
+        angle = radians(base_rotation + index * 360.0 / vertex_count)
+        dx = radius * cos(angle)
+        dy = radius * sin(angle)
+        if "X" in mirror_mode:
+            dx = -dx
+        if "Y" in mirror_mode:
+            dy = -dy
+        rotation = radians(object_rotation)
+        rx = dx * cos(rotation) - dy * sin(rotation)
+        ry = dx * sin(rotation) + dy * cos(rotation)
+        points.append((cx + rx, cy + ry))
+
+    outer = Polygon(points)
+    _validate_flash_polygon(outer)
+
+    hole = None if hole_diameter is None else float(hole_diameter)
+    hole_segments = 0
+    approximated = False
+    geometry = outer
+    if hole is not None:
+        if hole <= 0.0:
+            raise ValueError("Gerber polygon hole diameter must be positive")
+        max_hole = diameter * cos(pi / vertex_count)
+        if hole >= max_hole:
+            raise ValueError(
+                "Gerber polygon round hole must strictly fit within polygon"
+            )
+        hole_poly = polygonize_flash(
+            cx,
+            cy,
+            hole,
+            hole,
+            "C",
+            max_chord_error_mm=max_chord_error_mm,
+            max_arc_segments=max_arc_segments,
+        )
+        geometry = outer.difference(hole_poly.geometry)
+        hole_segments = hole_poly.curved_segments
+        approximated = hole_poly.approximated
+        if not isinstance(geometry, Polygon) or len(geometry.interiors) != 1:
+            raise ValueError(
+                "Gerber polygon holed flash did not preserve one centered hole"
+            )
+        _validate_flash_polygon(geometry)
+
+    return RegularPolygonFlashPolygonization(
+        geometry=geometry,
+        vertices=vertex_count,
+        outer_diameter=diameter,
+        base_rotation_deg=base_rotation % 360.0,
+        mirror=mirror_mode,
+        object_rotation_deg=object_rotation % 360.0,
+        hole_diameter=hole,
+        hole_curved_segments=hole_segments,
+        max_chord_error_mm=(max_chord_error_mm if hole is not None else 0.0),
+        approximated=approximated,
     )
 
 

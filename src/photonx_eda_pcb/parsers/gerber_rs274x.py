@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import isclose, isfinite, pi
+from math import cos, isclose, isfinite, pi
 from pathlib import Path
 import re
 
@@ -26,6 +26,7 @@ from ..gerber_image import (
     polygonize_aperture_track,
     polygonize_flash,
     polygonize_holed_flash,
+    polygonize_regular_polygon_flash,
     polygonize_rotated_flash,
     polygonize_track,
     trace_polygon_operation_contributions,
@@ -42,7 +43,9 @@ from .gerber_parts.tokenizer import iter_gerber_statements
 _FS = re.compile(r"^%FS([LT])([AI])?X(\d)(\d)Y(\d)(\d)\*%$")
 _MO = re.compile(r"^%MO(MM|IN)\*%$")
 _AD_STANDARD = re.compile(
-    r"^%ADD(\d+)([CRO]),?([0-9.]+(?:X[0-9.]+)*)\*%$"
+    r"^%ADD(\d+)([CROP]),?"
+    r"([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
+    r"(?:X[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))*)\*%$"
 )
 _AD_MACRO = re.compile(r"^%ADD(\d+)([A-Za-z_.$][A-Za-z0-9_.$-]*)(?:,([^*]*))?\*%$")
 _SELECT = re.compile(r"^(?:G54)?D(\d+)\*$")
@@ -107,6 +110,8 @@ class Aperture:
     x: float
     y: float
     hole_diameter: float | None = None
+    polygon_vertices: int | None = None
+    polygon_rotation_deg: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -144,8 +149,9 @@ class GerberLayerResult:
 class GerberRS274XParser:
     """Strict, auditable RS-274X subset parser.
 
-    Supported: FS, MO, ADD(C/R/O), Dnn selection, G01/D01/D02/D03,
-    linear C/R/O aperture draws on material layers, bounded G74 single-quadrant
+    Supported: FS, MO, ADD(C/R/O/P), Dnn selection, G01/D01/D02/D03,
+    linear C/R/O aperture draws plus standard P D03 flashes on material layers,
+    bounded G74 single-quadrant
     and G75 multi-quadrant G02/G03 circular
     interpolation with circular apertures, dark multi-contour linear/G74/G75
     G36/G37 regions with bounded multi-hole cut-ins, G04, M02, and standard
@@ -405,7 +411,7 @@ class GerberRS274XParser:
                     "GERBER_CLEAR_POLARITY_REGION_COMPOSITION",
                     (
                         "clear layer polarity is enabled for ordered polygon "
-                        "composition of supported G36/G37 regions, solid C/R/O D03 "
+                        "composition of supported G36/G37 regions, C/R/O/P D03 "
                         "flashes, linear C/R/O D01 aperture sweeps, and bounded "
                         "circular-aperture G02/G03 tessellation; curved boundaries use evidenced chord-"
                         "error bounds while outlines remain fail-closed"
@@ -1052,6 +1058,111 @@ class GerberRS274XParser:
                 out,
             )
             self.unsupported_apertures.add(code)
+            return
+
+        if shape == "P":
+            if len(values) not in {2, 3, 4}:
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_STANDARD_POLYGON_APERTURE",
+                    (
+                        "P standard aperture requires outer diameter and vertex "
+                        "count, with optional rotation and round-hole diameter"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            outer_diameter = values[0]
+            vertices_value = values[1]
+            rotation = values[2] if len(values) >= 3 else 0.0
+            hole_diameter = values[3] if len(values) == 4 else None
+
+            if outer_diameter <= 0:
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_STANDARD_APERTURE_SIZE",
+                    "P standard aperture outer diameter must be positive",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+            if (
+                not isfinite(vertices_value)
+                or not vertices_value.is_integer()
+                or not 3 <= int(vertices_value) <= 12
+            ):
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_POLYGON_VERTEX_COUNT",
+                    "P standard aperture vertex count must be an integer in 3..12",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+            if not isfinite(rotation):
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_POLYGON_ROTATION",
+                    "P standard aperture rotation must be finite",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            vertices = int(vertices_value)
+            if hole_diameter is not None:
+                if hole_diameter <= 0:
+                    self._parse_error_or_warn(
+                        path,
+                        line_no,
+                        line,
+                        "INVALID_GERBER_APERTURE_HOLE",
+                        "standard aperture hole diameter must be positive",
+                        out,
+                    )
+                    self.unsupported_apertures.add(code)
+                    return
+                max_hole = outer_diameter * cos(pi / vertices)
+                if hole_diameter >= max_hole:
+                    self._parse_error_or_warn(
+                        path,
+                        line_no,
+                        line,
+                        "INVALID_GERBER_APERTURE_HOLE_FIT",
+                        (
+                            "P standard aperture round hole must strictly fit "
+                            "inside the regular polygon"
+                        ),
+                        out,
+                    )
+                    self.unsupported_apertures.add(code)
+                    return
+
+            outer_mm = to_mm(outer_diameter, self.units)
+            hole_mm = (
+                None
+                if hole_diameter is None
+                else to_mm(hole_diameter, self.units)
+            )
+            self.apertures[code] = Aperture(
+                code,
+                "P",
+                outer_mm,
+                outer_mm,
+                hole_mm,
+                polygon_vertices=vertices,
+                polygon_rotation_deg=rotation % 360.0,
+            )
             return
 
         solid_parameter_count = 1 if shape == "C" else 2
@@ -3256,8 +3367,9 @@ class GerberRS274XParser:
     ) -> None:
         """Materialize the bounded polygonal LPC image subset.
 
-        Supported G36/G37 regions, rectangular D03 flashes, and rectangular
-        linear-aperture D01 sweeps are exact. Circular/obround D03 flashes plus
+        Supported G36/G37 regions, rectangular and regular-polygon D03 flashes,
+        and rectangular linear-aperture D01 sweeps are exact. Circular/obround
+        D03 flashes plus
         circular/obround linear-aperture D01 sweeps use deterministic
         inscribed-chord polygonization. Curved linear sweeps have a 0.005 mm
         boundary target. Tessellated G02/G03 circular-aperture arc tracks combine the
@@ -3287,8 +3399,8 @@ class GerberRS274XParser:
                 source_raw or "%LPC*%",
                 "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY",
                 (
-                    "clear Gerber layer polarity supports G36/G37 regions, solid "
-                    "C/R/O D03 flashes, linear C/R/O D01 aperture sweeps, and "
+                    "clear Gerber layer polarity supports G36/G37 regions, "
+                    "C/R/O/P D03 flashes, linear C/R/O D01 aperture sweeps, and "
                     "circular-aperture G02/G03 tessellation; unsupported track forms or outline "
                     "geometry remain outside the bounded polygon-composition subset"
                 ),
@@ -3308,8 +3420,9 @@ class GerberRS274XParser:
                 source_raw or "%LPC*%",
                 "UNSUPPORTED_GERBER_CLEAR_POLARITY_FLASH_SHAPE",
                 (
-                    "clear Gerber layer polarity supports only solid C/R/O D03 "
-                    "flashes in the bounded polygon-composition subset"
+                    "clear Gerber layer polarity supports C/R/O PadCandidate flashes "
+                    "plus polygon-materialized P and transformed/holed flashes "
+                    "in the bounded polygon-composition subset"
                 ),
                 out,
             )
@@ -3974,6 +4087,20 @@ class GerberRS274XParser:
                     continue
 
                 if operation == "1":
+                    if ap.shape == "P":
+                        self._fail_or_warn(
+                            p,
+                            line_no,
+                            line,
+                            "UNSUPPORTED_GERBER_POLYGON_DRAW",
+                            (
+                                "linear D01 draw with a P polygon aperture is not "
+                                "yet modeled safely"
+                            ),
+                            out,
+                        )
+                        self.current = nxt
+                        continue
                     if ap.hole_diameter is not None:
                         self._fail_or_warn(
                             p,
@@ -4169,6 +4296,163 @@ class GerberRS274XParser:
                             )
 
                 elif operation == "3":
+                    if ap.shape == "P":
+                        if self.layer == "Edge.Cuts":
+                            self._fail_or_warn(
+                                p,
+                                line_no,
+                                line,
+                                "UNSUPPORTED_GERBER_POLYGON_FLASH_EDGE",
+                                (
+                                    "standard P D03 flashes are supported only "
+                                    "on material layers"
+                                ),
+                                out,
+                            )
+                            self.current = nxt
+                            continue
+                        if ap.polygon_vertices is None:
+                            self._parse_error_or_warn(
+                                p,
+                                line_no,
+                                line,
+                                "GERBER_POLYGON_FLASH_INVALID",
+                                "P aperture is missing its vertex count",
+                                out,
+                            )
+                            self.current = nxt
+                            continue
+
+                        scaled_outer = ap.x * self.aperture_scale
+                        scaled_hole = (
+                            None
+                            if ap.hole_diameter is None
+                            else ap.hole_diameter * self.aperture_scale
+                        )
+                        output_rotation = (
+                            self.aperture_rotation_deg + self.image_rotation_deg
+                        ) % 360.0
+
+                        for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
+                            center = self._transform_output_point(
+                                nxt, dx_mm, dy_mm
+                            )
+                            try:
+                                polygonization = polygonize_regular_polygon_flash(
+                                    center.x,
+                                    center.y,
+                                    scaled_outer,
+                                    ap.polygon_vertices,
+                                    base_rotation_deg=ap.polygon_rotation_deg,
+                                    mirror=self.aperture_mirror,
+                                    object_rotation_deg=output_rotation,
+                                    hole_diameter=scaled_hole,
+                                    max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+                                    max_arc_segments=_MAX_ARC_SEGMENTS,
+                                )
+                                components = canonical_polygon_components(
+                                    polygonization.geometry
+                                )
+                            except (TypeError, ValueError) as exc:
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "GERBER_POLYGON_FLASH_INVALID",
+                                    f"polygon flash materialization failed: {exc}",
+                                    out,
+                                )
+                                continue
+
+                            expected_holes = 1 if scaled_hole is not None else 0
+                            if (
+                                len(components) != 1
+                                or len(components[0].holes) != expected_holes
+                            ):
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "GERBER_POLYGON_FLASH_INVALID",
+                                    (
+                                        "polygon flash did not produce one "
+                                        "connected component with the expected "
+                                        "hole topology"
+                                    ),
+                                    out,
+                                )
+                                continue
+
+                            component = components[0]
+                            shell = tuple(Point(x, y) for x, y in component.shell)
+                            holes = tuple(
+                                tuple(Point(x, y) for x, y in ring)
+                                for ring in component.holes
+                            )
+                            id_parts = [
+                                p.name,
+                                line_no,
+                                "polygon_flash",
+                                nxt.x,
+                                nxt.y,
+                                ap.code,
+                                scaled_outer,
+                                ap.polygon_vertices,
+                                ap.polygon_rotation_deg,
+                                self.aperture_mirror,
+                                output_rotation,
+                                scaled_hole,
+                                self.layer,
+                            ]
+                            id_parts.extend(self._image_transform_id_parts())
+                            id_parts.extend(self._aperture_transform_id_parts())
+                            if self.step_repeat is not None:
+                                id_parts.extend(["sr", x_index, y_index])
+                            obj_id = stable_id("reg", *id_parts)
+                            prov = self._step_repeat_provenance(
+                                src, x_index or 0, y_index or 0, dx_mm, dy_mm
+                            )
+                            self._add_aperture_transform_provenance(prov)
+                            prov.add_evidence(
+                                Evidence(
+                                    "gerber_polygon_flash",
+                                    (
+                                        f"vertices={ap.polygon_vertices}; "
+                                        f"outer_diameter_mm={scaled_outer:.12g}; "
+                                        f"template_rotation_deg_ccw="
+                                        f"{ap.polygon_rotation_deg:.12g}; "
+                                        f"mirror={self.aperture_mirror}; "
+                                        f"object_rotation_deg_ccw="
+                                        f"{output_rotation:.12g}; "
+                                        f"hole_diameter_mm="
+                                        f"{'none' if scaled_hole is None else format(scaled_hole, '.12g')}; "
+                                        f"hole_curved_segments="
+                                        f"{polygonization.hole_curved_segments}; "
+                                        f"max_chord_error_mm="
+                                        f"{polygonization.max_chord_error_mm:.12g}; "
+                                        f"approximated="
+                                        f"{str(polygonization.approximated).lower()}"
+                                    ),
+                                    1.0,
+                                    src,
+                                )
+                            )
+                            region = CopperRegion(
+                                obj_id,
+                                shell,
+                                self.layer,
+                                provenance=prov,
+                                holes=holes,
+                            )
+                            out.regions.append(region)
+                            self.material_image_operations.append(
+                                self.layer_polarity,
+                                region,
+                            )
+
+                        self.current = nxt
+                        continue
+
                     if ap.hole_diameter is not None:
                         if self.layer == "Edge.Cuts":
                             self._fail_or_warn(

@@ -79,7 +79,7 @@ The generic input path also handles several common real-world variations:
 - legacy G70/G71 unit selection plus modal G90/G91 absolute/incremental coordinate notation;
 - deprecated FS `A`/`I` absolute/incremental notation, with X/Y deltas accumulated safely and arc I/J retained as center offsets;
 - deprecated Gerber MI mirroring, applied exactly to coordinate data while deliberately leaving apertures and step-repeat distances unmirrored as required by the specification;
-- modern Gerber LM/LR/LS aperture graphics-state transforms for the representable subset: mirror-symmetric C/R/O shapes, arbitrary circle rotation, arbitrary finite R/O linear-sweep and flash rotation, and positive aperture scaling; non-orthogonal R/O flashes are materialized as polygons rather than forced into the axis-aligned PadCandidate model;
+- modern Gerber LM/LR/LS aperture graphics-state transforms for the representable subset: C/R/O plus standard P D03 flashes; P polygons honor template rotation and LM-before-LR semantics, while non-axis-aligned geometry is materialized as CopperRegion polygons rather than forced into PadCandidate;
 - deprecated Gerber SF coordinate scaling within the specification range; apertures and step-repeat distances remain unscaled, uniform SF composes with circular arcs, and anisotropic SF arcs fail closed;
 - deprecated Gerber OF image translation in the active MO units, applied after MI/SF and before IR regardless of command appearance;
 - legacy AS axis-select forms are accepted as output-device-only metadata because they do not alter CAD-to-CAM image geometry; AS/IN/MI/SF/OF/IR header state must appear before the first coordinate statement, including D02 moves;
@@ -114,7 +114,7 @@ sniff window are ignored by content detection.
 ### Fail-closed boundaries
 
 PHOTONX still rejects or explicitly diagnoses semantics that would be unsafe to
-guess, including unsupported legacy Gerber IP semantics and anisotropic-SF circular interpolation, unsupported region forms such as disjoint or mixed-axis/invalid cut-in or Edge.Cuts regions, and LPC files that mix clear polarity with outline material geometry (solid or single-round-holed C/R/O D03 flashes and linear C/R/O D01 aperture sweeps are supported; round holes are transparent within the flash operation, rectangular sweeps are exact, and C/O curved boundaries use explicitly evidenced 0.005 mm chord-error-bounded polygonization), complex aperture macros, aperture blocks, and Excellon routed-arc dialects outside the bounded G02/G03 I/J or standard XNC X/Y/A-radius subsets. An input being discovered does not mean
+guess, including unsupported legacy Gerber IP semantics and anisotropic-SF circular interpolation, unsupported region forms such as disjoint or mixed-axis/invalid cut-in or Edge.Cuts regions, and LPC files that mix clear polarity with outline material geometry (C/R/O/P D03 flashes, including supported single-round-holed variants, and linear C/R/O D01 aperture sweeps are supported; round holes are transparent within the flash operation, rectangular sweeps are exact, and C/O curved boundaries use explicitly evidenced 0.005 mm chord-error-bounded polygonization), complex aperture macros, aperture blocks, and Excellon routed-arc dialects outside the bounded G02/G03 I/J or standard XNC X/Y/A-radius subsets. An input being discovered does not mean
 every construct inside it is automatically accepted.
 
 
