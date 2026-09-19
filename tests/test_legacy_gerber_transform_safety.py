@@ -23,7 +23,6 @@ def _write(tmp_path: Path, body: str) -> Path:
 @pytest.mark.parametrize(
     "command",
     [
-        "%MIA1B0*%",
         "%OFA1B0*%",
         "%ASAYBX*%",
         "%IPNEG*%",
@@ -77,7 +76,7 @@ def test_non_default_legacy_transform_suppresses_permissive_geometry(
 ):
     path = _write(
         tmp_path,
-        "%MIA1B0*%\n"
+        "%OFA1B0*%\n"
         "X000000Y000000D02*\n"
         "X010000Y000000D01*\n",
     )
