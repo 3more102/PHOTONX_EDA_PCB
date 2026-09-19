@@ -238,3 +238,54 @@ def test_cpp_radius_persistent_index_reuses_handle_and_refreshes_after_insert():
         assert refreshed.revision == first_revision + 1
     finally:
         native_backend._load_library.cache_clear()
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_radius_duck_index_without_revision_uses_ephemeral_handle():
+    native_backend._clear_point_index_cache()
+    base = SpatialHashIndex(0.5)
+    base.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+
+    class DuckIndex:
+        __hash__ = None
+
+        def __init__(self, delegate):
+            self.delegate = delegate
+            self.cell_size = delegate.cell_size
+
+        def ids(self):
+            return self.delegate.ids()
+
+        def box(self, obj_id):
+            return self.delegate.box(obj_id)
+
+    duck = DuckIndex(base)
+    try:
+        assert radius_query(duck, 0.0, 0.0, 0.1, backend="native") == [
+            (0.0, "a")
+        ]
+        assert len(native_backend._POINT_INDEX_CACHE) == 0
+    finally:
+        native_backend._clear_point_index_cache()
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_point_cache_clear_preserves_borrowed_handle_lifetime():
+    native_backend._clear_point_index_cache()
+    index = SpatialHashIndex(0.5)
+    index.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+
+    try:
+        assert radius_query(index, 0.0, 0.0, 0.1, backend="native") == [
+            (0.0, "a")
+        ]
+        borrowed = native_backend._POINT_INDEX_CACHE[index]
+        native_backend._clear_point_index_cache()
+        assert borrowed.handle is not None
+        assert borrowed.handle.value
+    finally:
+        try:
+            borrowed.close()
+        except UnboundLocalError:
+            pass
+        native_backend._clear_point_index_cache()
