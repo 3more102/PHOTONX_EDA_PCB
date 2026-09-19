@@ -86,7 +86,7 @@ The generic input path also handles several common real-world variations:
 - legacy IN/LN names are preserved as diagnostic comment metadata; G55 and M01 are accepted as no-image-effect commands, while M00 terminates parsing like M02;
 - deprecated whole-image Gerber IR rotation at the specification-defined 0/90/180/270-degree angles, applied exactly to flashes, linear/arc geometry, supported regions, outlines, and step-repeat instances;
 - dark G36/G37 Gerber region statements with multiple explicitly closed contours, linear segments plus bounded G74 single-quadrant and G75 multi-quadrant G02/G03 circular boundaries, and multiple cut-in holes per contour when each bridge is a fully-coincident opposite horizontal/vertical linear pair and all bridges in that contour share one axis direction; holes are represented explicitly in CopperRegion geometry and compose with deterministic arc tessellation, supported MI/SF/OF/IR whole-image transforms, and step-repeat;
-- Excellon M71/M72 metric/inch selection;
+- Excellon METRIC/INCH and M71/M72 unit selection, with conflicting metric/inch switches rejected fail-closed so one file cannot mix dimensional systems;
 - Excellon tool definitions with feed/spindle suffixes;
 - standard XNC G02/G03 routed arcs using explicit X/Y endpoints plus A radius
   (bounded to the <=180-degree semantics defined by XNC);
