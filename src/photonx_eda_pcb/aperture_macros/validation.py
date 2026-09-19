@@ -1,4 +1,5 @@
 from .ast import MacroVariableDefinition
+from .primitives import is_supported_primitive
 
 
 def validate_macro(primitives):
@@ -6,7 +7,7 @@ def validate_macro(primitives):
     for index, primitive in enumerate(primitives):
         if isinstance(primitive, MacroVariableDefinition):
             continue
-        if primitive.code not in {1, 4, 5, 6, 7, 20, 21}:
+        if not is_supported_primitive(primitive.code):
             issues.append(
                 ("warning", "MACRO_PRIMITIVE_UNSUPPORTED", index, primitive.code)
             )

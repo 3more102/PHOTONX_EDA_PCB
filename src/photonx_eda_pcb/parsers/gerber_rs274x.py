@@ -1466,7 +1466,14 @@ class GerberRS274XParser:
                 if value != ""
             }
             primitives = parse_macro_body(body)
-            evaluated = evaluate_macro(primitives, variables)
+            # Production reduction keeps non-finite values visible until the
+            # primitive-specific validation below so established diagnostics
+            # remain precise. The reusable evaluator stays fail-closed by default.
+            evaluated = evaluate_macro(
+                primitives,
+                variables,
+                reject_nonfinite=False,
+            )
         except (ValueError, SyntaxError, ZeroDivisionError, OverflowError) as exc:
             self._fail_or_warn(
                 path,
