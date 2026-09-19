@@ -15,7 +15,7 @@ def _associated_pad(drill,pad,tol=1e-9):
 def check_drill_copper_clearance(board,cfg):
     minimum=float(getattr(cfg,"min_drill_copper_clearance_mm",0.0))
     if minimum<=0 or not board.drills:return []
-    copper=[*board.tracks,*board.pads]
+    copper=[*board.tracks,*board.pads,*getattr(board,"regions",())]
     if not copper:return []
     shapes={o.id:object_shape(o) for o in copper};objects={o.id:o for o in copper}
     idx=SpatialHashIndex(max(1.0,minimum*8))
