@@ -26,11 +26,17 @@ class ManufacturingFile:
 
 def _candidate_files(source: Path):
     if source.is_file():
+        # An explicitly selected file is intentional, even when the path itself
+        # is a symlink. Recursive directory discovery is the trust boundary.
         yield source
         return
     if source.is_dir():
         yield from sorted(
-            (p for p in source.rglob("*") if p.is_file()),
+            (
+                p
+                for p in source.rglob("*")
+                if p.is_file() and not p.is_symlink()
+            ),
             key=lambda p: p.as_posix().lower(),
         )
         return
