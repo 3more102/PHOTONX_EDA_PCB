@@ -1713,6 +1713,54 @@ class GerberRS274XParser:
             )
             return False
 
+        undirected_edges: dict[
+            tuple[tuple[float, float], tuple[float, float]],
+            list[tuple[Point, Point]],
+        ] = {}
+        for start, end in zip(points, points[1:]):
+            a = (start.x, start.y)
+            b = (end.x, end.y)
+            key = (a, b) if a <= b else (b, a)
+            undirected_edges.setdefault(key, []).append((start, end))
+        coincident_edges = [
+            uses for uses in undirected_edges.values() if len(uses) > 1
+        ]
+        if coincident_edges:
+            looks_like_cut_in = all(
+                len(uses) == 2
+                and uses[0][0] == uses[1][1]
+                and uses[0][1] == uses[1][0]
+                and (
+                    isclose(
+                        uses[0][0].x,
+                        uses[0][1].x,
+                        rel_tol=0.0,
+                        abs_tol=1e-12,
+                    )
+                    or isclose(
+                        uses[0][0].y,
+                        uses[0][1].y,
+                        rel_tol=0.0,
+                        abs_tol=1e-12,
+                    )
+                )
+                for uses in coincident_edges
+            )
+            if looks_like_cut_in:
+                self._region_fail(
+                    path,
+                    line_no,
+                    raw,
+                    "GERBER_REGION_CUTIN_UNSUPPORTED",
+                    (
+                        "Gerber cut-in hole topology was detected from fully "
+                        "coincident opposite horizontal/vertical segments; "
+                        "cut-in holes are not modeled yet"
+                    ),
+                    out,
+                )
+                return False
+
         candidate = CopperRegion(
             "validation",
             tuple(points),
