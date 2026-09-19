@@ -10,6 +10,21 @@ from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 def _u(name:str)->str:return str(uuid.uuid5(uuid.NAMESPACE_URL,"https://photonx.local/"+name))
 def _q(text:str)->str:return '"'+text.replace("\\","\\\\").replace('"','\\"').replace("\n","\\n").replace("\r","\\r")+'"'
 
+def _net_binding(board,net_num,net_id,object_id,report):
+    if net_id is None:
+        return 0,"",True
+    n=net_num.get(net_id)
+    if n is None:
+        report.issues.append(KicadExportIssue(
+            "warning",
+            "KICAD_NET_REFERENCE_UNRESOLVED",
+            object_id,
+            f"object references unknown net {net_id!r}; exporter will not claim net 0 for this unresolved reference",
+        ))
+        return None,"",False
+    net_name=next((net.label or net.id for net in board.nets if net.id==net_id),"")
+    return n,net_name,True
+
 def _pad_export_layers(pad):
     layer=str(pad.layer)
     ref_layer="B.SilkS" if layer=="B.Cu" else "F.SilkS"
@@ -26,7 +41,7 @@ def _pad_export_layers(pad):
 def _pad_lines(board,net_num,report):
     lines=[]
     for pad in board.pads:
-        n=net_num.get(pad.net_id,0);net_name=next((net.label or net.id for net in board.nets if net.id==pad.net_id),"")
+        n,net_name,net_known=_net_binding(board,net_num,pad.net_id,pad.id,report)
         shape=pad_shape_name(pad.shape);pad_type="thru_hole" if pad.drill else "smd"
         layers,ref_layer,layer_warning=_pad_export_layers(pad)
         angle=float(getattr(pad,"rotation_deg",getattr(pad,"rotation",0.0)) or 0.0)
@@ -34,7 +49,8 @@ def _pad_lines(board,net_num,report):
                   f'    (at {pad.center.x:.6f} {pad.center.y:.6f})',
                   f'    (property "Reference" {_q(pad.id)} (at 0 -2 0) (layer {_q(ref_layer)}) hide (uuid {_u("ref:"+pad.id)}))']
         drill=f' (drill {pad.drill:.6f})' if pad.drill else ""
-        lines.append(f'    (pad "1" {pad_type} {shape} (at 0 0 {angle:.6f}) (size {pad.size_x:.6f} {pad.size_y:.6f}){drill} (layers {layers}) (net {n} {_q(net_name)}) (uuid {_u("pad:"+pad.id)}))')
+        net_clause=f' (net {n} {_q(net_name)})' if net_known else ""
+        lines.append(f'    (pad "1" {pad_type} {shape} (at 0 0 {angle:.6f}) (size {pad.size_x:.6f} {pad.size_y:.6f}){drill} (layers {layers}){net_clause} (uuid {_u("pad:"+pad.id)}))')
         lines.append('  )')
         if str(pad.shape).upper() not in {"C","R","O"}:report.issues.append(KicadExportIssue("warning","KICAD_PAD_SHAPE_FALLBACK",pad.id,f"unsupported reconstructed pad shape {pad.shape}; exported as rect"))
         if layer_warning:report.issues.append(KicadExportIssue("warning","KICAD_SMD_NON_SURFACE_LAYER",pad.id,layer_warning))
@@ -58,16 +74,17 @@ def _plated_slot_lines(board,slot,net_num,report):
     inf=infer_plated_slot_padstack(board,slot)
     if inf.padstack is None:
         _record_skip(report,slot,"KICAD_SLOT_PLATED_UNSUPPORTED",";".join(inf.blockers));return []
-    p=inf.padstack;shape=pad_shape_name(p.pad_shape);n=net_num.get(p.net_id,0)
-    net_name=next((net.label or net.id for net in board.nets if net.id==p.net_id),"")
+    p=inf.padstack;shape=pad_shape_name(p.pad_shape)
+    n,net_name,net_known=_net_binding(board,net_num,p.net_id,slot.id,report)
     layer_tokens=" ".join(_q(x) for x in p.layers)+' "*.Mask"'
     cx,cy=p.center;pw,ph=p.pad_size;dl,ds=p.drill_size
+    net_clause=f' (net {n} {_q(net_name)})' if net_known else ""
     report.exported_slots+=1;report.exported_plated_slots+=1;report.exported_slot_ids.append(slot.id)
     return [
       f'  (footprint "PHOTONX:RecoveredPlatedSlot" (layer "F.Cu") (uuid {_u("slot-fp:"+slot.id)})',
       f'    (at {cx:.6f} {cy:.6f})',
       f'    (property "Reference" {_q(slot.id)} (at 0 -2 0) (layer "F.SilkS") hide (uuid {_u("slot-ref:"+slot.id)}))',
-      f'    (pad "1" thru_hole {shape} (at 0 0 {p.angle_deg:.6f}) (size {pw:.6f} {ph:.6f}) (drill oval {dl:.6f} {ds:.6f}) (layers {layer_tokens}) (net {n} {_q(net_name)}) (uuid {_u("slot-pad:"+slot.id)}))',
+      f'    (pad "1" thru_hole {shape} (at 0 0 {p.angle_deg:.6f}) (size {pw:.6f} {ph:.6f}) (drill oval {dl:.6f} {ds:.6f}) (layers {layer_tokens}){net_clause} (uuid {_u("slot-pad:"+slot.id)}))',
       '  )'
     ]
 
@@ -159,13 +176,24 @@ def _slot_lines(board,net_num,report):
         else:_record_skip(report,slot,"KICAD_SLOT_PLATING_UNKNOWN","slot plating is unknown")
     return lines
 
+def _track_lines(board,net_num,report):
+    lines=[]
+    for trk in board.tracks:
+        n,_,net_known=_net_binding(board,net_num,trk.net_id,trk.id,report)
+        if not net_known:
+            report.skipped_tracks+=1
+            report.skipped_track_ids.append(trk.id)
+            continue
+        lines.append(f'  (segment (start {trk.start.x:.6f} {trk.start.y:.6f}) (end {trk.end.x:.6f} {trk.end.y:.6f}) (width {trk.width:.6f}) (layer {_q(trk.layer)}) (net {n}) (uuid {_u("track:"+trk.id)}))')
+        report.exported_tracks+=1
+        report.exported_track_ids.append(trk.id)
+    return lines
+
 def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadExportReport]:
     p=Path(path);p.parent.mkdir(parents=True,exist_ok=True);report=KicadExportReport();net_num={net.id:i+1 for i,net in enumerate(board.nets)}
     lines=['(kicad_pcb (version 20240108) (generator "photonx_eda_pcb")','  (general (thickness 1.6))','  (paper "A4")','  (layers','    (0 "F.Cu" signal)','    (31 "B.Cu" signal)','    (36 "B.SilkS" user "b.silkscreen")','    (37 "F.SilkS" user "f.silkscreen")','    (44 "Edge.Cuts" user)','  )','  (setup (pad_to_mask_clearance 0))','  (net 0 "")']
     for net in board.nets:lines.append(f'  (net {net_num[net.id]} {_q(net.label or net.id)})')
-    lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));lines.extend(_region_lines(board,net_num,report))
-    for trk in board.tracks:
-        n=net_num.get(trk.net_id,0);lines.append(f'  (segment (start {trk.start.x:.6f} {trk.start.y:.6f}) (end {trk.end.x:.6f} {trk.end.y:.6f}) (width {trk.width:.6f}) (layer {_q(trk.layer)}) (net {n}) (uuid {_u("track:"+trk.id)}))')
+    lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));lines.extend(_region_lines(board,net_num,report));lines.extend(_track_lines(board,net_num,report))
     for seg in board.outline:lines.append(f'  (gr_line (start {seg.start.x:.6f} {seg.start.y:.6f}) (end {seg.end.x:.6f} {seg.end.y:.6f}) (stroke (width 0.1) (type default)) (layer "Edge.Cuts") (uuid {_u("edge:"+seg.id)}))')
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
 def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]
