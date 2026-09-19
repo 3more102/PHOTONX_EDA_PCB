@@ -118,6 +118,53 @@ def test_centered_horizontal_vector_line_macro_flash_is_supported(tmp_path: Path
     assert pad.size_y == pytest.approx(0.4)
 
 
+def test_vector_line_macro_arbitrary_rotation_is_exact(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMVLINE*20,1,0.4,-1.0,0,1.0,0,30*%\n"
+        "%ADD10VLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    shape = region_shape(result.regions[0])
+    assert shape.area == pytest.approx(0.8)
+    min_x, min_y, max_x, max_y = shape.bounds
+    assert max_x - min_x == pytest.approx(1.9320508075688772)
+    assert max_y - min_y == pytest.approx(1.3464101615137753)
+
+
+def test_vector_line_macro_diagonal_segment_is_exact(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMVLINE*20,1,0.2,-1.0,-1.0,1.0,1.0,0*%\n"
+        "%ADD10VLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    shape = region_shape(result.regions[0])
+    assert shape.area == pytest.approx(0.4 * 2**0.5)
+    min_x, min_y, max_x, max_y = shape.bounds
+    expected_extent = 2.0 + 0.1 * 2**0.5
+    assert max_x - min_x == pytest.approx(expected_extent)
+    assert max_y - min_y == pytest.approx(expected_extent)
+
+
 def test_vector_line_macro_orthogonal_rotation_swaps_dimensions(tmp_path: Path):
     path = _write(
         tmp_path,
@@ -185,9 +232,7 @@ def test_centered_vertical_vector_line_macro_respects_active_inch_units(
     [
         "20,0,0.2,-1,0,1,0,0",
         "20,1,0,-1,0,1,0,0",
-        "20,1,0.2,-1,0,1,0,30",
         "20,1,0.2,0,0,2,0,0",
-        "20,1,0.2,-1,-1,1,1,0",
         "20,1,0.2,0,0,0,0,0",
     ],
 )
@@ -257,6 +302,29 @@ def test_center_line_rectangle_macro_flash_is_supported(tmp_path: Path):
     assert pad.center.y == pytest.approx(2.0)
     assert pad.size_x == pytest.approx(1.0)
     assert pad.size_y == pytest.approx(2.0)
+
+
+def test_center_line_rectangle_macro_arbitrary_rotation_is_exact(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMBOX*21,1,1.0,2.0,0,0,30*%\n"
+        "%ADD10BOX*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    shape = region_shape(result.regions[0])
+    assert shape.area == pytest.approx(2.0)
+    min_x, min_y, max_x, max_y = shape.bounds
+    assert max_x - min_x == pytest.approx(1.8660254037844386)
+    assert max_y - min_y == pytest.approx(2.232050807568877)
 
 
 def test_center_line_rectangle_macro_orthogonal_rotation_swaps_dimensions(
@@ -332,7 +400,6 @@ def test_center_line_rectangle_macro_respects_active_inch_units(tmp_path: Path):
         "21,0,1.0,2.0,0,0,0",
         "21,1,1.0,2.0,0.1,0,0",
         "21,1,1.0,2.0,0,0.1,0",
-        "21,1,1.0,2.0,0,0,30",
         "21,1,0,2.0,0,0,0",
         "21,1,1.0,0,0,0,0",
     ],
@@ -597,6 +664,58 @@ def test_lower_left_rectangle_macro_flash_is_supported(tmp_path: Path):
     assert pad.size_y == pytest.approx(1.0)
 
 
+def test_lower_left_rectangle_macro_arbitrary_rotation_is_exact(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMLL*22,1,2.0,1.0,-1.0,-0.5,45*%\n"
+        "%ADD10LL*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    shape = region_shape(result.regions[0])
+    assert shape.area == pytest.approx(2.0)
+    min_x, min_y, max_x, max_y = shape.bounds
+    expected_extent = 3.0 / 2**0.5
+    assert max_x - min_x == pytest.approx(expected_extent)
+    assert max_y - min_y == pytest.approx(expected_extent)
+
+
+def test_lower_left_rectangle_macro_rotation_composes_with_lm_lr_ir(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%IR90*%\n"
+        "%AMLL*22,1,2.0,1.0,-1.0,-0.5,30*%\n"
+        "%ADD10LL*%\n"
+        "%LMX*%\n"
+        "%LR20*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    evidence = [
+        item.detail
+        for item in result.regions[0].provenance.evidence
+        if item.kind == "gerber_flash_polygonization"
+    ]
+    assert evidence
+    assert "rotation_deg_ccw=260" in evidence[0]
+
+
 def test_lower_left_rectangle_macro_orthogonal_rotation_swaps_dimensions(
     tmp_path: Path,
 ):
@@ -646,7 +765,6 @@ def test_lower_left_rectangle_macro_respects_active_inch_units(tmp_path: Path):
         "22,1,2.0,0,-1.0,0,0",
         "22,1,2.0,1.0,0,-0.5,0",
         "22,1,2.0,1.0,-1.0,0,0",
-        "22,1,2.0,1.0,-1.0,-0.5,45",
     ],
 )
 def test_lower_left_rectangle_macro_non_exact_cases_fail_closed(
@@ -718,7 +836,7 @@ def test_invalid_lower_left_rectangle_macro_preflight_blocks(tmp_path: Path):
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
-        "%AMLL*22,1,2.0,1.0,-1.0,-0.5,45*%\n"
+        "%AMLL*22,1,2.0,1.0,0,-0.5,45*%\n"
         "%ADD10LL*%\n"
         "D10*\n"
         "X000000Y000000D03*\n"
@@ -811,7 +929,7 @@ def test_permissive_unsupported_macro_skips_geometry_and_continues(tmp_path: Pat
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
-        "%AMBOX*21,1,1.0,2.0,0,0,30*%\n"
+        "%AMBOX*21,1,1.0,2.0,0.1,0,30*%\n"
         "%ADD10BOX*%\n"
         "%ADD11C,0.300*%\n"
         "D10*\n"
