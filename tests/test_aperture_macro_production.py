@@ -632,7 +632,7 @@ def test_irregular_outline_macro_clear_flash_composes_with_lpc(tmp_path: Path):
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
-        "%AMOUTLINE*4,1,3,0,0,1,0,0,1,0,0,0*%\n"
+        "%AMOUTLINE*4,1,3,0,0,0.5,0,0,0.5,0,0,0*%\n"
         "%ADD10OUTLINE*%\n"
         "%ADD11R,2X2*%\n"
         "D11*\n"
@@ -647,7 +647,8 @@ def test_irregular_outline_macro_clear_flash_composes_with_lpc(tmp_path: Path):
 
     assert result.pads == []
     assert len(result.regions) == 1
-    assert region_shape(result.regions[0]).area == pytest.approx(3.5)
+    assert len(result.regions[0].holes) == 1
+    assert region_shape(result.regions[0]).area == pytest.approx(3.875)
 
 
 def test_general_outline_macro_d01_sweep_remains_fail_closed(tmp_path: Path):
