@@ -17,7 +17,7 @@ Every skipped or omitted object must have a matching exporter issue with an appr
 Current conservative policies include:
 
 - unknown-plating or unsupported plated slots are skipped;
-- unsupported, invalid, or unresolved-net copper regions are skipped;
+- valid copper-region shells and holes are exported as editable zone contours; hole-bearing zones omit cached fill and require an explicit KiCad repour, while invalid topology, unsupported layers, and unresolved-net regions are skipped;
 - tracks with a non-empty unresolved `net_id` are skipped instead of being relabelled net 0;
 - arbitrary Excellon routed paths remain preserved in PHOTONX/JSON but omitted from KiCad.
 
