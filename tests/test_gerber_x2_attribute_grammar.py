@@ -29,7 +29,7 @@ def _write(tmp_path: Path, body: str) -> Path:
             (
                 "TF",
                 ".GenerationSoftware",
-                [r"Vendor\u002CInc", "Tool", "1.0"],
+                ["Vendor,Inc", "Tool", "1.0"],
             ),
         ),
         (
