@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added omission-aware KiCad connectivity round-trip verification. PHOTONX now re-reads generated boards with its format-aware reader and compares the net table plus emitted track, recovered-pad, copper-region, and recovered-slot net bindings against the exact export report. The CLI writes `kicad_connectivity_roundtrip.json`, separating readback equality from source-equivalence losses caused by conservative omissions or unresolved net references without changing reconstruction exit-code semantics.
+
 - Hardened KiCad track export against undeclared/noncanonical layer references. Track segments now export only on the board's declared canonical copper layers (`F.Cu`, `B.Cu`, and the structurally declared `In1.Cu`..`In30.Cu` prefix); invalid layers such as `In31.Cu` or user/documentation layers are omitted with `KICAD_TRACK_LAYER_UNSUPPORTED`, included in unified omission accounting, and may coexist with independent unresolved-net diagnostics without double-counting the skipped track.
 
 - Exposed the conservative KiCad export audit in the normal `photonx reconstruct --kicad` workflow. The CLI now emits the editable board, a complete `kicad_export_report.json`, the stable unified `kicad_omissions.json` manifest, and the separate native `kicad_validation.txt` result, preserving current slot/region/track/route export decisions and structured warnings without changing reconstruction exit-code semantics.
