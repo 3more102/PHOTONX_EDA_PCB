@@ -36,6 +36,7 @@ from ..ids import stable_id
 from ..models import CopperRegion, OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
 from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
+from .common.limits import ParseLimits
 from .gerber_parts.region_state import RegionState
 from .gerber_parts.step_repeat import parse_step_repeat
 from .gerber_parts.tokenizer import iter_gerber_statements
@@ -166,9 +167,15 @@ class GerberRS274XParser:
     Unsupported constructs are never silently discarded in strict mode.
     """
 
-    def __init__(self, layer: str, strict: bool = True):
+    def __init__(
+        self,
+        layer: str,
+        strict: bool = True,
+        limits: ParseLimits | None = None,
+    ):
         self.layer = layer
         self.strict = strict
+        self.limits = limits or ParseLimits()
         self.units = "mm"
         self.units_declared = False
         self.xfmt = CoordinateFormat(2, 4, "L")
@@ -223,6 +230,17 @@ class GerberRS274XParser:
         self.aperture_rotation_source: SourceRef | None = None
         self.aperture_scale_source: SourceRef | None = None
         self.image_body_started = False
+
+    def _read_limited_text(self, path: Path) -> str:
+        chunks: list[str] = []
+        with path.open(encoding="utf-8-sig", errors="strict") as stream:
+            for line_no, raw in enumerate(stream, 1):
+                try:
+                    self.limits.check_line(raw.rstrip("\r\n"), line_no)
+                except ValueError as exc:
+                    raise ParseError(f"{path}:{line_no}: {exc}") from exc
+                chunks.append(raw)
+        return "".join(chunks)
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -4088,7 +4106,7 @@ class GerberRS274XParser:
         p = Path(path)
         out = GerberLayerResult()
 
-        text = p.read_text(encoding="utf-8-sig", errors="strict")
+        text = self._read_limited_text(p)
         for line_no, line in iter_gerber_statements(text):
             if not line or line.startswith("G04"):
                 continue
