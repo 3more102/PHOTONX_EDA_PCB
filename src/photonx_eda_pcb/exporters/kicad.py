@@ -65,8 +65,21 @@ def _pad_export_layers(pad):
 
 def _pad_lines(board,net_num,report):
     lines=[]
+    declared_copper_layers=_declared_copper_layer_names(board)
     for pad in board.pads:
+        layer_known=pad.layer in declared_copper_layers
+        if not layer_known:
+            report.issues.append(KicadExportIssue(
+                "warning",
+                "KICAD_PAD_LAYER_UNSUPPORTED",
+                pad.id,
+                f"pad layer {pad.layer!r} is not a declared canonical KiCad copper layer",
+            ))
         n,net_name,net_known=_net_binding(board,net_num,pad.net_id,pad.id,report)
+        if not layer_known:
+            report.skipped_pads+=1
+            report.skipped_pad_ids.append(pad.id)
+            continue
         shape=pad_shape_name(pad.shape);pad_type="thru_hole" if pad.drill else "smd"
         layers,ref_layer,layer_warning=_pad_export_layers(pad)
         angle=float(getattr(pad,"rotation_deg",getattr(pad,"rotation",0.0)) or 0.0)
@@ -77,6 +90,8 @@ def _pad_lines(board,net_num,report):
         net_clause=f' (net {n} {_q(net_name)})' if net_known else ""
         lines.append(f'    (pad "1" {pad_type} {shape} (at 0 0 {angle:.6f}) (size {pad.size_x:.6f} {pad.size_y:.6f}){drill} (layers {layers}){net_clause} (uuid {_u("pad:"+pad.id)}))')
         lines.append('  )')
+        report.exported_pads+=1
+        report.exported_pad_ids.append(pad.id)
         if str(pad.shape).upper() not in {"C","R","O"}:report.issues.append(KicadExportIssue("warning","KICAD_PAD_SHAPE_FALLBACK",pad.id,f"unsupported reconstructed pad shape {pad.shape}; exported as rect"))
         if layer_warning:report.issues.append(KicadExportIssue("warning","KICAD_SMD_NON_SURFACE_LAYER",pad.id,layer_warning))
     return lines
