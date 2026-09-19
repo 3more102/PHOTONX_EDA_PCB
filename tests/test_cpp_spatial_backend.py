@@ -163,6 +163,18 @@ def test_native_index_snapshot_cache_reuses_and_invalidates_after_insert():
     assert third.revision == index.revision
 
 
+def test_native_index_snapshot_cache_detects_cell_size_change():
+    index = SpatialHashIndex(1.0)
+    index.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+
+    first = native_backend._native_index_snapshot(index)
+    index.cell_size = 0.5
+    second = native_backend._native_index_snapshot(index)
+
+    assert second is not first
+    assert second.cell_size == 0.5
+
+
 def test_native_index_snapshot_is_not_cached_without_revision_contract():
     class DuckIndex:
         cell_size = 1.0
