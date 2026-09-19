@@ -174,3 +174,58 @@ def test_empty_x2_net_name_preserves_explicit_no_net_without_label():
         item.kind == "gerber_x2_no_net"
         for item in nets[0].provenance.evidence
     )
+
+
+def test_reserved_nc_name_is_preserved_without_becoming_unique_label():
+    track = Track(
+        "T1",
+        Point(0, 0),
+        Point(1, 0),
+        0.2,
+        "F.Cu",
+        provenance=_net_provenance("N/C"),
+    )
+    board = BoardModel(tracks=[track])
+    graph = nx.Graph()
+    graph.add_node("T1")
+
+    nets = assign_physical_nets(board, graph)
+
+    assert nets[0].label is None
+    assert any(
+        item.kind == "gerber_x2_reserved_nc"
+        for item in nets[0].provenance.evidence
+    )
+
+
+def test_duplicate_source_net_name_across_physical_groups_stays_unresolved():
+    first = Track(
+        "T1",
+        Point(0, 0),
+        Point(1, 0),
+        0.2,
+        "F.Cu",
+        provenance=_net_provenance("CLK"),
+    )
+    second = Track(
+        "T2",
+        Point(10, 0),
+        Point(11, 0),
+        0.2,
+        "F.Cu",
+        provenance=_net_provenance("CLK"),
+    )
+    board = BoardModel(tracks=[first, second])
+    graph = nx.Graph()
+    graph.add_nodes_from(["T1", "T2"])
+
+    nets = assign_physical_nets(board, graph)
+
+    assert [net.label for net in nets] == [None, None]
+    assert all(
+        any(
+            item.kind == "gerber_x2_duplicate_net_label"
+            for item in net.provenance.evidence
+        )
+        for net in nets
+    )
