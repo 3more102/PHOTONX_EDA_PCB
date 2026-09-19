@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened Excellon tool-identifier lexing to ASCII decimal digits across production and helper parsers. Unicode digit lookalikes and malformed selections fail closed with dedicated diagnostics.
+
 - Hardened Excellon/XNC end-of-file and tool-table validation. `M30` is terminal and non-comment trailing data fails closed; duplicate tool definitions and undefined tool selections are rejected; finite positive tool diameters remain enforced on top of the strict numeric grammar. Strict parsing raises deterministic errors while permissive parsing suppresses affected-file geometry with explicit diagnostics.
 
 - Added an optional C++17 native spatial-acceleration backend behind a versioned C ABI. The backend provides deterministic AABB candidate-pair generation plus batched point-radius broad-phase queries used by drill association, footprint clustering/metrics, and component inference/metrics; Python remains the correctness reference and automatic fallback, exact Euclidean/connectivity predicates stay authoritative, native discovery is cached, ABI/range failures are explicit, and CI builds/loads the shared library on Python 3.11/3.12/3.13 before running the full regression suite.
