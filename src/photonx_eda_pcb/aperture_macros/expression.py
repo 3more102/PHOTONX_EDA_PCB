@@ -30,6 +30,12 @@ def eval_expr(text, *, reject_nonfinite=True):
             current.value, (int, float)
         ):
             return _number(current.value, reject_nonfinite=reject_nonfinite)
+        if (
+            not reject_nonfinite
+            and isinstance(current, ast.Name)
+            and current.id in {"inf", "nan"}
+        ):
+            return float(current.id)
         if isinstance(current, ast.UnaryOp) and type(current.op) in _OPS:
             return _number(
                 _OPS[type(current.op)](visit(current.operand)),
