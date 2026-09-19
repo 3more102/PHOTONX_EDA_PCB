@@ -1,4 +1,4 @@
-from ..spatial_connectivity.points import build_point_index,radius_query
+from ..spatial_connectivity.points import build_point_index,radius_queries
 
 def component_pair_candidate_metrics(pads,max_pair_distance_mm=4.0,cell_size_mm=None):
     pads=list(pads);n=len(pads);total=n*(n-1)//2
