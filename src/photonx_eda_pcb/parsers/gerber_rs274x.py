@@ -58,6 +58,10 @@ _APERTURE_SCALING = re.compile(
     re.IGNORECASE,
 )
 _IMAGE_ROTATION = re.compile(r"^%IR(0|90|180|270)\*%$", re.IGNORECASE)
+_MIRROR_IMAGE = re.compile(
+    r"^%MI(?:A([01]))?(?:B([01]))?\*%$",
+    re.IGNORECASE,
+)
 _LEGACY_SCALE_FACTOR = re.compile(
     r"^%SF"
     r"(?:A([0-9]+(?:\.[0-9]*)?|\.[0-9]+))?"
@@ -143,6 +147,9 @@ class GerberRS274XParser:
         self.incremental = False
         self.image_rotation_deg = 0
         self.image_rotation_source: SourceRef | None = None
+        self.mirror_a = False
+        self.mirror_b = False
+        self.mirror_image_source: SourceRef | None = None
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -391,6 +398,57 @@ class GerberRS274XParser:
         if not self.strict:
             self._disable_image_geometry(out)
 
+    def _handle_mirror_image(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        match = _MIRROR_IMAGE.match(line)
+        if match is None:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_MIRROR_IMAGE",
+                "legacy Gerber MI accepts only optional A0/A1 and B0/B1 factors",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        if self.mirror_image_source is not None:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "DUPLICATE_GERBER_MIRROR_IMAGE",
+                "legacy Gerber MI may only be declared once",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        if out.tracks or out.pads or out.outline:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "LATE_GERBER_MIRROR_IMAGE",
+                "legacy Gerber MI must precede emitted image geometry",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        self.mirror_a = match.group(1) == "1"
+        self.mirror_b = match.group(2) == "1"
+        self.mirror_image_source = SourceRef(str(path), line_no, line)
+
     def _handle_image_rotation(
         self,
         line: str,
@@ -483,6 +541,12 @@ class GerberRS274XParser:
         if not self.strict:
             self._disable_image_geometry(out)
 
+    def _mirror_coordinate_point(self, point: Point) -> Point:
+        return Point(
+            -point.x if self.mirror_a else point.x,
+            -point.y if self.mirror_b else point.y,
+        )
+
     def _rotate_image_point(self, point: Point) -> Point:
         if self.image_rotation_deg == 90:
             return Point(-point.y, point.x)
@@ -496,6 +560,27 @@ class GerberRS274XParser:
         if self.image_rotation_deg in {90, 270}:
             return y, x
         return x, y
+
+    def _transform_output_point(
+        self,
+        point: Point,
+        dx_mm: float = 0.0,
+        dy_mm: float = 0.0,
+    ) -> Point:
+        mirrored = self._mirror_coordinate_point(point)
+        # Per the Gerber specification MI mirrors coordinate data only.
+        # Step-repeat distances are not coordinate data and are therefore added
+        # after MI, before the whole-image IR rotation.
+        repeated = Point(mirrored.x + dx_mm, mirrored.y + dy_mm)
+        return self._rotate_image_point(repeated)
+
+    def _image_transform_id_parts(self) -> list[object]:
+        parts: list[object] = []
+        if self.mirror_a or self.mirror_b:
+            parts.extend(["mi", int(self.mirror_a), int(self.mirror_b)])
+        if self.image_rotation_deg:
+            parts.extend(["ir", self.image_rotation_deg])
+        return parts
 
     def _decode(self, raw, axis):
         if raw is None:
@@ -965,6 +1050,16 @@ class GerberRS274XParser:
                     src,
                 )
             )
+        if self.mirror_image_source is not None and (self.mirror_a or self.mirror_b):
+            prov.add_source(self.mirror_image_source)
+            prov.add_evidence(
+                Evidence(
+                    "gerber_mirror_image",
+                    f"mirror_a={int(self.mirror_a)}; mirror_b={int(self.mirror_b)}",
+                    1.0,
+                    self.mirror_image_source,
+                )
+            )
         if self.image_rotation_source is not None and self.image_rotation_deg:
             prov.add_source(self.image_rotation_source)
             prov.add_evidence(
@@ -1357,17 +1452,17 @@ class GerberRS274XParser:
         width = max(aperture.x, aperture.y)
 
         for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
-            repeated_center = self._rotate_image_point(
-                Point(center.x + dx_mm, center.y + dy_mm)
+            repeated_center = self._transform_output_point(
+                center, dx_mm, dy_mm
             )
             for segment_index in range(segment_count):
                 start_geo = points[segment_index]
                 end_geo = points[segment_index + 1]
-                start = self._rotate_image_point(
-                    Point(start_geo.x + dx_mm, start_geo.y + dy_mm)
+                start = self._transform_output_point(
+                    Point(start_geo.x, start_geo.y), dx_mm, dy_mm
                 )
-                end = self._rotate_image_point(
-                    Point(end_geo.x + dx_mm, end_geo.y + dy_mm)
+                end = self._transform_output_point(
+                    Point(end_geo.x, end_geo.y), dx_mm, dy_mm
                 )
 
                 id_parts = [
@@ -1385,6 +1480,7 @@ class GerberRS274XParser:
                     width,
                     self.layer,
                 ]
+                id_parts.extend(self._image_transform_id_parts())
                 if self.step_repeat is not None:
                     id_parts.extend(["sr", x_index, y_index])
                 obj_id = stable_id("trk", *id_parts)
@@ -1500,6 +1596,12 @@ class GerberRS274XParser:
                 self.incremental = True
                 continue
 
+            # Deprecated MI mirrors coordinate data only. Apertures and
+            # step-repeat distances are intentionally left unmirrored.
+            if line.startswith("%MI"):
+                self._handle_mirror_image(line, p, line_no, out)
+                continue
+
             # Deprecated whole-image rotation is exactly representable for the
             # four orthogonal angles allowed by the Gerber specification.
             if line.startswith("%IR"):
@@ -1516,9 +1618,9 @@ class GerberRS274XParser:
             # Older generators may emit explicit default transform statements.
             # Only the identity forms are accepted; non-identity transforms
             # remain unsupported rather than being silently ignored.
-            if line in {"%ASAXBY*%", "%IPPOS*%", "%MIA0B0*%", "%OFA0B0*%"}:
+            if line in {"%ASAXBY*%", "%IPPOS*%", "%OFA0B0*%"}:
                 continue
-            if line.startswith(("%AS", "%IP", "%MI", "%OF")):
+            if line.startswith(("%AS", "%IP", "%OF")):
                 self._fail_or_warn(
                     p,
                     line_no,
@@ -1788,39 +1890,26 @@ class GerberRS274XParser:
                     width = ap.x
 
                     for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
-                        start = self._rotate_image_point(
-                            Point(self.current.x + dx_mm, self.current.y + dy_mm)
+                        start = self._transform_output_point(
+                            self.current, dx_mm, dy_mm
                         )
-                        end = self._rotate_image_point(
-                            Point(nxt.x + dx_mm, nxt.y + dy_mm)
+                        end = self._transform_output_point(
+                            nxt, dx_mm, dy_mm
                         )
-                        if self.step_repeat is None:
-                            obj_id = stable_id(
-                                "trk",
-                                p.name,
-                                line_no,
-                                self.current.x,
-                                self.current.y,
-                                nxt.x,
-                                nxt.y,
-                                width,
-                                self.layer,
-                            )
-                        else:
-                            obj_id = stable_id(
-                                "trk",
-                                p.name,
-                                line_no,
-                                self.current.x,
-                                self.current.y,
-                                nxt.x,
-                                nxt.y,
-                                width,
-                                self.layer,
-                                "sr",
-                                x_index,
-                                y_index,
-                            )
+                        id_parts = [
+                            p.name,
+                            line_no,
+                            self.current.x,
+                            self.current.y,
+                            nxt.x,
+                            nxt.y,
+                            width,
+                            self.layer,
+                        ]
+                        id_parts.extend(self._image_transform_id_parts())
+                        if self.step_repeat is not None:
+                            id_parts.extend(["sr", x_index, y_index])
+                        obj_id = stable_id("trk", *id_parts)
                         prov = self._step_repeat_provenance(
                             src, x_index or 0, y_index or 0, dx_mm, dy_mm
                         )
@@ -1843,32 +1932,21 @@ class GerberRS274XParser:
                 elif operation == "3":
                     size_x, size_y = self._rotate_image_size(ap.x, ap.y)
                     for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
-                        center = self._rotate_image_point(
-                            Point(nxt.x + dx_mm, nxt.y + dy_mm)
+                        center = self._transform_output_point(
+                            nxt, dx_mm, dy_mm
                         )
-                        if self.step_repeat is None:
-                            obj_id = stable_id(
-                                "pad",
-                                p.name,
-                                line_no,
-                                nxt.x,
-                                nxt.y,
-                                ap.code,
-                                self.layer,
-                            )
-                        else:
-                            obj_id = stable_id(
-                                "pad",
-                                p.name,
-                                line_no,
-                                nxt.x,
-                                nxt.y,
-                                ap.code,
-                                self.layer,
-                                "sr",
-                                x_index,
-                                y_index,
-                            )
+                        id_parts = [
+                            p.name,
+                            line_no,
+                            nxt.x,
+                            nxt.y,
+                            ap.code,
+                            self.layer,
+                        ]
+                        id_parts.extend(self._image_transform_id_parts())
+                        if self.step_repeat is not None:
+                            id_parts.extend(["sr", x_index, y_index])
+                        obj_id = stable_id("pad", *id_parts)
                         prov = self._step_repeat_provenance(
                             src, x_index or 0, y_index or 0, dx_mm, dy_mm
                         )

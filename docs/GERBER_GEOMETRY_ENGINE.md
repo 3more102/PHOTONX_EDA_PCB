@@ -18,7 +18,9 @@ The high-level Gerber parser supports a deliberately bounded circular-arc subset
 
 Arc center/radius consistency is checked using the active coordinate resolution so valid quantized files are not rejected solely because of last-digit rounding.
 
-## Legacy whole-image rotation
+## Legacy image transforms
+
+Deprecated Gerber `MI` mirroring is applied to coordinate data before later image transforms. A1 negates the A/X coordinate and B1 negates the B/Y coordinate. Apertures are not mirrored. Step-repeat distances are not coordinate data and are therefore added after MI rather than mirrored.
 
 Deprecated Gerber `IR` image rotation is applied as an exact origin-centered transform after supported source geometry is resolved. The four specification-defined values are supported:
 
@@ -29,7 +31,7 @@ Deprecated Gerber `IR` image rotation is applied as an exact origin-centered tra
 
 The transform is applied consistently to linear tracks, outlines, flashes, tessellated arcs, and expanded step-repeat instances. Rectangular and obround flash X/Y dimensions are swapped at 90/270 degrees. Non-zero rotation is recorded as `gerber_image_rotation` provenance evidence.
 
-Legacy `SF` scale-factor syntax is also recognized. Identity scaling is accepted; non-identity scaling remains fail-closed because Gerber scales coordinate data but not apertures or step-repeat distances, and anisotropic scaling can change circular interpolation into non-circular geometry.
+The transformation order follows the legacy Gerber rule independently of command appearance: MI is applied before IR in the currently supported subset. Legacy `SF` scale-factor syntax is also recognized. Identity scaling is accepted; non-identity scaling remains fail-closed because Gerber scales coordinate data but not apertures or step-repeat distances, and anisotropic scaling can change circular interpolation into non-circular geometry.
 
 ## Deliberately unsupported
 
