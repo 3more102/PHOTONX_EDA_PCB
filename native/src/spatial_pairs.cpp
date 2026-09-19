@@ -11,7 +11,7 @@
 
 namespace {
 
-constexpr uint32_t kAbiVersion = 2;
+constexpr uint32_t kAbiVersion = 3;
 constexpr long double kMaxCellsPerBox = 1000000.0L;
 constexpr long double kMaxTotalInsertedCells = 20000000.0L;
 constexpr long double kMaxTotalQueriedCells = 20000000.0L;
@@ -133,26 +133,36 @@ bool box_center(
     return std::isfinite(center_x) && std::isfinite(center_y);
 }
 
-int compute_pairs(
+using Grid =
+    std::unordered_map<Cell, std::vector<uint32_t>, CellHash>;
+
+struct PersistentAABBIndex {
+    std::vector<photonx_aabb> boxes;
+    double cell_size = 1.0;
+    Grid grid;
+};
+
+int build_persistent_aabb_index(
     const photonx_aabb* boxes,
     uint32_t box_count,
-    double tolerance,
     double cell_size,
-    std::vector<photonx_pair>& pairs
+    PersistentAABBIndex& index
 ) {
     if ((box_count != 0U && boxes == nullptr) ||
-        !std::isfinite(tolerance) || tolerance < 0.0 ||
         !std::isfinite(cell_size) || cell_size <= 0.0) {
         return PHOTONX_NATIVE_INVALID_ARGUMENT;
     }
 
-    using Grid =
-        std::unordered_map<Cell, std::vector<uint32_t>, CellHash>;
-    Grid grid;
-    long double total_inserted_cells = 0.0L;
+    index.boxes.clear();
+    index.grid.clear();
+    index.cell_size = cell_size;
+    if (box_count != 0U) {
+        index.boxes.assign(boxes, boxes + box_count);
+    }
 
+    long double total_inserted_cells = 0.0L;
     for (uint32_t i = 0; i < box_count; ++i) {
-        if (!finite_box(boxes[i])) {
+        if (!finite_box(index.boxes[i])) {
             return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
         }
 
@@ -162,7 +172,13 @@ int compute_pairs(
         int64_t max_y = 0;
         long double cell_count = 0.0L;
         if (!cell_bounds(
-                boxes[i], cell_size, min_x, min_y, max_x, max_y, cell_count)) {
+                index.boxes[i],
+                cell_size,
+                min_x,
+                min_y,
+                max_x,
+                max_y,
+                cell_count)) {
             return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
         }
 
@@ -173,7 +189,7 @@ int compute_pairs(
 
         for (int64_t x = min_x;; ++x) {
             for (int64_t y = min_y;; ++y) {
-                grid[Cell{x, y}].push_back(i);
+                index.grid[Cell{x, y}].push_back(i);
                 if (y == max_y) {
                     break;
                 }
@@ -184,20 +200,33 @@ int compute_pairs(
         }
     }
 
+    return PHOTONX_NATIVE_OK;
+}
+
+int compute_pairs_from_index(
+    const PersistentAABBIndex& index,
+    double tolerance,
+    std::vector<photonx_pair>& pairs
+) {
+    if (!std::isfinite(tolerance) || tolerance < 0.0) {
+        return PHOTONX_NATIVE_INVALID_ARGUMENT;
+    }
+
+    const uint32_t box_count = static_cast<uint32_t>(index.boxes.size());
     std::vector<QueryWindow> query_windows;
     query_windows.reserve(box_count);
     long double total_queried_cells = 0.0L;
 
     for (uint32_t i = 0; i < box_count; ++i) {
         QueryWindow window{};
-        if (!expanded_box(boxes[i], tolerance, window.box)) {
+        if (!expanded_box(index.boxes[i], tolerance, window.box)) {
             return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
         }
 
         long double cell_count = 0.0L;
         if (!cell_bounds(
                 window.box,
-                cell_size,
+                index.cell_size,
                 window.min_x,
                 window.min_y,
                 window.max_x,
@@ -227,14 +256,14 @@ int compute_pairs(
 
         for (int64_t x = window.min_x;; ++x) {
             for (int64_t y = window.min_y;; ++y) {
-                const auto it = grid.find(Cell{x, y});
-                if (it != grid.end()) {
+                const auto it = index.grid.find(Cell{x, y});
+                if (it != index.grid.end()) {
                     for (const uint32_t candidate : it->second) {
                         if (candidate == i || visited[candidate] == generation) {
                             continue;
                         }
                         visited[candidate] = generation;
-                        if (intersects(boxes[candidate], window.box)) {
+                        if (intersects(index.boxes[candidate], window.box)) {
                             const uint32_t first = std::min(i, candidate);
                             const uint32_t second = std::max(i, candidate);
                             if (pairs.size() >= kMaxOutputItems) {
@@ -274,6 +303,22 @@ int compute_pairs(
     );
 
     return PHOTONX_NATIVE_OK;
+}
+
+int compute_pairs(
+    const photonx_aabb* boxes,
+    uint32_t box_count,
+    double tolerance,
+    double cell_size,
+    std::vector<photonx_pair>& pairs
+) {
+    PersistentAABBIndex index;
+    const int status =
+        build_persistent_aabb_index(boxes, box_count, cell_size, index);
+    if (status != PHOTONX_NATIVE_OK) {
+        return status;
+    }
+    return compute_pairs_from_index(index, tolerance, pairs);
 }
 
 int compute_point_radius_candidates(
@@ -410,6 +455,79 @@ int compute_point_radius_candidates(
 
 extern "C" uint32_t photonx_native_abi_version(void) {
     return kAbiVersion;
+}
+
+extern "C" int photonx_aabb_index_create(
+    const photonx_aabb* boxes,
+    uint32_t box_count,
+    double cell_size,
+    photonx_aabb_index_handle* out_index
+) {
+    if (out_index == nullptr) {
+        return PHOTONX_NATIVE_INVALID_ARGUMENT;
+    }
+    *out_index = nullptr;
+
+    try {
+        auto* index = new PersistentAABBIndex();
+        const int status =
+            build_persistent_aabb_index(boxes, box_count, cell_size, *index);
+        if (status != PHOTONX_NATIVE_OK) {
+            delete index;
+            return status;
+        }
+        *out_index = static_cast<photonx_aabb_index_handle>(index);
+        return PHOTONX_NATIVE_OK;
+    } catch (...) {
+        return PHOTONX_NATIVE_INTERNAL_ERROR;
+    }
+}
+
+extern "C" void photonx_aabb_index_destroy(
+    photonx_aabb_index_handle handle
+) {
+    delete static_cast<PersistentAABBIndex*>(handle);
+}
+
+extern "C" int photonx_aabb_index_candidate_pairs(
+    photonx_aabb_index_handle handle,
+    double tolerance,
+    photonx_pair* out_pairs,
+    uint32_t out_capacity,
+    uint32_t* out_count
+) {
+    if (handle == nullptr || out_count == nullptr) {
+        return PHOTONX_NATIVE_INVALID_ARGUMENT;
+    }
+    *out_count = 0U;
+
+    try {
+        std::vector<photonx_pair> pairs;
+        const auto* index = static_cast<const PersistentAABBIndex*>(handle);
+        const int status = compute_pairs_from_index(*index, tolerance, pairs);
+        if (status != PHOTONX_NATIVE_OK) {
+            return status;
+        }
+
+        if (pairs.size() >
+            static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        const uint32_t required = static_cast<uint32_t>(pairs.size());
+        *out_count = required;
+        if (required == 0U) {
+            return PHOTONX_NATIVE_OK;
+        }
+        if (out_pairs == nullptr || out_capacity < required) {
+            return PHOTONX_NATIVE_BUFFER_TOO_SMALL;
+        }
+
+        std::copy(pairs.begin(), pairs.end(), out_pairs);
+        return PHOTONX_NATIVE_OK;
+    } catch (...) {
+        return PHOTONX_NATIVE_INTERNAL_ERROR;
+    }
 }
 
 extern "C" int photonx_candidate_pairs(
