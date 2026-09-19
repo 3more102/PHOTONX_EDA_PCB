@@ -324,10 +324,17 @@ class ExcellonParser:
             return
 
         xraw,yraw=match.group(2),match.group(3)
-        step_x=0.0 if xraw is None else self._decode(xraw)
-        step_y=0.0 if yraw is None else self._decode(yraw)
-        final_x=self.current.x + count * step_x
-        final_y=self.current.y + count * step_y
+        try:
+            step_x=0.0 if xraw is None else self._decode(xraw)
+            step_y=0.0 if yraw is None else self._decode(yraw)
+            final_x=self.current.x + count * step_x
+            final_y=self.current.y + count * step_y
+        except (ValueError, OverflowError) as exc:
+            message=f"invalid repeat-hole step ({exc})"
+            if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
+            out.diagnostics.append(ParseDiagnostic("warning","INVALID_EXCELLON_REPEAT_STEP",message,str(p),line_no))
+            self._disable_geometry(out)
+            return
         if not all(isfinite(v) for v in (step_x,step_y,final_x,final_y)):
             message="repeat-hole step or expanded coordinate is non-finite"
             if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
