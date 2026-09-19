@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened deprecated Gerber IP image-polarity handling: `%IPPOS*%` is now a once-only image-header command that must precede coordinate data, with explicit positive-polarity diagnostics and preflight coverage. Late or duplicate IPPOS declarations fail closed and suppress permissive geometry; `%IPNEG*%` remains fail-closed because whole-image inversion is not modeled. Also synchronized LPC capability text with the already-supported standard P aperture paths.
+
 - Extended standard P aperture support to solid linear D01 draws on material layers. Because the regular polygon aperture is convex, PHOTONX materializes the exact swept image as the convex hull of the transformed aperture at the segment endpoints, preserving template rotation, LM-before-LR, LS, whole-image IR, step-repeat, provenance and ordered LPD/LPC composition. Holed P D01 remains fail-closed.
 
 - Added bounded standard P regular-polygon aperture support for D03 flashes. P apertures validate outer diameter, integer vertex count 3–12, optional template rotation, and optional centered round hole; LM mirroring is applied before LR, with LS, whole-image IR, step-repeat and ordered LPD/LPC composition preserved. Polygon outer boundaries are exact CopperRegion geometry, while optional round holes retain the 0.005 mm chord-error policy. Holed P-aperture D01 remains explicitly fail-closed; solid P D01 is supported by the exact sweep path above.

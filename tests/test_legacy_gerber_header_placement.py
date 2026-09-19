@@ -54,6 +54,7 @@ def test_d02_coordinate_closes_legacy_image_header_in_strict_mode(
         ("%SFA2B2*%", "LATE_GERBER_SCALE_FACTOR"),
         ("%OFA1B0*%", "LATE_GERBER_OFFSET"),
         ("%IR90*%", "LATE_GERBER_IMAGE_ROTATION"),
+        ("%IPPOS*%", "LATE_GERBER_IMAGE_POLARITY"),
     ],
 )
 def test_d02_coordinate_late_transform_suppresses_permissive_geometry(
@@ -87,6 +88,7 @@ def test_d02_coordinate_late_transform_suppresses_permissive_geometry(
         ("%IR90*%", "LATE_GERBER_IMAGE_ROTATION"),
         ("%ASAYBX*%", "LATE_GERBER_AXIS_SELECT"),
         ("%INLateName*%", "LATE_GERBER_IMAGE_NAME"),
+        ("%IPPOS*%", "LATE_GERBER_IMAGE_POLARITY"),
     ],
 )
 def test_preflight_blocks_header_commands_after_d02(
@@ -119,6 +121,7 @@ def test_preflight_blocks_header_commands_after_d02(
         ("%IR90*%", "%IR180*%", "DUPLICATE_GERBER_IMAGE_ROTATION"),
         ("%ASAXBY*%", "%ASAYBX*%", "DUPLICATE_GERBER_AXIS_SELECT"),
         ("%INOne*%", "%INTwo*%", "DUPLICATE_GERBER_IMAGE_NAME"),
+        ("%IPPOS*%", "%IPPOS*%", "DUPLICATE_GERBER_IMAGE_POLARITY"),
     ],
 )
 def test_preflight_blocks_duplicate_header_commands(
@@ -155,10 +158,24 @@ def test_late_image_name_is_strictly_invalid_even_though_non_geometric(
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
+def test_late_positive_image_polarity_is_strictly_invalid(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "late_ippos.gtl",
+        "X010000Y020000D02*\n"
+        "%IPPOS*%\n"
+        "X020000Y020000D03*\n",
+    )
+
+    with pytest.raises(ParseError, match="must appear before"):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
 def test_header_commands_before_first_coordinate_remain_supported(tmp_path: Path):
     path = _write(
         tmp_path,
         "valid_header.gtl",
+        "%IPPOS*%\n"
         "%ASAYBX*%\n"
         "%INBoardTop*%\n"
         "%MIA1*%\n"

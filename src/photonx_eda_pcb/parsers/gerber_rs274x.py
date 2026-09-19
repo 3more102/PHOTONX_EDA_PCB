@@ -211,6 +211,7 @@ class GerberRS274XParser:
         self.scale_source: SourceRef | None = None
         self.axis_select_source: SourceRef | None = None
         self.image_name_source: SourceRef | None = None
+        self.image_polarity_source: SourceRef | None = None
         self.aperture_mirror = "N"
         self.aperture_rotation_deg = 0.0
         self.aperture_scale = 1.0
@@ -635,6 +636,74 @@ class GerberRS274XParser:
                     f"legacy AS {match.group(1).upper()} affects only output-device "
                     "axis assignment and does not alter CAD-to-CAM image geometry"
                 ),
+                str(path),
+                line_no,
+            )
+        )
+
+    def _handle_image_polarity(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        """Handle the deprecated whole-image IP command conservatively.
+
+        Positive image polarity is the normal Gerber image semantics already used
+        by the parser. Negative image polarity inverts the infinite image plane
+        and therefore remains fail-closed until an explicit bounded image-plane
+        representation exists.
+        """
+
+        if line != "%IPPOS*%":
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "UNSUPPORTED_GERBER_TRANSFORM",
+                (
+                    "negative or malformed legacy Gerber IP image polarity changes "
+                    "image geometry and whole-image semantics and is not implemented safely"
+                ),
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        if self.image_polarity_source is not None:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "DUPLICATE_GERBER_IMAGE_POLARITY",
+                "legacy Gerber IP may only be declared once",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        if self.image_body_started:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "LATE_GERBER_IMAGE_POLARITY",
+                "legacy Gerber IP must appear before any coordinate data",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        self.image_polarity_source = SourceRef(str(path), line_no, line)
+        out.diagnostics.append(
+            ParseDiagnostic(
+                "info",
+                "GERBER_IMAGE_POLARITY_POSITIVE",
+                "legacy IPPOS selects the default positive whole-image polarity",
                 str(path),
                 line_no,
             )
@@ -3805,25 +3874,11 @@ class GerberRS274XParser:
                 self._handle_legacy_scale_factor(line, p, line_no, out)
                 continue
 
-            # Older generators may emit explicit default transform statements.
-            # Only the identity forms are accepted; non-identity transforms
-            # remain unsupported rather than being silently ignored.
-            if line == "%IPPOS*%":
-                continue
+            # Deprecated IP is a once-only whole-image header command.
+            # Positive polarity matches the parser's normal image semantics;
+            # negative polarity remains fail-closed because it inverts the image plane.
             if line.startswith("%IP"):
-                self._fail_or_warn(
-                    p,
-                    line_no,
-                    line,
-                    "UNSUPPORTED_GERBER_TRANSFORM",
-                    (
-                        "non-default legacy Gerber transform changes image geometry "
-                        "and is not implemented safely"
-                    ),
-                    out,
-                )
-                if not self.strict:
-                    self._disable_image_geometry(out)
+                self._handle_image_polarity(line, p, line_no, out)
                 continue
 
             if line.startswith("%AM"):
