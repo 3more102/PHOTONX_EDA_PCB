@@ -315,13 +315,6 @@ class ExcellonParser:
             return
 
         xraw,yraw=match.group(2),match.group(3)
-        if xraw is None and yraw is None:
-            message="repeat-hole command requires an X and/or Y step"
-            if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
-            out.diagnostics.append(ParseDiagnostic("warning","INVALID_EXCELLON_REPEAT_STEP",message,str(p),line_no))
-            self._disable_geometry(out)
-            return
-
         step_x=0.0 if xraw is None else self._decode(xraw)
         step_y=0.0 if yraw is None else self._decode(yraw)
         final_x=self.current.x + count * step_x
