@@ -7,10 +7,16 @@ from pathlib import Path
 from .capabilities import CAPABILITIES
 from .config import ReconstructionConfig
 from .exporters import export_json, export_kicad, validate_with_kicad_cli
+from .exporters.csv_export import export_csv_tables
+from .exporters.graphml import export_graphml
+from .exporters.svg import export_svg
 from .io import write_reconstruction_bundle
 from .pipeline import reconstruct
 from .preflight import preflight as inspect_input
 from .reporting import summary
+from .reporting.json_report import render_json_report
+from .reporting.junit import checks_to_junit
+from .reporting.markdown import render_markdown_report
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -48,6 +54,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also emit reconstructed.kicad_pcb",
     )
+    r.add_argument(
+        "--review-artifacts",
+        action="store_true",
+        help=(
+            "emit review/reporting artifacts under OUTPUT/review "
+            "(Markdown, JSON, JUnit, SVG, GraphML, and CSV)"
+        ),
+    )
     return p
 
 
@@ -57,6 +71,25 @@ def _write_json(path: Path, payload: dict) -> None:
         json.dumps(payload, indent=2, sort_keys=True),
         encoding="utf-8",
     )
+
+
+def _write_text(path: Path, text: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _write_review_artifacts(board, output_dir: Path) -> list[Path]:
+    review_dir = Path(output_dir) / "review"
+    artifacts = [
+        _write_text(review_dir / "report.md", render_markdown_report(board)),
+        _write_text(review_dir / "summary.json", render_json_report(board)),
+        _write_text(review_dir / "checks.junit.xml", checks_to_junit(board) + "\n"),
+        export_svg(board, review_dir / "board.svg"),
+        export_graphml(board, review_dir / "connectivity.graphml"),
+    ]
+    artifacts.extend(export_csv_tables(board, review_dir / "csv"))
+    return artifacts
 
 
 def main(argv=None) -> int:
@@ -94,6 +127,9 @@ def main(argv=None) -> int:
     result = reconstruct(args.input, cfg)
     write_reconstruction_bundle(result.board, result.validation, args.output)
     export_json(result.board, args.output / "reconstructed.json")
+
+    if args.review_artifacts:
+        _write_review_artifacts(result.board, args.output)
 
     if args.kicad:
         kpath = export_kicad(result.board, args.output / "reconstructed.kicad_pcb")
