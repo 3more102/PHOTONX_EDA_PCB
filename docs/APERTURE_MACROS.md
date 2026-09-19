@@ -17,4 +17,6 @@ For these centered rectangular reductions, intrinsic macro rotation is applied b
 
 Macro modifiers may be parameterized and are evaluated before these constraints are checked. Active Gerber units are applied when the primitive is reduced.
 
+Macro variables follow the Gerber 2026.05 rules implemented by the evaluator: `$1..$n` are seeded from the calling AD parameters, `$n=expression` assignments are evaluated in source order, undefined positive-index variables evaluate as zero, and an AD-supplied or previously defined variable cannot be redefined. Variable matching is token-aware, so `$1` cannot alias the prefix of `$10`; index zero is rejected.
+
 Multiple primitives, subtraction/exposure-off geometry, non-centered rectangles/vector lines/Code-5 polygons, zero-size primitives, invalid Code-4 contours, general Code-4 D01 sweeps, Edge.Cuts Code-4 flashes, thermals, moirés, and aperture blocks remain outside the supported production path unless a later implementation can preserve their geometry safely.
