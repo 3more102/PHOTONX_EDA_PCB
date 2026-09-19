@@ -5,12 +5,13 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
 namespace {
 
-constexpr uint32_t kAbiVersion = 2;
+constexpr uint32_t kAbiVersion = 3;
 constexpr long double kMaxCellsPerBox = 1000000.0L;
 constexpr long double kMaxTotalInsertedCells = 20000000.0L;
 
@@ -31,6 +32,8 @@ struct CellHash {
                      (h1 << 6U) + (h1 >> 2U));
     }
 };
+
+using Grid = std::unordered_map<Cell, std::vector<uint32_t>, CellHash>;
 
 bool finite_box(const photonx_aabb& box) noexcept {
     return std::isfinite(box.min_x) && std::isfinite(box.min_y) &&
@@ -122,28 +125,38 @@ bool box_center(
     return std::isfinite(center_x) && std::isfinite(center_y);
 }
 
-int compute_pairs(
+struct NativeSpatialIndex {
+    std::vector<photonx_aabb> boxes;
+    Grid box_grid;
+    std::vector<double> center_x;
+    std::vector<double> center_y;
+    Grid point_grid;
+    double cell_size = 1.0;
+};
+
+int build_native_index(
     const photonx_aabb* boxes,
     uint32_t box_count,
-    double tolerance,
     double cell_size,
-    std::vector<photonx_pair>& pairs
+    NativeSpatialIndex& out
 ) {
     if ((box_count != 0U && boxes == nullptr) ||
-        !std::isfinite(tolerance) || tolerance < 0.0 ||
         !std::isfinite(cell_size) || cell_size <= 0.0) {
         return PHOTONX_NATIVE_INVALID_ARGUMENT;
     }
 
-    using Grid =
-        std::unordered_map<Cell, std::vector<uint32_t>, CellHash>;
-    Grid grid;
-    long double total_inserted_cells = 0.0L;
+    NativeSpatialIndex built;
+    built.cell_size = cell_size;
+    built.boxes.resize(box_count);
+    built.center_x.assign(box_count, 0.0);
+    built.center_y.assign(box_count, 0.0);
 
+    long double total_inserted_cells = 0.0L;
     for (uint32_t i = 0; i < box_count; ++i) {
         if (!finite_box(boxes[i])) {
             return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
         }
+        built.boxes[i] = boxes[i];
 
         int64_t min_x = 0;
         int64_t min_y = 0;
@@ -162,7 +175,7 @@ int compute_pairs(
 
         for (int64_t x = min_x;; ++x) {
             for (int64_t y = min_y;; ++y) {
-                grid[Cell{x, y}].push_back(i);
+                built.box_grid[Cell{x, y}].push_back(i);
                 if (y == max_y) {
                     break;
                 }
@@ -171,7 +184,37 @@ int compute_pairs(
                 break;
             }
         }
+
+        if (!box_center(boxes[i], built.center_x[i], built.center_y[i])) {
+            continue;
+        }
+
+        int64_t cell_x = 0;
+        int64_t cell_y = 0;
+        if (!to_cell(built.center_x[i], cell_size, cell_x) ||
+            !to_cell(built.center_y[i], cell_size, cell_y)) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+        built.point_grid[Cell{cell_x, cell_y}].push_back(i);
     }
+
+    out = std::move(built);
+    return PHOTONX_NATIVE_OK;
+}
+
+int compute_pairs(
+    const NativeSpatialIndex& index,
+    double tolerance,
+    std::vector<photonx_pair>& pairs
+) {
+    if (!std::isfinite(tolerance) || tolerance < 0.0) {
+        return PHOTONX_NATIVE_INVALID_ARGUMENT;
+    }
+
+    const auto& boxes = index.boxes;
+    const auto& grid = index.box_grid;
+    const double cell_size = index.cell_size;
+    const uint32_t box_count = static_cast<uint32_t>(boxes.size());
 
     std::vector<uint32_t> visited(box_count, 0U);
     uint32_t generation = 0U;
@@ -247,44 +290,19 @@ int compute_pairs(
 }
 
 int compute_point_radius_candidates(
-    const photonx_aabb* boxes,
-    uint32_t box_count,
+    const NativeSpatialIndex& index,
     const photonx_point_query* queries,
     uint32_t query_count,
-    double cell_size,
     std::vector<photonx_query_match>& matches
 ) {
-    if ((box_count != 0U && boxes == nullptr) ||
-        (query_count != 0U && queries == nullptr) ||
-        !std::isfinite(cell_size) || cell_size <= 0.0) {
+    if (query_count != 0U && queries == nullptr) {
         return PHOTONX_NATIVE_INVALID_ARGUMENT;
     }
 
-    using Grid =
-        std::unordered_map<Cell, std::vector<uint32_t>, CellHash>;
-    Grid grid;
-    std::vector<double> center_x(box_count, 0.0);
-    std::vector<double> center_y(box_count, 0.0);
-
-    for (uint32_t i = 0; i < box_count; ++i) {
-        if (!finite_box(boxes[i])) {
-            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
-        }
-        if (!box_center(boxes[i], center_x[i], center_y[i])) {
-            // Finite endpoints can still overflow during Python's binary64
-            // center calculation. Its exact distance predicate cannot accept
-            // that +/-inf center for a finite query, so skip it here too.
-            continue;
-        }
-
-        int64_t cell_x = 0;
-        int64_t cell_y = 0;
-        if (!to_cell(center_x[i], cell_size, cell_x) ||
-            !to_cell(center_y[i], cell_size, cell_y)) {
-            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
-        }
-        grid[Cell{cell_x, cell_y}].push_back(i);
-    }
+    const auto& center_x = index.center_x;
+    const auto& center_y = index.center_y;
+    const auto& grid = index.point_grid;
+    const double cell_size = index.cell_size;
 
     for (uint32_t q = 0; q < query_count; ++q) {
         const double x = queries[q].x;
@@ -358,8 +376,119 @@ int compute_point_radius_candidates(
 
 }  // namespace
 
+struct photonx_index_handle {
+    NativeSpatialIndex index;
+};
+
 extern "C" uint32_t photonx_native_abi_version(void) {
     return kAbiVersion;
+}
+
+extern "C" int photonx_index_create(
+    const photonx_aabb* boxes,
+    uint32_t box_count,
+    double cell_size,
+    photonx_index_handle** out_handle
+) {
+    if (out_handle == nullptr) {
+        return PHOTONX_NATIVE_INVALID_ARGUMENT;
+    }
+    *out_handle = nullptr;
+
+    try {
+        auto handle = std::make_unique<photonx_index_handle>();
+        const int status =
+            build_native_index(boxes, box_count, cell_size, handle->index);
+        if (status != PHOTONX_NATIVE_OK) {
+            return status;
+        }
+        *out_handle = handle.release();
+        return PHOTONX_NATIVE_OK;
+    } catch (...) {
+        return PHOTONX_NATIVE_INTERNAL_ERROR;
+    }
+}
+
+extern "C" void photonx_index_destroy(photonx_index_handle* handle) {
+    delete handle;
+}
+
+extern "C" int photonx_index_candidate_pairs(
+    const photonx_index_handle* handle,
+    double tolerance,
+    photonx_pair* out_pairs,
+    uint32_t out_capacity,
+    uint32_t* out_count
+) {
+    if (handle == nullptr || out_count == nullptr) {
+        return PHOTONX_NATIVE_INVALID_ARGUMENT;
+    }
+    *out_count = 0U;
+
+    try {
+        std::vector<photonx_pair> pairs;
+        const int status = compute_pairs(handle->index, tolerance, pairs);
+        if (status != PHOTONX_NATIVE_OK) {
+            return status;
+        }
+        if (pairs.size() >
+            static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        const uint32_t required = static_cast<uint32_t>(pairs.size());
+        *out_count = required;
+        if (required == 0U) {
+            return PHOTONX_NATIVE_OK;
+        }
+        if (out_pairs == nullptr || out_capacity < required) {
+            return PHOTONX_NATIVE_BUFFER_TOO_SMALL;
+        }
+        std::copy(pairs.begin(), pairs.end(), out_pairs);
+        return PHOTONX_NATIVE_OK;
+    } catch (...) {
+        return PHOTONX_NATIVE_INTERNAL_ERROR;
+    }
+}
+
+extern "C" int photonx_index_point_radius_candidates(
+    const photonx_index_handle* handle,
+    const photonx_point_query* queries,
+    uint32_t query_count,
+    photonx_query_match* out_matches,
+    uint32_t out_capacity,
+    uint32_t* out_count
+) {
+    if (handle == nullptr || out_count == nullptr) {
+        return PHOTONX_NATIVE_INVALID_ARGUMENT;
+    }
+    *out_count = 0U;
+
+    try {
+        std::vector<photonx_query_match> matches;
+        const int status = compute_point_radius_candidates(
+            handle->index, queries, query_count, matches);
+        if (status != PHOTONX_NATIVE_OK) {
+            return status;
+        }
+        if (matches.size() >
+            static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        const uint32_t required = static_cast<uint32_t>(matches.size());
+        *out_count = required;
+        if (required == 0U) {
+            return PHOTONX_NATIVE_OK;
+        }
+        if (out_matches == nullptr || out_capacity < required) {
+            return PHOTONX_NATIVE_BUFFER_TOO_SMALL;
+        }
+        std::copy(matches.begin(), matches.end(), out_matches);
+        return PHOTONX_NATIVE_OK;
+    } catch (...) {
+        return PHOTONX_NATIVE_INTERNAL_ERROR;
+    }
 }
 
 extern "C" int photonx_candidate_pairs(
@@ -375,37 +504,18 @@ extern "C" int photonx_candidate_pairs(
         return PHOTONX_NATIVE_INVALID_ARGUMENT;
     }
 
-    *out_count = 0U;
-
-    try {
-        std::vector<photonx_pair> pairs;
-        const int status =
-            compute_pairs(boxes, box_count, tolerance, cell_size, pairs);
-        if (status != PHOTONX_NATIVE_OK) {
-            return status;
-        }
-
-        if (pairs.size() >
-            static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
-            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
-        }
-
-        const uint32_t required = static_cast<uint32_t>(pairs.size());
-        *out_count = required;
-
-        if (required == 0U) {
-            return PHOTONX_NATIVE_OK;
-        }
-
-        if (out_pairs == nullptr || out_capacity < required) {
-            return PHOTONX_NATIVE_BUFFER_TOO_SMALL;
-        }
-
-        std::copy(pairs.begin(), pairs.end(), out_pairs);
-        return PHOTONX_NATIVE_OK;
-    } catch (...) {
-        return PHOTONX_NATIVE_INTERNAL_ERROR;
+    photonx_index_handle* handle = nullptr;
+    const int create_status =
+        photonx_index_create(boxes, box_count, cell_size, &handle);
+    if (create_status != PHOTONX_NATIVE_OK) {
+        *out_count = 0U;
+        return create_status;
     }
+
+    const int status = photonx_index_candidate_pairs(
+        handle, tolerance, out_pairs, out_capacity, out_count);
+    photonx_index_destroy(handle);
+    return status;
 }
 
 extern "C" int photonx_point_radius_candidates(
@@ -422,41 +532,22 @@ extern "C" int photonx_point_radius_candidates(
         return PHOTONX_NATIVE_INVALID_ARGUMENT;
     }
 
-    *out_count = 0U;
-
-    try {
-        std::vector<photonx_query_match> matches;
-        const int status = compute_point_radius_candidates(
-            boxes,
-            box_count,
-            queries,
-            query_count,
-            cell_size,
-            matches
-        );
-        if (status != PHOTONX_NATIVE_OK) {
-            return status;
-        }
-
-        if (matches.size() >
-            static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
-            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
-        }
-
-        const uint32_t required = static_cast<uint32_t>(matches.size());
-        *out_count = required;
-
-        if (required == 0U) {
-            return PHOTONX_NATIVE_OK;
-        }
-
-        if (out_matches == nullptr || out_capacity < required) {
-            return PHOTONX_NATIVE_BUFFER_TOO_SMALL;
-        }
-
-        std::copy(matches.begin(), matches.end(), out_matches);
-        return PHOTONX_NATIVE_OK;
-    } catch (...) {
-        return PHOTONX_NATIVE_INTERNAL_ERROR;
+    photonx_index_handle* handle = nullptr;
+    const int create_status =
+        photonx_index_create(boxes, box_count, cell_size, &handle);
+    if (create_status != PHOTONX_NATIVE_OK) {
+        *out_count = 0U;
+        return create_status;
     }
+
+    const int status = photonx_index_point_radius_candidates(
+        handle,
+        queries,
+        query_count,
+        out_matches,
+        out_capacity,
+        out_count
+    );
+    photonx_index_destroy(handle);
+    return status;
 }
