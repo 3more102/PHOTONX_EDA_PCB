@@ -1,3 +1,5 @@
+from random import Random
+
 import pytest
 
 from photonx_eda_pcb.spatial_connectivity import AABB, SpatialHashIndex, candidate_pairs
@@ -58,6 +60,34 @@ def test_broken_native_library_does_not_silently_fallback(monkeypatch):
             with pytest.raises(NativeBackendLoadError, match="simulated loader failure"):
                 candidate_pairs(index, 0.1, backend="auto")
         assert attempts == 1
+    finally:
+        native_backend._load_library.cache_clear()
+
+
+def test_configured_native_library_is_authoritative(monkeypatch):
+    native_backend._load_library.cache_clear()
+    monkeypatch.setenv("PHOTONX_NATIVE_LIBRARY", "configured-broken.so")
+
+    discovery_calls = 0
+
+    def unexpected_discovery(_name):
+        nonlocal discovery_calls
+        discovery_calls += 1
+        return "system-photonx-native.so"
+
+    attempts = []
+
+    def fail_load(candidate):
+        attempts.append(candidate)
+        raise OSError("simulated configured-library failure")
+
+    monkeypatch.setattr(native_backend, "find_library", unexpected_discovery)
+    monkeypatch.setattr(native_backend.ctypes, "CDLL", fail_load)
+    try:
+        with pytest.raises(NativeBackendLoadError, match="configured-broken"):
+            native_backend._load_library()
+        assert discovery_calls == 0
+        assert attempts == ["configured-broken.so"]
     finally:
         native_backend._load_library.cache_clear()
 
@@ -234,4 +264,56 @@ def test_cpp_radius_batch_matches_python_center_rounding_at_cell_boundary():
     expected = radius_queries(index, ((center, 0.0, 0.0),), backend="python")
     assert expected == [[(0.0, "edge")]]
     assert radius_queries(index, ((center, 0.0, 0.0),), backend="native") == expected
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_candidate_pairs_deterministic_randomized_parity():
+    rng = Random(0x50484F54)
+    for case in range(12):
+        index = SpatialHashIndex((0.17, 0.31, 0.73)[case % 3])
+        order = list(range(48))
+        rng.shuffle(order)
+        boxes = {}
+        for i in range(48):
+            x = rng.uniform(-12.0, 12.0)
+            y = rng.uniform(-9.0, 9.0)
+            width = rng.uniform(0.0, 1.4)
+            height = rng.uniform(0.0, 1.2)
+            boxes[i] = AABB(x, y, x + width, y + height)
+        for i in order:
+            index.insert(f"box-{i:03d}", boxes[i])
+
+        for tolerance in (0.0, 0.001, 0.05, 0.25):
+            assert candidate_pairs(index, tolerance, backend="native") == candidate_pairs(
+                index, tolerance, backend="python"
+            )
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_radius_queries_deterministic_randomized_parity():
+    rng = Random(0x584441)
+    index = SpatialHashIndex(0.41)
+    order = list(range(72))
+    rng.shuffle(order)
+    boxes = {}
+    for i in range(72):
+        cx = rng.uniform(-6.0, 6.0)
+        cy = rng.uniform(-5.0, 5.0)
+        half_w = rng.uniform(0.0, 0.08)
+        half_h = rng.uniform(0.0, 0.08)
+        boxes[i] = AABB(cx - half_w, cy - half_h, cx + half_w, cy + half_h)
+    for i in order:
+        index.insert(f"point-{i:03d}", boxes[i])
+
+    queries = tuple(
+        (
+            rng.uniform(-6.5, 6.5),
+            rng.uniform(-5.5, 5.5),
+            rng.choice((-0.1, 0.0, 0.03, 0.2, 0.75, 1.5)),
+        )
+        for _ in range(64)
+    )
+    assert radius_queries(index, queries, backend="native") == radius_queries(
+        index, queries, backend="python"
+    )
 
