@@ -5,6 +5,7 @@ from photonx_eda_pcb.spatial_connectivity import native_backend
 from photonx_eda_pcb.spatial_connectivity.points import radius_query, radius_queries
 from photonx_eda_pcb.spatial_connectivity.native_backend import (
     NativeBackendLoadError,
+    NativeBackendUnsupported,
     native_available,
 )
 
@@ -208,4 +209,23 @@ def test_cpp_radius_batch_matches_python_center_rounding_at_cell_boundary():
     expected = radius_queries(index, ((center, 0.0, 0.0),), backend="python")
     assert expected == [[(0.0, "edge")]]
     assert radius_queries(index, ((center, 0.0, 0.0),), backend="native") == expected
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_candidate_pairs_rejects_excessive_total_query_work():
+    index = SpatialHashIndex(1.0)
+    for i in range(21):
+        index.insert(f"p-{i:02d}", AABB(0.0, 0.0, 0.0, 0.0))
+
+    with pytest.raises(NativeBackendUnsupported, match="status=3"):
+        candidate_pairs(index, 499.0, backend="native")
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_radius_batch_rejects_excessive_total_query_work():
+    index = SpatialHashIndex(1.0)
+    index.insert("origin", AABB(0.0, 0.0, 0.0, 0.0))
+    queries = tuple((0.0, 0.0, 499.0) for _ in range(21))
+
+    with pytest.raises(NativeBackendUnsupported, match="status=3"):
+        radius_queries(index, queries, backend="native")
 
