@@ -23,13 +23,13 @@ def infer_component_hypotheses_bruteforce(board:BoardModel,max_pair_distance_mm:
         distance,b_id,b=nearest;remaining.pop(b_id);result.append(_make_pair(a,b,distance))
     board.components=result;return result
 
-def infer_component_hypotheses(board:BoardModel,max_pair_distance_mm:float=4.0,*,use_spatial_index:bool=True,cell_size_mm:float|None=None)->list[ComponentHypothesis]:
+def infer_component_hypotheses(board:BoardModel,max_pair_distance_mm:float=4.0,*,use_spatial_index:bool=True,cell_size_mm:float|None=None,spatial_backend:str="auto")->list[ComponentHypothesis]:
     if not use_spatial_index:return infer_component_hypotheses_bruteforce(board,max_pair_distance_mm)
     pads=list(board.pads);by={p.id:p for p in pads};remaining=set(by);result=[]
     if not pads:
         board.components=[];return []
     idx=build_point_index(((p.id,p) for p in pads),lambda p:(p.center.x,p.center.y),float(cell_size_mm or max(1.0,max_pair_distance_mm)))
-    neighbor_lists=radius_queries(idx,((p.center.x,p.center.y,max_pair_distance_mm) for p in pads))
+    neighbor_lists=radius_queries(idx,((p.center.x,p.center.y,max_pair_distance_mm) for p in pads),backend=spatial_backend)
     neighbors={p.id:items for p,items in zip(pads,neighbor_lists)}
     while remaining:
         a_id=min(remaining);remaining.remove(a_id);a=by[a_id]
