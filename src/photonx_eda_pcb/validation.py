@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass,field
 from .models import BoardModel
 from .excellon_routing.validation import validate_route
+from .geometry_kernel import region_shape
 
 @dataclass(frozen=True)
 class ValidationIssue:
@@ -22,7 +23,7 @@ class ValidationReport:
 
 def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationReport:
     r=ValidationReport()
-    all_objects=[*board.tracks,*board.pads,*board.drills,*board.outline,*getattr(board,"slots",()),*getattr(board,"routes",())]
+    all_objects=[*board.tracks,*board.pads,*board.drills,*board.outline,*getattr(board,"slots",()),*getattr(board,"routes",()),*getattr(board,"regions",())]
     ids=[o.id for o in all_objects]
     if len(ids)!=len(set(ids)):r.issues.append(ValidationIssue("error","DUPLICATE_OBJECT_ID","object IDs must be globally unique"))
     idx=board.object_index();net_members=set()
@@ -32,7 +33,7 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
             if member not in idx:r.issues.append(ValidationIssue("error","NET_MEMBER_MISSING",f"{net.id} references missing object {member}",(net.id,member)))
             if member in net_members:r.issues.append(ValidationIssue("error","OBJECT_IN_MULTIPLE_NETS",f"{member} appears in more than one physical net",(member,)))
             net_members.add(member)
-    for obj in [*board.tracks,*board.pads]:
+    for obj in [*board.tracks,*board.pads,*getattr(board,"regions",())]:
         if obj.net_id and obj.id not in net_members:r.issues.append(ValidationIssue("error","OBJECT_NET_BACKREF_MISMATCH",f"{obj.id} has net_id but is not listed in that net",(obj.id,)))
     pad_ids={p.id for p in board.pads}
     for comp in board.components:
@@ -47,6 +48,18 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
         for code in validate_route(route):
             sev="warning" if code=="ROUTE_ZERO_LENGTH_SEGMENT" else "error"
             r.issues.append(ValidationIssue(sev,code,code.replace("_"," ").lower(),(route.id,)))
+    for region in getattr(board,"regions",()):
+        points=tuple(region.points)
+        if len(points)<4 or points[0]!=points[-1]:
+            r.issues.append(ValidationIssue("error","REGION_NOT_CLOSED","copper region must have a closed contour",(region.id,)))
+            continue
+        unique={(float(p.x),float(p.y)) for p in points[:-1]}
+        if len(unique)<3:
+            r.issues.append(ValidationIssue("error","REGION_VERTEX_COUNT_INVALID","copper region needs at least three unique vertices",(region.id,)))
+            continue
+        shape=region_shape(region)
+        if shape.is_empty or float(shape.area)<=0 or not shape.is_valid:
+            r.issues.append(ValidationIssue("error","REGION_GEOMETRY_INVALID","copper region polygon is empty, zero-area, or invalid",(region.id,)))
     if board.outline:
         degree={}
         def key(pt):return (round(pt.x/outline_tolerance_mm)*outline_tolerance_mm,round(pt.y/outline_tolerance_mm)*outline_tolerance_mm)
@@ -55,5 +68,5 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
         bad=[p for p,d in degree.items() if d!=2]
         if bad:r.issues.append(ValidationIssue("warning","OUTLINE_NOT_CLOSED",f"outline has {len(bad)} non-degree-2 endpoints"))
     else:r.issues.append(ValidationIssue("warning","NO_BOARD_OUTLINE","no board outline was reconstructed"))
-    if not board.nets and (board.pads or board.tracks):r.issues.append(ValidationIssue("error","NO_CONNECTIVITY","copper objects exist but no connectivity groups were generated"))
+    if not board.nets and (board.pads or board.tracks or getattr(board,"regions",())):r.issues.append(ValidationIssue("error","NO_CONNECTIVITY","copper objects exist but no connectivity groups were generated"))
     return r

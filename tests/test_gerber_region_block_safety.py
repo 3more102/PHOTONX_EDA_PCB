@@ -20,44 +20,24 @@ def _write(tmp_path: Path, body: str) -> Path:
     return path
 
 
-def test_region_fails_closed_in_strict_mode(tmp_path: Path):
+def test_linear_region_is_supported_without_leaking_tracks(tmp_path: Path):
     path = _write(
         tmp_path,
         "G36*\n"
         "X000000Y000000D02*\n"
         "X010000Y000000D01*\n"
         "X010000Y010000D01*\n"
+        "X000000Y010000D01*\n"
         "X000000Y000000D01*\n"
         "G37*\n",
     )
 
-    with pytest.raises(
-        UnsupportedFeatureError,
-        match="regions/aperture blocks are not implemented safely",
-    ):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
-
-
-def test_region_body_does_not_leak_tracks_in_permissive_mode(tmp_path: Path):
-    path = _write(
-        tmp_path,
-        "G36*\n"
-        "X000000Y000000D02*\n"
-        "X010000Y000000D01*\n"
-        "X010000Y010000D01*\n"
-        "X000000Y000000D01*\n"
-        "G37*\n",
-    )
-
-    result = GerberRS274XParser("F.Cu", strict=False).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     assert result.tracks == []
     assert result.pads == []
     assert result.outline == []
-    assert any(
-        diagnostic.code == "UNSUPPORTED_GERBER_CONSTRUCT"
-        for diagnostic in result.diagnostics
-    )
+    assert len(result.regions) == 1
 
 
 def test_aperture_block_fails_closed_in_strict_mode(tmp_path: Path):
@@ -71,7 +51,7 @@ def test_aperture_block_fails_closed_in_strict_mode(tmp_path: Path):
 
     with pytest.raises(
         UnsupportedFeatureError,
-        match="regions/aperture blocks are not implemented safely",
+        match="aperture blocks are not implemented safely",
     ):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
@@ -92,10 +72,15 @@ def test_aperture_block_body_does_not_leak_geometry_in_permissive_mode(
 
     assert result.tracks == []
     assert result.pads == []
+    assert result.regions == []
     assert result.outline == []
+    assert any(
+        diagnostic.code == "UNSUPPORTED_GERBER_CONSTRUCT"
+        for diagnostic in result.diagnostics
+    )
 
 
-def test_late_region_clears_prior_geometry_and_never_reenables(tmp_path: Path):
+def test_supported_region_does_not_disable_surrounding_geometry(tmp_path: Path):
     path = _write(
         tmp_path,
         "X000000Y000000D02*\n"
@@ -103,29 +88,40 @@ def test_late_region_clears_prior_geometry_and_never_reenables(tmp_path: Path):
         "G36*\n"
         "X020000Y000000D02*\n"
         "X030000Y000000D01*\n"
+        "X030000Y010000D01*\n"
+        "X020000Y000000D01*\n"
         "G37*\n"
         "X040000Y000000D01*\n",
     )
 
-    result = GerberRS274XParser("F.Cu", strict=False).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
 
-    assert result.tracks == []
+    assert len(result.tracks) == 2
+    assert len(result.regions) == 1
     assert result.pads == []
     assert result.outline == []
 
 
-@pytest.mark.parametrize(
-    "construct",
-    [
-        "G36*\nG37*\n",
-        "%ABD11*%\n%AB*%\n",
-    ],
-)
-def test_preflight_blocks_regions_and_aperture_blocks(
-    tmp_path: Path,
-    construct: str,
-):
-    path = _write(tmp_path, construct)
+def test_preflight_accepts_supported_linear_region(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "G36*\n"
+        "X000000Y000000D02*\n"
+        "X010000Y000000D01*\n"
+        "X010000Y010000D01*\n"
+        "X000000Y000000D01*\n"
+        "G37*\n",
+    )
+
+    report = preflight(path)
+
+    assert report.discovered_files == 1
+    assert report.ready_for_strict_reconstruction
+    assert report.strict_blockers == []
+
+
+def test_preflight_still_blocks_aperture_blocks(tmp_path: Path):
+    path = _write(tmp_path, "%ABD11*%\n%AB*%\n")
 
     report = preflight(path)
 

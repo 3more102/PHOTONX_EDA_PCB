@@ -1,5 +1,5 @@
 from .model import FidelitySection,FidelityReport
-DEFAULT_WEIGHTS={"tracks":2.0,"pads":2.0,"drills":2.0,"nets":3.0,"components":2.0,"outline":2.0,"mechanical_slots":2.0}
+DEFAULT_WEIGHTS={"tracks":2.0,"pads":2.0,"drills":2.0,"nets":3.0,"components":2.0,"outline":2.0,"mechanical_slots":2.0,"regions":2.0}
 def evaluate_fidelity(left,right,compare_fn=None,weights=None):
     from photonx_eda_pcb.roundtrip.compare import compare_board_models
     compare_fn=compare_fn or compare_board_models;weights={**DEFAULT_WEIGHTS,**(weights or {})}

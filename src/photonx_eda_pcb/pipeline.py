@@ -68,6 +68,7 @@ def reconstruct(
             r = GerberRS274XParser(layer, strict=cfg.strict_parsing).parse(item.path)
             board.tracks.extend(r.tracks)
             board.pads.extend(r.pads)
+            board.regions.extend(r.regions)
             board.outline.extend(r.outline)
             board.diagnostics.extend(r.diagnostics)
 

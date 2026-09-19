@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added bounded dark single-contour linear Gerber G36/G37 region reconstruction as exact copper polygons, with modal/incremental coordinates, step-repeat, supported whole-image transforms, source provenance, connectivity/DRC integration, validation, and explicit KiCad omission reporting; arc-bounded, multi-contour/hole, clear-polarity, and Edge.Cuts regions remain fail-closed.
 - Hardened legacy Gerber header placement: AS/IN/MI/SF/OF/IR commands are now considered late after the first coordinate statement, including non-emitting D02 moves, rather than only after physical geometry has already been emitted.
 - Preflight now classifies LATE_GERBER_* and DUPLICATE_GERBER_* diagnostics as strict blockers so parser-invalid header state cannot be reported as ready for strict reconstruction.
 - Expanded production Gerber aperture-transform support from identity-only to an exact modal LM/LR/LS subset: mirror-symmetric C/R/O apertures accept all LM states, circles accept arbitrary finite LR, rectangular/obround flashes accept 90-degree-step LR, and positive LS scales flash dimensions plus circular draw/arc widths. Non-orthogonal R/O flashes remain fail-closed.

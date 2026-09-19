@@ -70,6 +70,7 @@ def _is_strict_blocker(code: str) -> bool:
         or code.startswith("LATE_GERBER_")
         or code.startswith("DUPLICATE_GERBER_")
         or code.startswith("GERBER_ARC_") and code.endswith("_UNSUPPORTED")
+        or code.startswith("GERBER_REGION_")
         or code in {
             "NON_CIRCULAR_DRAW",
             "GERBER_STEP_REPEAT_LIMIT",

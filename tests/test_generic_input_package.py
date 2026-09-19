@@ -62,7 +62,7 @@ def test_zip_package_can_be_reconstructed(tmp_path: Path):
 def test_preflight_reports_strict_blocker_without_silent_drop(tmp_path: Path):
     p = tmp_path / "top.gtl"
     p.write_text(
-        "%FSLAX24Y24*%\n%MOMM*%\nG36*\nM02*\n",
+        "%FSLAX24Y24*%\n%MOMM*%\n%ABD10*%\n%AB*%\nM02*\n",
         encoding="utf-8",
     )
     report = preflight(tmp_path)
@@ -72,6 +72,22 @@ def test_preflight_reports_strict_blocker_without_silent_drop(tmp_path: Path):
         "UNSUPPORTED_GERBER_CONSTRUCT" in blocker
         for blocker in report.strict_blockers
     )
+
+
+def test_preflight_accepts_supported_linear_region(tmp_path: Path):
+    p = tmp_path / "top.gtl"
+    p.write_text(
+        "%FSLAX24Y24*%\n%MOMM*%\n"
+        "G36*\n"
+        "X000000Y000000D02*\n"
+        "X010000Y000000D01*\n"
+        "X010000Y010000D01*\n"
+        "X000000Y000000D01*\n"
+        "G37*\nM02*\n",
+        encoding="utf-8",
+    )
+    report = preflight(tmp_path)
+    assert report.ready_for_strict_reconstruction
 
 
 def test_zip_path_traversal_is_rejected(tmp_path: Path):
