@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Added bounded standard P regular-polygon aperture support for D03 flashes. P apertures validate outer diameter, integer vertex count 3–12, optional template rotation, and optional centered round hole; LM mirroring is applied before LR, with LS, whole-image IR, step-repeat and ordered LPD/LPC composition preserved. Polygon outer boundaries are exact CopperRegion geometry, while optional round holes retain the 0.005 mm chord-error policy. P-aperture D01 remains explicitly fail-closed.
+- Extended standard P aperture support to solid linear D01 draws on material layers. Because the regular polygon aperture is convex, PHOTONX materializes the exact swept image as the convex hull of the transformed aperture at the segment endpoints, preserving template rotation, LM-before-LR, LS, whole-image IR, step-repeat, provenance and ordered LPD/LPC composition. Holed P D01 remains fail-closed.
+
+- Added bounded standard P regular-polygon aperture support for D03 flashes. P apertures validate outer diameter, integer vertex count 3–12, optional template rotation, and optional centered round hole; LM mirroring is applied before LR, with LS, whole-image IR, step-repeat and ordered LPD/LPC composition preserved. Polygon outer boundaries are exact CopperRegion geometry, while optional round holes retain the 0.005 mm chord-error policy. Holed P-aperture D01 remains explicitly fail-closed; solid P D01 is supported by the exact sweep path above.
 
 - Added specification-compliant zero-diameter standard C aperture support. C0 D01/D03/G02/G03 objects are accepted as legal no-image operations, emit no copper/outline geometry, preserve modal/current coordinate progression, and remain preflight-safe. Arc geometry is still validated before a zero-width arc is treated as image-empty.
 
