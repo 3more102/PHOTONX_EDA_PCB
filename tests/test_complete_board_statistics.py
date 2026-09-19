@@ -62,11 +62,17 @@ def test_legacy_board_statistics_cover_current_physical_model():
 
 def test_extended_statistics_validation_covers_new_counts_and_lengths():
     stats = compute_board_stats(_board_with_extended_physical_evidence())
-    invalid = replace(stats, routes=-1, route_length_mm=-1.0)
+    invalid = replace(
+        stats,
+        routes=-1,
+        total_track_length_mm=-1.0,
+        route_length_mm=-1.0,
+    )
 
     issues = validate_stats(invalid)
 
     assert "STATS_NEGATIVE_ROUTES" in issues
+    assert "STATS_NEGATIVE_TRACK_LENGTH" in issues
     assert "STATS_NEGATIVE_ROUTE_LENGTH" in issues
 
 
