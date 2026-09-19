@@ -40,6 +40,8 @@ typedef struct photonx_query_match {
     uint32_t point;
 } photonx_query_match;
 
+typedef struct photonx_point_index photonx_point_index;
+
 enum photonx_native_status {
     PHOTONX_NATIVE_OK = 0,
     PHOTONX_NATIVE_BUFFER_TOO_SMALL = 1,
@@ -66,6 +68,26 @@ PHOTONX_NATIVE_API int photonx_point_radius_candidates(
     const photonx_point_query* queries,
     uint32_t query_count,
     double cell_size,
+    photonx_query_match* out_matches,
+    uint32_t out_capacity,
+    uint32_t* out_count
+);
+
+PHOTONX_NATIVE_API int photonx_point_index_create(
+    const photonx_aabb* boxes,
+    uint32_t box_count,
+    double cell_size,
+    photonx_point_index** out_index
+);
+
+PHOTONX_NATIVE_API void photonx_point_index_destroy(
+    photonx_point_index* index
+);
+
+PHOTONX_NATIVE_API int photonx_point_index_radius_candidates(
+    const photonx_point_index* index,
+    const photonx_point_query* queries,
+    uint32_t query_count,
     photonx_query_match* out_matches,
     uint32_t out_capacity,
     uint32_t* out_count
