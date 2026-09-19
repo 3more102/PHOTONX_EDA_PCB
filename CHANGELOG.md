@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Expanded production Gerber aperture-transform support from identity-only to an exact modal LM/LR/LS subset: mirror-symmetric C/R/O apertures accept all LM states, circles accept arbitrary finite LR, rectangular/obround flashes accept 90-degree-step LR, and positive LS scales flash dimensions plus circular draw/arc widths. Non-orthogonal R/O flashes remain fail-closed.
+- Aperture transform state is applied to the original aperture at object creation (not cumulatively), recorded as provenance, and included in deterministic IDs.
 - Corrected Gerber arc provenance under legacy image transforms: reflecting exactly one MI axis now reports the transformed output arc direction as the opposite of the source CW/CCW command, while two-axis mirroring, positive SF, OF translation, and IR rotation preserve orientation. Arc evidence now records both source and output directions.
 - Added legacy Gerber `SF` coordinate scaling for the specification range 0.0001..999.99999. SF scales coordinate data only; apertures and step-repeat distances remain unchanged. Uniform scaling is supported for circular interpolation with output-space chord-error preservation, while anisotropic circular interpolation fails closed instead of being approximated as an ellipse.
 - Added `gerber_scale_factor` provenance and transform-aware stable-ID inputs for non-identity SF state.

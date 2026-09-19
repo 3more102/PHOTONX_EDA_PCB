@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import isclose, pi
+from math import isclose, isfinite, pi
 from pathlib import Path
 import re
 
@@ -168,6 +168,12 @@ class GerberRS274XParser:
         self.scale_source: SourceRef | None = None
         self.axis_select_source: SourceRef | None = None
         self.image_name_source: SourceRef | None = None
+        self.aperture_mirror = "N"
+        self.aperture_rotation_deg = 0.0
+        self.aperture_scale = 1.0
+        self.aperture_mirror_source: SourceRef | None = None
+        self.aperture_rotation_source: SourceRef | None = None
+        self.aperture_scale_source: SourceRef | None = None
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -347,60 +353,139 @@ class GerberRS274XParser:
         line_no: int,
         out: GerberLayerResult,
     ) -> None:
-        transform = None
-        value = None
-
         match = _APERTURE_MIRROR.match(line)
         if match is not None:
-            transform = "mirroring"
-            value = match.group(1).upper()
-            is_identity = value == "N"
-        else:
-            match = _APERTURE_ROTATION.match(line)
-            if match is not None:
-                transform = "rotation"
-                value = float(match.group(1))
-                normalized = value % 360.0
-                is_identity = isclose(
-                    normalized, 0.0, rel_tol=0.0, abs_tol=1e-12
-                ) or isclose(
-                    normalized, 360.0, rel_tol=0.0, abs_tol=1e-12
-                )
-            else:
-                match = _APERTURE_SCALING.match(line)
-                if match is not None:
-                    transform = "scaling"
-                    value = float(match.group(1))
-                    if value <= 0:
-                        self._parse_error_or_warn(
-                            path,
-                            line_no,
-                            line,
-                            "INVALID_GERBER_APERTURE_TRANSFORM",
-                            "Gerber LS scaling factor must be greater than zero",
-                            out,
-                        )
-                        if not self.strict:
-                            self._disable_image_geometry(out)
-                        return
-                    is_identity = isclose(
-                        value, 1.0, rel_tol=0.0, abs_tol=1e-12
-                    )
-                else:
-                    self._parse_error_or_warn(
-                        path,
-                        line_no,
-                        line,
-                        "INVALID_GERBER_APERTURE_TRANSFORM",
-                        "invalid Gerber LM/LR/LS aperture-transform command",
-                        out,
-                    )
-                    if not self.strict:
-                        self._disable_image_geometry(out)
-                    return
-
-        if is_identity:
+            self.aperture_mirror = match.group(1).upper()
+            self.aperture_mirror_source = SourceRef(str(path), line_no, line)
             return
+
+        match = _APERTURE_ROTATION.match(line)
+        if match is not None:
+            value = float(match.group(1))
+            if not isfinite(value):
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_TRANSFORM",
+                    "Gerber LR rotation must be finite",
+                    out,
+                )
+                if not self.strict:
+                    self._disable_image_geometry(out)
+                return
+            self.aperture_rotation_deg = value % 360.0
+            self.aperture_rotation_source = SourceRef(str(path), line_no, line)
+            return
+
+        match = _APERTURE_SCALING.match(line)
+        if match is not None:
+            value = float(match.group(1))
+            if not isfinite(value) or value <= 0:
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_TRANSFORM",
+                    "Gerber LS scaling factor must be greater than zero",
+                    out,
+                )
+                if not self.strict:
+                    self._disable_image_geometry(out)
+                return
+            self.aperture_scale = value
+            self.aperture_scale_source = SourceRef(str(path), line_no, line)
+            return
+
+        self._parse_error_or_warn(
+            path,
+            line_no,
+            line,
+            "INVALID_GERBER_APERTURE_TRANSFORM",
+            "invalid Gerber LM/LR/LS aperture-transform command",
+            out,
+        )
+        if not self.strict:
+            self._disable_image_geometry(out)
+
+    def _aperture_transform_id_parts(self) -> list[object]:
+        parts: list[object] = []
+        if self.aperture_mirror != "N":
+            parts.extend(["lm", self.aperture_mirror])
+        if not isclose(
+            self.aperture_rotation_deg, 0.0, rel_tol=0.0, abs_tol=1e-12
+        ):
+            parts.extend(["lr", self.aperture_rotation_deg])
+        if not isclose(
+            self.aperture_scale, 1.0, rel_tol=0.0, abs_tol=1e-12
+        ):
+            parts.extend(["ls", self.aperture_scale])
+        return parts
+
+    def _add_aperture_transform_provenance(self, prov: Provenance) -> None:
+        if self.aperture_mirror != "N" and self.aperture_mirror_source is not None:
+            prov.add_source(self.aperture_mirror_source)
+            prov.add_evidence(
+                Evidence(
+                    "gerber_aperture_mirror",
+                    f"mirror={self.aperture_mirror}",
+                    1.0,
+                    self.aperture_mirror_source,
+                )
+            )
+        if (
+            not isclose(
+                self.aperture_rotation_deg, 0.0, rel_tol=0.0, abs_tol=1e-12
+            )
+            and self.aperture_rotation_source is not None
+        ):
+            prov.add_source(self.aperture_rotation_source)
+            prov.add_evidence(
+                Evidence(
+                    "gerber_aperture_rotation",
+                    f"rotation_deg_ccw={self.aperture_rotation_deg:.12g}",
+                    1.0,
+                    self.aperture_rotation_source,
+                )
+            )
+        if (
+            not isclose(self.aperture_scale, 1.0, rel_tol=0.0, abs_tol=1e-12)
+            and self.aperture_scale_source is not None
+        ):
+            prov.add_source(self.aperture_scale_source)
+            prov.add_evidence(
+                Evidence(
+                    "gerber_aperture_scale",
+                    f"scale={self.aperture_scale:.12g}",
+                    1.0,
+                    self.aperture_scale_source,
+                )
+            )
+
+    def _transformed_aperture_size(
+        self,
+        aperture: Aperture,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+    ) -> tuple[float, float] | None:
+        size_x = aperture.x * self.aperture_scale
+        size_y = aperture.y * self.aperture_scale
+
+        # All currently representable C/R/O apertures and exactly reduced
+        # simple macros are centered and mirror-symmetric, so LM does not alter
+        # their extents. LR is geometry-invariant for circles.
+        if aperture.shape == "C":
+            return size_x, size_y
+
+        rotated = self._orthogonal_rectangle_size(
+            size_x,
+            size_y,
+            self.aperture_rotation_deg,
+        )
+        if rotated is not None:
+            return rotated
 
         self._fail_or_warn(
             path,
@@ -408,13 +493,15 @@ class GerberRS274XParser:
             line,
             "UNSUPPORTED_GERBER_APERTURE_TRANSFORM",
             (
-                f"non-identity Gerber aperture {transform} ({value}) changes "
-                "object geometry and is not modeled safely"
+                f"Gerber LR{self.aperture_rotation_deg:.12g} rotates "
+                f"{aperture.shape} aperture D{aperture.code} to a non-axis-aligned "
+                "shape that the current PadCandidate model cannot represent exactly"
             ),
             out,
         )
         if not self.strict:
             self._disable_image_geometry(out)
+        return None
 
     def _handle_axis_select(
         self,
@@ -1767,7 +1854,7 @@ class GerberRS274XParser:
         src = SourceRef(str(path), line_no, line)
         source_direction = "CW" if clockwise else "CCW"
         output_direction = self._output_arc_direction(clockwise)
-        width = max(aperture.x, aperture.y)
+        width = max(aperture.x, aperture.y) * self.aperture_scale
 
         for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
             repeated_center = self._transform_output_point(
@@ -1799,6 +1886,7 @@ class GerberRS274XParser:
                     self.layer,
                 ]
                 id_parts.extend(self._image_transform_id_parts())
+                id_parts.extend(self._aperture_transform_id_parts())
                 if self.step_repeat is not None:
                     id_parts.extend(["sr", x_index, y_index])
                 obj_id = stable_id("trk", *id_parts)
@@ -1810,6 +1898,7 @@ class GerberRS274XParser:
                     dx_mm,
                     dy_mm,
                 )
+                self._add_aperture_transform_provenance(prov)
                 prov.add_evidence(
                     Evidence(
                         "gerber_arc_tessellation",
@@ -2247,7 +2336,7 @@ class GerberRS274XParser:
                         )
                         self.current = nxt
                         continue
-                    width = ap.x
+                    width = ap.x * self.aperture_scale
 
                     for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
                         start = self._transform_output_point(
@@ -2267,12 +2356,14 @@ class GerberRS274XParser:
                             self.layer,
                         ]
                         id_parts.extend(self._image_transform_id_parts())
+                        id_parts.extend(self._aperture_transform_id_parts())
                         if self.step_repeat is not None:
                             id_parts.extend(["sr", x_index, y_index])
                         obj_id = stable_id("trk", *id_parts)
                         prov = self._step_repeat_provenance(
                             src, x_index or 0, y_index or 0, dx_mm, dy_mm
                         )
+                        self._add_aperture_transform_provenance(prov)
                         if self.layer == "Edge.Cuts":
                             out.outline.append(
                                 OutlineSegment(obj_id, start, end, prov)
@@ -2290,7 +2381,13 @@ class GerberRS274XParser:
                             )
 
                 elif operation == "3":
-                    size_x, size_y = self._rotate_image_size(ap.x, ap.y)
+                    transformed_size = self._transformed_aperture_size(
+                        ap, p, line_no, line, out
+                    )
+                    if transformed_size is None:
+                        self.current = nxt
+                        continue
+                    size_x, size_y = self._rotate_image_size(*transformed_size)
                     for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
                         center = self._transform_output_point(
                             nxt, dx_mm, dy_mm
@@ -2304,12 +2401,14 @@ class GerberRS274XParser:
                             self.layer,
                         ]
                         id_parts.extend(self._image_transform_id_parts())
+                        id_parts.extend(self._aperture_transform_id_parts())
                         if self.step_repeat is not None:
                             id_parts.extend(["sr", x_index, y_index])
                         obj_id = stable_id("pad", *id_parts)
                         prov = self._step_repeat_provenance(
                             src, x_index or 0, y_index or 0, dx_mm, dy_mm
                         )
+                        self._add_aperture_transform_provenance(prov)
                         out.pads.append(
                             PadCandidate(
                                 obj_id,
