@@ -3048,6 +3048,48 @@ class GerberRS274XParser:
 
         self.current = nxt
 
+    def _composition_operation_affects_component(
+        self,
+        operation,
+        component_shape,
+    ) -> bool:
+        """Return whether one ordered image operation contributes to a component.
+
+        Dark geometry contributes when final material overlaps it with positive
+        area. Clear geometry contributes when its boundary defines a non-zero
+        length part of the final component boundary. Point-only contact does not
+        alter material and therefore does not create provenance dependency.
+        """
+        operation_shape = region_shape(operation.geometry)
+        if operation.polarity == "dark":
+            overlap = component_shape.intersection(operation_shape)
+            return not overlap.is_empty and float(overlap.area) > 0.0
+
+        boundary_overlap = component_shape.boundary.intersection(
+            operation_shape.boundary
+        )
+        return not boundary_overlap.is_empty and float(boundary_overlap.length) > 0.0
+
+    def _layer_polarity_source_for_operation(self, operation) -> SourceRef | None:
+        """Return the LP command that established polarity for one region operation."""
+        source_lines = [
+            source.line
+            for source in operation.geometry.provenance.sources
+            if source.line is not None
+        ]
+        if not source_lines:
+            return None
+
+        operation_line = min(source_lines)
+        candidates = [
+            source
+            for source in self.layer_polarity_sources
+            if source.line is not None and source.line <= operation_line
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda source: source.line or -1)
+
     def _finalize_layer_polarity_image(
         self,
         path: Path,
@@ -3109,10 +3151,6 @@ class GerberRS274XParser:
             return
 
         operations = self.region_image_operations.operations
-        ordered_signature = tuple(
-            (operation.polarity, operation.geometry.id)
-            for operation in operations
-        )
         dark_count = sum(operation.polarity == "dark" for operation in operations)
         clear_count = sum(operation.polarity == "clear" for operation in operations)
         output_count = len(components)
@@ -3124,23 +3162,44 @@ class GerberRS274XParser:
                 tuple(Point(x, y) for x, y in ring)
                 for ring in component.holes
             )
+            validation_region = CopperRegion(
+                "validation",
+                shell,
+                self.layer,
+                holes=holes,
+            )
+            component_shape = region_shape(validation_region)
+            relevant_operations = tuple(
+                operation
+                for operation in operations
+                if self._composition_operation_affects_component(
+                    operation,
+                    component_shape,
+                )
+            )
+            relevant_signature = tuple(
+                (operation.polarity, operation.geometry.id)
+                for operation in relevant_operations
+            )
             obj_id = stable_id(
                 "regcmp",
                 path.name,
                 self.layer,
-                ordered_signature,
-                component_index,
+                relevant_signature,
                 component.shell,
                 component.holes,
             )
             prov = Provenance()
-            for operation in operations:
+            relevant_polarity_sources: list[tuple[object, SourceRef]] = []
+            for operation in relevant_operations:
                 for source in operation.geometry.provenance.sources:
                     prov.add_source(source)
                 for evidence in operation.geometry.provenance.evidence:
                     prov.add_evidence(evidence)
-            for source in self.layer_polarity_sources:
-                prov.add_source(source)
+                polarity_source = self._layer_polarity_source_for_operation(operation)
+                if polarity_source is not None:
+                    prov.add_source(polarity_source)
+                    relevant_polarity_sources.append((operation, polarity_source))
 
             region = CopperRegion(
                 obj_id,
@@ -3149,19 +3208,30 @@ class GerberRS274XParser:
                 provenance=prov,
                 holes=holes,
             )
-            output_area = float(region_shape(region).area)
+            output_area = float(component_shape.area)
+            composition_source = next(
+                (
+                    source
+                    for operation, source in relevant_polarity_sources
+                    if getattr(operation, "polarity", None) == "clear"
+                ),
+                relevant_polarity_sources[0][1]
+                if relevant_polarity_sources
+                else None,
+            )
             prov.add_evidence(
                 Evidence(
                     "gerber_layer_polarity_composition",
                     (
                         f"ordered_operations={len(operations)}; "
+                        f"relevant_operations={len(relevant_operations)}; "
                         f"dark_operations={dark_count}; "
                         f"clear_operations={clear_count}; "
                         f"output_component={component_index + 1}/{output_count}; "
                         f"output_area_mm2={output_area:.12g}"
                     ),
                     1.0,
-                    clear_source,
+                    composition_source,
                 )
             )
             composed_regions.append(region)
