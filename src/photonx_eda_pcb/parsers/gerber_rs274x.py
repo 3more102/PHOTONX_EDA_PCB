@@ -2319,6 +2319,20 @@ class GerberRS274XParser:
                 self._disable_image_geometry(out)
             return
 
+        if not isfinite(x_step_mm) or not isfinite(y_step_mm):
+            self.step_repeat = None
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_STEP_REPEAT",
+                "step-and-repeat increments overflow after active-unit conversion",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
         if x_count < 1 or y_count < 1:
             self.step_repeat = None
             self._fail_or_warn(
