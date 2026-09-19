@@ -438,6 +438,53 @@ def polygonize_flash(
     raise ValueError(f"unsupported Gerber flash shape for polygonization: {kind!r}")
 
 
+def polygonize_rotated_flash(
+    center_x: float,
+    center_y: float,
+    size_x: float,
+    size_y: float,
+    shape: str,
+    *,
+    rotation_deg: float = 0.0,
+    max_chord_error_mm: float = 0.005,
+    max_arc_segments: int = 4096,
+) -> FlashPolygonization:
+    """Return a solid C/R/O flash polygon at an arbitrary finite rotation."""
+
+    rotation = float(rotation_deg)
+    if not isfinite(rotation):
+        raise ValueError("Gerber flash rotation must be finite")
+    rotation %= 360.0
+
+    base = polygonize_flash(
+        center_x,
+        center_y,
+        size_x,
+        size_y,
+        shape,
+        max_chord_error_mm=max_chord_error_mm,
+        max_arc_segments=max_arc_segments,
+    )
+    geometry = base.geometry
+    if not isclose(rotation, 0.0, rel_tol=0.0, abs_tol=1e-15):
+        geometry = rotate(
+            geometry,
+            rotation,
+            origin=(float(center_x), float(center_y)),
+            use_radians=False,
+        )
+    if not isinstance(geometry, Polygon):
+        raise ValueError("Gerber rotated flash produced non-polygonal geometry")
+    _validate_flash_polygon(geometry)
+    return FlashPolygonization(
+        geometry=geometry,
+        shape=base.shape,
+        curved_segments=base.curved_segments,
+        max_chord_error_mm=base.max_chord_error_mm,
+        approximated=base.approximated,
+    )
+
+
 def _circle_points(
     cx: float,
     cy: float,
