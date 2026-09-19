@@ -2,7 +2,11 @@ import math
 
 import pytest
 
-from photonx_eda_pcb.gerber_image import polygonize_flash, polygonize_rotated_flash
+from photonx_eda_pcb.gerber_image import (
+    polygonize_flash,
+    polygonize_holed_flash,
+    polygonize_rotated_flash,
+)
 
 
 def test_rectangular_flash_polygonization_is_exact():
@@ -150,3 +154,84 @@ def test_rotated_flash_rejects_non_finite_rotation():
             "R",
             rotation_deg=math.inf,
         )
+
+
+def test_holed_rectangular_flash_preserves_one_transparent_hole():
+    result = polygonize_holed_flash(
+        0.0,
+        0.0,
+        4.0,
+        2.0,
+        "R",
+        1.0,
+    )
+
+    assert result.geometry.is_valid
+    assert len(result.geometry.interiors) == 1
+    assert result.outer_curved_segments == 0
+    assert result.hole_curved_segments > 0
+    expected_hole = polygonize_flash(0.0, 0.0, 1.0, 1.0, "C")
+    assert result.geometry.area == pytest.approx(8.0 - expected_hole.geometry.area)
+
+
+def test_holed_obround_flash_supports_rotation_with_bounded_curves():
+    result = polygonize_holed_flash(
+        1.0,
+        -2.0,
+        4.0,
+        2.0,
+        "O",
+        1.0,
+        rotation_deg=37.0,
+    )
+
+    assert result.approximated
+    assert len(result.geometry.interiors) == 1
+    assert result.outer_curved_segments > 0
+    assert result.hole_curved_segments > 0
+    assert result.max_chord_error_mm == pytest.approx(0.005)
+
+
+@pytest.mark.parametrize(
+    "hole",
+    [0.0, -0.1, 2.0, 2.1],
+)
+def test_holed_flash_rejects_invalid_or_non_fitting_hole(hole: float):
+    match = (
+        "must be positive"
+        if hole <= 0.0
+        else "must strictly fit"
+    )
+    with pytest.raises(ValueError, match=match):
+        polygonize_holed_flash(
+            0.0,
+            0.0,
+            4.0,
+            2.0,
+            "R",
+            hole,
+        )
+
+
+def test_holed_flash_is_deterministic():
+    first = polygonize_holed_flash(
+        1.25,
+        -0.75,
+        5.0,
+        1.5,
+        "O",
+        0.5,
+        rotation_deg=19.5,
+    )
+    second = polygonize_holed_flash(
+        1.25,
+        -0.75,
+        5.0,
+        1.5,
+        "O",
+        0.5,
+        rotation_deg=19.5,
+    )
+
+    assert first == second
+    assert first.geometry.equals_exact(second.geometry, tolerance=0.0)

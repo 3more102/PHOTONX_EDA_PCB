@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added bounded support for one centered round-hole modifier on standard C/R/O D03 flashes. Holed flashes are materialized as CopperRegion polygons whose interior ring is transparent within that flash operation, preserving Gerber semantics under dark/clear composition rather than converting the hole into a destructive clear operation. LR/LS, whole-image IR, step-repeat, provenance, connectivity and DRC remain supported. Invalid/non-fitting holes plus holed D01/G02/G03 draws remain fail-closed.
+
 - Added arbitrary finite `LR` support for rectangular and obround D03 flashes on material layers. Orthogonal cases remain PadCandidate objects; non-orthogonal flashes are materialized as CopperRegion polygons so exact rectangular geometry and 0.005 mm chord-error-bounded obround geometry can participate in step-repeat, whole-image transforms, connectivity/DRC, provenance, and ordered LPD/LPC composition without suppressing the file.
 
 - Extended rectangular and obround linear D01 sweeps to arbitrary finite Gerber `LR` rotation. Rotated rectangular sweeps remain polygon-exact; obround curved boundaries retain the 0.005 mm chord-error policy. Effective aperture rotation composes with whole-image `IR`, is recorded in provenance, and participates in LPD/LPC composition. Non-circular Edge.Cuts draws remain fail-closed.

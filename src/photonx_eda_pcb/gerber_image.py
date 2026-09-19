@@ -51,6 +51,19 @@ class FlashPolygonization:
 
 
 @dataclass(frozen=True)
+class HoledFlashPolygonization:
+    """Polygonal standard aperture flash with one centered round hole."""
+
+    geometry: Polygon
+    shape: str
+    hole_diameter: float
+    outer_curved_segments: int
+    hole_curved_segments: int
+    max_chord_error_mm: float
+    approximated: bool
+
+
+@dataclass(frozen=True)
 class TrackPolygonization:
     """Polygonal circular-aperture linear stroke plus approximation metadata."""
 
@@ -482,6 +495,77 @@ def polygonize_rotated_flash(
         curved_segments=base.curved_segments,
         max_chord_error_mm=base.max_chord_error_mm,
         approximated=base.approximated,
+    )
+
+
+def polygonize_holed_flash(
+    center_x: float,
+    center_y: float,
+    size_x: float,
+    size_y: float,
+    shape: str,
+    hole_diameter: float,
+    *,
+    rotation_deg: float = 0.0,
+    max_chord_error_mm: float = 0.005,
+    max_arc_segments: int = 4096,
+) -> HoledFlashPolygonization:
+    """Return the solid part of a standard C/R/O flash with a round hole.
+
+    Gerber aperture holes are transparent: the hole is excluded from this
+    operation geometry rather than emitted as a separate clear operation.
+    """
+
+    sx = float(size_x)
+    sy = float(size_y)
+    hole = float(hole_diameter)
+    kind = str(shape).upper()
+    if hole <= 0.0:
+        raise ValueError("Gerber aperture hole diameter must be positive")
+    if hole >= min(sx, sy):
+        raise ValueError("Gerber aperture hole must strictly fit within aperture")
+
+    outer = polygonize_rotated_flash(
+        center_x,
+        center_y,
+        sx,
+        sy,
+        kind,
+        rotation_deg=rotation_deg,
+        max_chord_error_mm=max_chord_error_mm,
+        max_arc_segments=max_arc_segments,
+    )
+    hole_poly = polygonize_flash(
+        center_x,
+        center_y,
+        hole,
+        hole,
+        "C",
+        max_chord_error_mm=max_chord_error_mm,
+        max_arc_segments=max_arc_segments,
+    )
+    geometry = outer.geometry.difference(hole_poly.geometry)
+    if not isinstance(geometry, Polygon):
+        raise ValueError("Gerber holed flash produced non-polygonal geometry")
+    if (
+        geometry.is_empty
+        or float(geometry.area) <= 0.0
+        or not geometry.is_valid
+        or len(geometry.interiors) != 1
+    ):
+        raise ValueError("Gerber holed flash did not preserve one centered hole")
+
+    return HoledFlashPolygonization(
+        geometry=geometry,
+        shape=kind,
+        hole_diameter=hole,
+        outer_curved_segments=outer.curved_segments,
+        hole_curved_segments=hole_poly.curved_segments,
+        max_chord_error_mm=max(
+            outer.max_chord_error_mm,
+            hole_poly.max_chord_error_mm,
+        ),
+        approximated=outer.approximated or hole_poly.approximated,
     )
 
 
