@@ -37,7 +37,7 @@ def _candidate_files(source: Path):
                 for p in source.rglob("*")
                 if p.is_file() and not p.is_symlink()
             ),
-            key=lambda p: (p.as_posix().lower(), p.as_posix()),
+            key=lambda p: p.as_posix().lower(),
         )
         return
     raise FileNotFoundError(source)
