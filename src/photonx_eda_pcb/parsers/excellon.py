@@ -49,7 +49,7 @@ class ExcellonParser:
     and are converted to deterministic polyline points with explicit evidence.
     """
     def __init__(self, strict: bool = True):
-        self.strict = strict; self.units = "mm"; self.zero = "L"; self.units_declared = False
+        self.strict = strict; self.units = "mm"; self.zero = "L"; self.units_declared = False; self.incremental = False
         self.fmt = CoordinateFormat(2, 4, "L"); self.tools = {}; self.tool = None; self.current = Point(0.0, 0.0)
         self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
         self.geometry_enabled=True
@@ -66,6 +66,11 @@ class ExcellonParser:
 
     def _route_xy(self,xraw,yraw):
         x=self._decode(xraw);y=self._decode(yraw)
+        if self.incremental:
+            return (
+                self.current.x if x is None else self.current.x+x,
+                self.current.y if y is None else self.current.y+y,
+            )
         return (self.current.x if x is None else x,self.current.y if y is None else y)
 
     def _route_arc_tolerance_mm(self):
@@ -281,17 +286,21 @@ class ExcellonParser:
             if line.startswith(("FMAT,", "VER,")):
                 continue
             if line == "G90":
+                self.incremental=False
                 continue
             if line == "G91":
-                if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: incremental Excellon coordinates are unsupported: {line}")
-                out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_INCREMENTAL",line,str(p),line_no))
-                self._disable_geometry(out)
+                self.incremental=True
                 continue
             if line.startswith("ICI,"):
                 if line == "ICI,OFF":
+                    self.incremental=False
                     continue
-                if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: incremental Excellon coordinates are unsupported: {line}")
-                out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_INCREMENTAL",line,str(p),line_no))
+                if line == "ICI,ON":
+                    self.incremental=True
+                    continue
+                message=f"unsupported Excellon incremental-input command: {line}"
+                if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}")
+                out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_ICI_MODE",message,str(p),line_no))
                 self._disable_geometry(out)
                 continue
             if not self.geometry_enabled:
@@ -300,6 +309,12 @@ class ExcellonParser:
                 if self.route.tool_down:
                     if self.strict:raise ParseError(f"{p}:{line_no}: G85 encountered while route tool is down")
                     out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","G85 while route active",str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
+                if self.incremental:
+                    message="incremental Excellon G85 slot coordinates are not yet modeled"
+                    if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}: {line}")
+                    out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_INCREMENTAL_SLOT",message,str(p),line_no))
                     self._disable_geometry(out)
                     continue
                 try:x1r,y1r,x2r,y2r=parse_slot_command(line)
@@ -415,7 +430,7 @@ class ExcellonParser:
                     self._disable_geometry(out)
                     continue
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: drill hit before valid tool selection")
-                x=self._decode(m.group(1));y=self._decode(m.group(2));pt=Point(self.current.x if x is None else x,self.current.y if y is None else y)
+                x,y=self._route_xy(m.group(1),m.group(2));pt=Point(x,y)
                 src=SourceRef(str(p),line_no,line);obj_id=stable_id("drill",p.name,line_no,pt.x,pt.y,self.tool)
                 out.drills.append(DrillHit(obj_id,pt,self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],[])));self.current=pt;continue
             if self.strict:raise ParseError(f"{p}:{line_no}: unrecognized Excellon statement: {line}")
