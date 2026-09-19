@@ -223,6 +223,8 @@ class GerberRS274XParser:
         self.aperture_mirror_source: SourceRef | None = None
         self.aperture_rotation_source: SourceRef | None = None
         self.aperture_scale_source: SourceRef | None = None
+        self.object_attributes: dict[str, tuple[str, ...]] = {}
+        self.object_attribute_sources: dict[str, SourceRef] = {}
         self.image_body_started = False
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
@@ -2097,6 +2099,57 @@ class GerberRS274XParser:
         )
         self.unsupported_apertures.add(code)
 
+    def _update_object_attribute_state(
+        self,
+        command: str,
+        name: str,
+        values: list[str],
+        source: SourceRef,
+    ) -> None:
+        """Apply X2 TO/TD dictionary semantics for future graphical objects."""
+
+        if command == "TO":
+            self.object_attributes[name] = tuple(values)
+            self.object_attribute_sources[name] = source
+            return
+
+        if command != "TD":
+            return
+
+        if name:
+            self.object_attributes.pop(name, None)
+            self.object_attribute_sources.pop(name, None)
+            return
+
+        self.object_attributes.clear()
+        self.object_attribute_sources.clear()
+
+    def _add_object_attribute_provenance(self, prov: Provenance) -> None:
+        """Attach the current X2 object-attribute snapshot to one new object."""
+
+        for name in sorted(self.object_attributes):
+            values = self.object_attributes[name]
+            source = self.object_attribute_sources[name]
+            prov.add_source(source)
+            prov.add_evidence(
+                Evidence(
+                    "gerber_x2_object_attribute",
+                    f"name={name}; values={values!r}",
+                    1.0,
+                    source,
+                )
+            )
+            if name == ".N":
+                for net_name in values:
+                    prov.add_evidence(
+                        Evidence(
+                            "gerber_x2_net_name",
+                            net_name,
+                            1.0,
+                            source,
+                        )
+                    )
+
     def _step_repeat_provenance(
         self,
         src: SourceRef,
@@ -2106,6 +2159,7 @@ class GerberRS274XParser:
         dy_mm: float,
     ) -> Provenance:
         prov = Provenance([src], [])
+        self._add_object_attribute_provenance(prov)
         if self.step_repeat is not None:
             output_offset = self._rotate_image_point(Point(dx_mm, dy_mm))
             detail = (
@@ -4252,7 +4306,7 @@ class GerberRS274XParser:
                 or line.startswith("%TD")
             ):
                 try:
-                    validate_x2_attribute_command(line)
+                    command, name, values = validate_x2_attribute_command(line)
                 except ValueError as exc:
                     self._parse_error_or_warn(
                         p,
@@ -4265,6 +4319,13 @@ class GerberRS274XParser:
                     if not self.strict:
                         self._disable_image_geometry(out)
                     continue
+                if command in {"TO", "TD"}:
+                    self._update_object_attribute_state(
+                        command,
+                        name,
+                        values,
+                        SourceRef(str(p), line_no, line),
+                    )
                 out.diagnostics.append(
                     ParseDiagnostic(
                         "info",

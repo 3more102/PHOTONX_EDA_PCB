@@ -55,6 +55,7 @@ def test_validate_x2_attribute_command_accepts_2026_05_grammar(text, expected):
         "%TDBad Name*%",
         "%TD.AperFunction,Conductor*%",
         "%TO.C*%",
+        "%TO.N*%",
     ],
 )
 def test_validate_x2_attribute_command_rejects_invalid_domain_or_shape(text):
