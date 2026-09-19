@@ -23,6 +23,7 @@ from ..geometry_kernel import region_shape
 from ..gerber_image import (
     ImageCompositionStream,
     canonical_polygon_components,
+    polygonize_aperture_track,
     polygonize_flash,
     polygonize_track,
     trace_polygon_operation_contributions,
@@ -141,7 +142,8 @@ class GerberRS274XParser:
     """Strict, auditable RS-274X subset parser.
 
     Supported: FS, MO, ADD(C/R/O), Dnn selection, G01/D01/D02/D03,
-    bounded G74 single-quadrant and G75 multi-quadrant G02/G03 circular
+    linear C/R/O aperture draws on material layers, bounded G74 single-quadrant
+    and G75 multi-quadrant G02/G03 circular
     interpolation with circular apertures, dark multi-contour linear/G74/G75
     G36/G37 regions with bounded multi-hole cut-ins, G04, M02, and standard
     linear step-and-repeat
@@ -378,8 +380,8 @@ class GerberRS274XParser:
                     (
                         "clear layer polarity is enabled for ordered polygon "
                         "composition of supported G36/G37 regions, solid C/R/O D03 "
-                        "flashes, and circular-aperture D01 tracks including bounded "
-                        "G02/G03 tessellation; curved boundaries use evidenced chord-"
+                        "flashes, linear C/R/O D01 aperture sweeps, and bounded "
+                        "circular-aperture G02/G03 tessellation; curved boundaries use evidenced chord-"
                         "error bounds while outlines remain fail-closed"
                     ),
                     str(path),
@@ -536,7 +538,7 @@ class GerberRS274XParser:
             (
                 f"Gerber LR{self.aperture_rotation_deg:.12g} rotates "
                 f"{aperture.shape} aperture D{aperture.code} to a non-axis-aligned "
-                "shape that the current PadCandidate model cannot represent exactly"
+                "shape outside the current exact flash/sweep representation"
             ),
             out,
         )
@@ -3195,10 +3197,11 @@ class GerberRS274XParser:
     ) -> None:
         """Materialize the bounded polygonal LPC image subset.
 
-        Supported G36/G37 regions and rectangular D03 flashes are exact.
-        Circular/obround D03 flashes and circular-aperture D01 tracks use
-        deterministic inscribed-chord polygonization. Linear tracks have a
-        0.005 mm cap-boundary target. Tessellated G02/G03 arc tracks combine the
+        Supported G36/G37 regions, rectangular D03 flashes, and rectangular
+        linear-aperture D01 sweeps are exact. Circular/obround D03 flashes plus
+        circular/obround linear-aperture D01 sweeps use deterministic
+        inscribed-chord polygonization. Curved linear sweeps have a 0.005 mm
+        boundary target. Tessellated G02/G03 circular-aperture arc tracks combine the
         existing 0.005 mm centerline chord target with the 0.005 mm capsule-cap
         target for a conservative <=0.010 mm boundary-deviation budget. Outline
         segments remain fail-closed.
@@ -3226,8 +3229,8 @@ class GerberRS274XParser:
                 "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY",
                 (
                     "clear Gerber layer polarity supports G36/G37 regions, solid "
-                    "C/R/O D03 flashes, and circular-aperture D01 tracks including "
-                    "bounded G02/G03 tessellation; unsupported track forms or outline "
+                    "C/R/O D03 flashes, linear C/R/O D01 aperture sweeps, and "
+                    "circular-aperture G02/G03 tessellation; unsupported track forms or outline "
                     "geometry remain outside the bounded polygon-composition subset"
                 ),
                 out,
@@ -3896,65 +3899,182 @@ class GerberRS274XParser:
                 src = SourceRef(str(p), line_no, line)
 
                 if operation == "1":
-                    if ap.shape != "C":
-                        self._fail_or_warn(
-                            p,
-                            line_no,
-                            line,
-                            "NON_CIRCULAR_DRAW",
-                            (
-                                "non-circular draw aperture is not modeled exactly; "
-                                "geometry is skipped rather than approximated"
-                            ),
-                            out,
-                        )
-                        self.current = nxt
-                        continue
-                    width = ap.x * self.aperture_scale
+                    if ap.shape == "C":
+                        width = ap.x * self.aperture_scale
 
-                    for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
-                        start = self._transform_output_point(
-                            self.current, dx_mm, dy_mm
-                        )
-                        end = self._transform_output_point(
-                            nxt, dx_mm, dy_mm
-                        )
-                        id_parts = [
-                            p.name,
-                            line_no,
-                            self.current.x,
-                            self.current.y,
-                            nxt.x,
-                            nxt.y,
-                            width,
-                            self.layer,
-                        ]
-                        id_parts.extend(self._image_transform_id_parts())
-                        id_parts.extend(self._aperture_transform_id_parts())
-                        if self.step_repeat is not None:
-                            id_parts.extend(["sr", x_index, y_index])
-                        obj_id = stable_id("trk", *id_parts)
-                        prov = self._step_repeat_provenance(
-                            src, x_index or 0, y_index or 0, dx_mm, dy_mm
-                        )
-                        self._add_aperture_transform_provenance(prov)
-                        if self.layer == "Edge.Cuts":
-                            out.outline.append(
-                                OutlineSegment(obj_id, start, end, prov)
+                        for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
+                            start_point = self._transform_output_point(
+                                self.current, dx_mm, dy_mm
                             )
-                        else:
-                            track = Track(
-                                obj_id,
-                                start,
-                                end,
+                            end_point = self._transform_output_point(
+                                nxt, dx_mm, dy_mm
+                            )
+                            id_parts = [
+                                p.name,
+                                line_no,
+                                self.current.x,
+                                self.current.y,
+                                nxt.x,
+                                nxt.y,
                                 width,
+                                self.layer,
+                            ]
+                            id_parts.extend(self._image_transform_id_parts())
+                            id_parts.extend(self._aperture_transform_id_parts())
+                            if self.step_repeat is not None:
+                                id_parts.extend(["sr", x_index, y_index])
+                            obj_id = stable_id("trk", *id_parts)
+                            prov = self._step_repeat_provenance(
+                                src, x_index or 0, y_index or 0, dx_mm, dy_mm
+                            )
+                            self._add_aperture_transform_provenance(prov)
+                            if self.layer == "Edge.Cuts":
+                                out.outline.append(
+                                    OutlineSegment(obj_id, start_point, end_point, prov)
+                                )
+                            else:
+                                track = Track(
+                                    obj_id,
+                                    start_point,
+                                    end_point,
+                                    width,
+                                    self.layer,
+                                    provenance=prov,
+                                )
+                                out.tracks.append(track)
+                                self.material_image_operations.append(
+                                    self.layer_polarity,
+                                    track,
+                                )
+                    else:
+                        if self.layer == "Edge.Cuts":
+                            self._fail_or_warn(
+                                p,
+                                line_no,
+                                line,
+                                "NON_CIRCULAR_DRAW",
+                                (
+                                    "non-circular Edge.Cuts draw apertures are not "
+                                    "represented as centerline outline segments"
+                                ),
+                                out,
+                            )
+                            self.current = nxt
+                            continue
+
+                        transformed_size = self._transformed_aperture_size(
+                            ap, p, line_no, line, out
+                        )
+                        if transformed_size is None:
+                            self.current = nxt
+                            continue
+                        size_x, size_y = self._rotate_image_size(*transformed_size)
+
+                        for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
+                            start_point = self._transform_output_point(
+                                self.current, dx_mm, dy_mm
+                            )
+                            end_point = self._transform_output_point(
+                                nxt, dx_mm, dy_mm
+                            )
+                            try:
+                                polygonization = polygonize_aperture_track(
+                                    start_point.x,
+                                    start_point.y,
+                                    end_point.x,
+                                    end_point.y,
+                                    size_x,
+                                    size_y,
+                                    ap.shape,
+                                    max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+                                    max_arc_segments=_MAX_ARC_SEGMENTS,
+                                )
+                                components = canonical_polygon_components(
+                                    polygonization.geometry
+                                )
+                            except (TypeError, ValueError) as exc:
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "GERBER_NONCIRCULAR_DRAW_INVALID",
+                                    f"non-circular linear draw polygonization failed: {exc}",
+                                    out,
+                                )
+                                continue
+
+                            if len(components) != 1 or components[0].holes:
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "GERBER_NONCIRCULAR_DRAW_INVALID",
+                                    (
+                                        "non-circular linear draw sweep did not "
+                                        "produce one simply connected polygon"
+                                    ),
+                                    out,
+                                )
+                                continue
+
+                            component = components[0]
+                            shell = tuple(Point(x, y) for x, y in component.shell)
+                            id_parts = [
+                                p.name,
+                                line_no,
+                                "linear_aperture_sweep",
+                                self.current.x,
+                                self.current.y,
+                                nxt.x,
+                                nxt.y,
+                                ap.code,
+                                ap.shape,
+                                size_x,
+                                size_y,
+                                self.layer,
+                            ]
+                            id_parts.extend(self._image_transform_id_parts())
+                            id_parts.extend(self._aperture_transform_id_parts())
+                            if self.step_repeat is not None:
+                                id_parts.extend(["sr", x_index, y_index])
+                            obj_id = stable_id("reg", *id_parts)
+                            prov = self._step_repeat_provenance(
+                                src, x_index or 0, y_index or 0, dx_mm, dy_mm
+                            )
+                            self._add_aperture_transform_provenance(prov)
+                            method = (
+                                "convex_sweep_exact"
+                                if not polygonization.approximated
+                                else "convex_sweep_inscribed_chords"
+                            )
+                            prov.add_evidence(
+                                Evidence(
+                                    "gerber_track_polygonization",
+                                    (
+                                        f"aperture_shape={ap.shape}; "
+                                        f"method={method}; "
+                                        f"length_mm={polygonization.length_mm:.12g}; "
+                                        f"size_x_mm={size_x:.12g}; "
+                                        f"size_y_mm={size_y:.12g}; "
+                                        f"curved_segments={polygonization.curved_segments}; "
+                                        f"max_chord_error_mm="
+                                        f"{polygonization.max_chord_error_mm:.12g}; "
+                                        f"approximated={str(polygonization.approximated).lower()}"
+                                    ),
+                                    1.0,
+                                    src,
+                                )
+                            )
+                            region = CopperRegion(
+                                obj_id,
+                                shell,
                                 self.layer,
                                 provenance=prov,
                             )
-                            out.tracks.append(track)
+                            out.regions.append(region)
                             self.material_image_operations.append(
                                 self.layer_polarity,
-                                track,
+                                region,
                             )
 
                 elif operation == "3":
