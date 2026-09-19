@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened KiCad routed-path omission-manifest validation: externally loaded manifests now fail closed on malformed container shapes, invalid or duplicate route IDs, invalid reason values, missing reasons, and orphan reason entries instead of raising or silently accepting inconsistent evidence.
+
 - Fixed KiCad recovered-pad surface-layer pairing: back-side SMD pads now use `B.Paste`/`B.Mask` and back silkscreen references, front-side pads keep the matching front layers, and non-surface copper pads no longer invent front/back paste or mask layers.
 
 - Hardened Gerber X2 attribute ingestion: TF/TA/TO/TD command grammar and standard-name domains are validated before metadata is preserved, while attribute fields safely decode 4- and 8-digit Unicode escapes after comma splitting. Malformed escapes, invalid Unicode scalars, raw reserved characters, invalid names/domain use, value-bearing TD commands, and malformed TO.C fail closed.
