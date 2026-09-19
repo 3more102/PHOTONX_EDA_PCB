@@ -8,7 +8,8 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - Gerber step-and-repeat expansion for supported linear geometry, with deterministic IDs and source provenance;
 - G75 multi-quadrant G02/G03 circular arcs with signed I/J center offsets and circular draw apertures, tessellated with explicit approximation evidence;
 - bounded legacy G74 single-quadrant G02/G03 arcs using unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90 degrees;
-- single positive centered-circle aperture macros, including parameterized diameters, reduced exactly to circular apertures;
+- single positive origin-centered circle aperture macros, including parameterized diameters, reduced exactly to circular apertures;
+- single positive Code-21 center-line aperture macros reduced exactly to rectangular apertures when centered at the macro origin with zero rotation;
 - explicit X2 `.FilePolarity,Positive` metadata is recognized without changing positive-image geometry;
 - Gerber `%LPD*%` dark layer polarity is accepted as the supported positive-object state;
 - identity Gerber aperture transforms (`%LMN*%`, zero/full-turn `LR`, and `%LS1*%`) are accepted;
