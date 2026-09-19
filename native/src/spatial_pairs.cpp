@@ -279,22 +279,21 @@ int compute_radius_neighbors(
                 const auto it = grid.find(Cell{x, y});
                 if (it != grid.end()) {
                     for (const uint32_t point_index : it->second) {
-                        const double distance = std::hypot(
-                            queries[query_index].x - points[point_index].x,
-                            queries[query_index].y - points[point_index].y
-                        );
-                        if (distance <= radius) {
-                            if (neighbors.size() >= kMaxNativeResults) {
-                                return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
-                            }
-                            neighbors.push_back(
-                                photonx_neighbor{
-                                    query_index,
-                                    point_index,
-                                    distance,
-                                }
-                            );
+                        const auto& point = points[point_index];
+                        if (point.x < window.min_x || point.x > window.max_x ||
+                            point.y < window.min_y || point.y > window.max_y) {
+                            continue;
                         }
+                        if (neighbors.size() >= kMaxNativeResults) {
+                            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+                        }
+                        neighbors.push_back(
+                            photonx_neighbor{
+                                query_index,
+                                point_index,
+                                0.0,
+                            }
+                        );
                     }
                 }
                 if (y == max_y) {
