@@ -39,6 +39,8 @@ The native ABI also supports batched point-radius candidate generation. PHOTONX 
 
 The batch path is used by drill association, footprint clustering and metrics, and component-pair inference and metrics. This reduces repeated Python-to-native transitions while preserving the previous Python result contract.
 
+Repeated native operations on the same `SpatialHashIndex` reuse a packed `ctypes` AABB snapshot plus the exact Python-style box centers used by radius post-filtering. The cache is keyed by index identity plus a monotonic insertion revision, so any index mutation invalidates the snapshot before the next native call. Weak keys ensure this optimization does not keep discarded indexes alive.
+
 The main spatial consumers expose the same backend contract as the low-level API:
 
 - `attach_drills(..., backend="auto" | "python" | "native")`
