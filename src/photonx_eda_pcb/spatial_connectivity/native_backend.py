@@ -159,23 +159,34 @@ def native_available() -> bool:
     return True
 
 
-def native_candidate_pairs(index, tolerance: float = 0.0):
-    library = _load_library()
-    ids = tuple(index.ids())
+def _index_generation(index):
+    generation = getattr(index, "generation", None)
+    if callable(generation):
+        generation = generation()
+    return generation
 
-    if len(ids) > 0xFFFFFFFF:
-        raise NativeBackendUnsupported("native backend supports at most 2^32-1 boxes")
 
+def _native_index_snapshot(index):
+    """Cache the Python-to-ctypes AABB snapshot until the index mutates."""
     try:
-        tolerance_value = float(tolerance)
         cell_size = float(index.cell_size)
     except (TypeError, ValueError, AttributeError) as exc:
-        raise NativeBackendUnsupported("index/tolerance is not native-compatible") from exc
+        raise NativeBackendUnsupported("index is not native-compatible") from exc
 
-    if tolerance_value < 0.0:
-        raise NativeBackendUnsupported(
-            "negative tolerance keeps the Python reference semantics"
-        )
+    generation = _index_generation(index)
+    cached = getattr(index, "_photonx_native_snapshot", None)
+    if (
+        generation is not None
+        and isinstance(cached, tuple)
+        and len(cached) == 4
+        and cached[0] == generation
+        and cached[1] == cell_size
+    ):
+        return cached[2], cached[3], cell_size
+
+    ids = tuple(index.ids())
+    if len(ids) > 0xFFFFFFFF:
+        raise NativeBackendUnsupported("native backend supports at most 2^32-1 boxes")
 
     box_array_type = _NativeAABB * len(ids)
     native_boxes = box_array_type(
@@ -189,6 +200,33 @@ def native_candidate_pairs(index, tolerance: float = 0.0):
             for obj_id in ids
         )
     )
+
+    if generation is not None:
+        try:
+            setattr(
+                index,
+                "_photonx_native_snapshot",
+                (generation, cell_size, ids, native_boxes),
+            )
+        except (AttributeError, TypeError):
+            pass
+
+    return ids, native_boxes, cell_size
+
+
+def native_candidate_pairs(index, tolerance: float = 0.0):
+    library = _load_library()
+    ids, native_boxes, cell_size = _native_index_snapshot(index)
+
+    try:
+        tolerance_value = float(tolerance)
+    except (TypeError, ValueError) as exc:
+        raise NativeBackendUnsupported("tolerance is not native-compatible") from exc
+
+    if tolerance_value < 0.0:
+        raise NativeBackendUnsupported(
+            "negative tolerance keeps the Python reference semantics"
+        )
 
     required = ctypes.c_uint32(0)
     status = int(
@@ -237,31 +275,13 @@ def native_candidate_pairs(index, tolerance: float = 0.0):
 
 def native_radius_queries(index, queries):
     library = _load_library()
-    ids = tuple(index.ids())
+    ids, native_boxes, cell_size = _native_index_snapshot(index)
     query_specs = tuple((float(x), float(y), float(radius)) for x, y, radius in queries)
 
-    if len(ids) > 0xFFFFFFFF or len(query_specs) > 0xFFFFFFFF:
+    if len(query_specs) > 0xFFFFFFFF:
         raise NativeBackendUnsupported(
-            "native backend supports at most 2^32-1 boxes and queries"
+            "native backend supports at most 2^32-1 queries"
         )
-
-    try:
-        cell_size = float(index.cell_size)
-    except (TypeError, ValueError, AttributeError) as exc:
-        raise NativeBackendUnsupported("index is not native-compatible") from exc
-
-    box_array_type = _NativeAABB * len(ids)
-    native_boxes = box_array_type(
-        *(
-            _NativeAABB(
-                float(index.box(obj_id).min_x),
-                float(index.box(obj_id).min_y),
-                float(index.box(obj_id).max_x),
-                float(index.box(obj_id).max_y),
-            )
-            for obj_id in ids
-        )
-    )
 
     native_query_type = _NativePointQuery * len(query_specs)
     native_queries = native_query_type(
