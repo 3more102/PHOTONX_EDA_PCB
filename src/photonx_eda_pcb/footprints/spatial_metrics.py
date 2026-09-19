@@ -1,4 +1,4 @@
-from photonx_eda_pcb.spatial_connectivity.points import build_point_index,radius_query
+from photonx_eda_pcb.spatial_connectivity.points import build_point_index,radius_queries
 
 def clustering_candidate_metrics(pads,max_gap_mm=5.0,cell_size_mm=None):
     pads=list(pads);n=len(pads);total=n*(n-1)//2
