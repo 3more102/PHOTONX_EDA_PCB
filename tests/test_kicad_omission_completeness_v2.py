@@ -28,11 +28,11 @@ def _square(region_id: str, x0: float, *, holes=()) -> CopperRegion:
 
 def test_report_and_manifest_cover_exported_and_omitted_geometry(tmp_path):
     hole = (
-        Point(4.5, 0.5),
-        Point(5.5, 0.5),
-        Point(5.5, 1.5),
-        Point(4.5, 1.5),
-        Point(4.5, 0.5),
+        Point(6.5, 0.5),
+        Point(7.5, 0.5),
+        Point(7.5, 1.5),
+        Point(6.5, 1.5),
+        Point(6.5, 0.5),
     )
     board = BoardModel(
         regions=[

@@ -3,6 +3,7 @@ import re,shutil,subprocess,uuid
 from pathlib import Path
 from math import isfinite
 from ..models import BoardModel
+from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
 from .kicad_policy import pad_shape_name,slot_geometry,slot_export_status
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
@@ -117,24 +118,22 @@ def _record_region_skip(report,region,code,msg):
     report.skipped_region_ids.append(region.id)
     report.issues.append(KicadExportIssue("warning",code,region.id,msg))
 
-def _region_points(region):
-    points=list(region.points)
+def _ring_coords(points):
+    points=list(points)
     if len(points)>1 and points[0].x==points[-1].x and points[0].y==points[-1].y:
         points=points[:-1]
-    return points
+    coords=[(float(point.x),float(point.y)) for point in points]
+    if len(set(coords))<3 or any(not isfinite(value) for pair in coords for value in pair):
+        return None
+    return coords
+
+def _region_points(region):
+    return _ring_coords(region.points)
 
 def _region_lines(board,net_num,report):
     lines=[]
     declared_copper_layers=_declared_copper_layer_names(board)
     for region in getattr(board,"regions",()):
-        if getattr(region,"holes",()):
-            _record_region_skip(
-                report,
-                region,
-                "KICAD_COPPER_REGION_HOLES_UNSUPPORTED",
-                "copper region contains one or more holes; exact KiCad zone-hole export is not implemented",
-            )
-            continue
         if region.layer not in declared_copper_layers:
             _record_region_skip(
                 report,
@@ -143,16 +142,32 @@ def _region_lines(board,net_num,report):
                 f"copper region layer {region.layer!r} is not a declared canonical KiCad copper layer",
             )
             continue
-        points=_region_points(region)
-        coords=[(float(point.x),float(point.y)) for point in points]
-        if len(set(coords))<3 or any(not isfinite(value) for pair in coords for value in pair):
+
+        holes=tuple(getattr(region,"holes",()))
+        rings=[region.points,*holes]
+        ring_coords=[_ring_coords(ring) for ring in rings]
+        if any(coords is None for coords in ring_coords):
             _record_region_skip(
                 report,
                 region,
                 "KICAD_COPPER_REGION_INVALID_GEOMETRY",
-                "copper region must contain at least three distinct finite vertices",
+                "copper region shell and hole rings must each contain at least three distinct finite vertices",
             )
             continue
+
+        try:
+            shape=region_shape(region)
+        except (TypeError,ValueError,OverflowError):
+            shape=None
+        if shape is None or shape.is_empty or not shape.is_valid or not isfinite(float(shape.area)) or shape.area<=0:
+            _record_region_skip(
+                report,
+                region,
+                "KICAD_COPPER_REGION_INVALID_GEOMETRY",
+                "copper region shell/holes do not form one valid positive-area polygon",
+            )
+            continue
+
         if region.net_id is None:
             n=0;net_name=""
         elif region.net_id not in net_num:
@@ -166,8 +181,8 @@ def _region_lines(board,net_num,report):
         else:
             n=net_num[region.net_id]
             net_name=next((net.label or net.id for net in board.nets if net.id==region.net_id),"")
-        pts=" ".join(f"(xy {x:.6f} {y:.6f})" for x,y in coords)
-        lines.extend([
+
+        zone_lines=[
             "  (zone",
             f"    (net {n})",
             f"    (net_name {_q(net_name)})",
@@ -177,21 +192,38 @@ def _region_lines(board,net_num,report):
             "    (hatch edge 0.500000)",
             "    (connect_pads (clearance 0.500000))",
             "    (min_thickness 0.250000)",
-            "    (fill yes (thermal_gap 0.500000) (thermal_bridge_width 0.500000) (island_removal_mode 1))",
-            f"    (polygon (pts {pts}))",
-            f"    (filled_polygon (layer {_q(region.layer)}) (pts {pts}))",
-            "  )",
-        ])
+        ]
+        if holes:
+            zone_lines.append("    (fill)")
+        else:
+            zone_lines.append("    (fill yes (thermal_gap 0.500000) (thermal_bridge_width 0.500000) (island_removal_mode 1))")
+
+        for ring in ring_coords:
+            pts=" ".join(f"(xy {x:.6f} {y:.6f})" for x,y in ring)
+            zone_lines.append(f"    (polygon (pts {pts}))")
+
+        if not holes:
+            pts=" ".join(f"(xy {x:.6f} {y:.6f})" for x,y in ring_coords[0])
+            zone_lines.append(f"    (filled_polygon (layer {_q(region.layer)}) (pts {pts}))")
+        zone_lines.append("  )")
+        lines.extend(zone_lines)
+
         report.exported_regions+=1
         report.exported_region_ids.append(region.id)
+        if holes:
+            report.issues.append(KicadExportIssue(
+                "warning",
+                "KICAD_COPPER_REGION_FILL_CACHE_OMITTED",
+                region.id,
+                "zone shell and holes were exported exactly; cached fill was omitted so KiCad must repour using exporter-default zone rules",
+            ))
         report.issues.append(KicadExportIssue(
             "warning",
             "KICAD_COPPER_REGION_ZONE_RULES_DEFAULTED",
             region.id,
-            "saved fill preserves observed copper geometry; KiCad repour clearance and thermal rules use exporter defaults because Gerber does not preserve the original zone-design rules",
+            "KiCad repour clearance and thermal rules use exporter defaults because Gerber does not preserve the original zone-design rules",
         ))
     return lines
-
 
 def _record_route_skips(board,report):
     readiness=assess_route_export_readiness(getattr(board,"routes",()))

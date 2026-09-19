@@ -75,7 +75,7 @@ def test_unnetted_copper_region_exports_on_net_zero(tmp_path: Path):
     assert '(net_name "")' in text
 
 
-def test_region_with_hole_is_reported_and_not_approximated(tmp_path: Path):
+def test_region_with_hole_exports_exact_zone_contours_without_cached_fill(tmp_path: Path):
     hole = (
         Point(0.5, 0.25),
         Point(1.5, 0.25),
@@ -91,15 +91,97 @@ def test_region_with_hole_is_reported_and_not_approximated(tmp_path: Path):
     )
     text = path.read_text(encoding="utf-8")
 
+    assert report.exported_regions == 1
+    assert report.exported_region_ids == ["R1"]
+    assert report.skipped_regions == 0
+    assert text.count("(polygon (pts ") == 2
+    assert "(xy 0.500000 0.250000)" in text
+    assert "(xy 1.500000 0.750000)" in text
+    assert "(filled_polygon " not in text
+    assert "    (fill)\n" in text
+    assert "    (fill yes " not in text
+    assert any(
+        issue.code == "KICAD_COPPER_REGION_FILL_CACHE_OMITTED"
+        and issue.object_id == "R1"
+        for issue in report.issues
+    )
+    assert any(
+        issue.code == "KICAD_COPPER_REGION_ZONE_RULES_DEFAULTED"
+        and issue.object_id == "R1"
+        for issue in report.issues
+    )
+
+
+def test_region_with_outside_hole_fails_closed(tmp_path: Path):
+    outside_hole = (
+        Point(3.0, 0.25),
+        Point(4.0, 0.25),
+        Point(4.0, 0.75),
+        Point(3.0, 0.75),
+        Point(3.0, 0.25),
+    )
+    region = _square(holes=(outside_hole,))
+
+    path, report = export_kicad_with_report(
+        BoardModel(regions=[region]),
+        tmp_path / "invalid_hole_region.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8")
+
     assert report.exported_regions == 0
     assert report.skipped_regions == 1
     assert report.skipped_region_ids == ["R1"]
     assert "(zone" not in text
     assert any(
-        issue.code == "KICAD_COPPER_REGION_HOLES_UNSUPPORTED"
+        issue.code == "KICAD_COPPER_REGION_INVALID_GEOMETRY"
         and issue.object_id == "R1"
         for issue in report.issues
     )
+
+
+def test_multiple_holes_export_on_declared_inner_copper(tmp_path: Path):
+    region = CopperRegion(
+        "Rinner",
+        (
+            Point(0, 0),
+            Point(6, 0),
+            Point(6, 4),
+            Point(0, 4),
+            Point(0, 0),
+        ),
+        "In2.Cu",
+        holes=(
+            (
+                Point(1, 1),
+                Point(2, 1),
+                Point(2, 2),
+                Point(1, 2),
+                Point(1, 1),
+            ),
+            (
+                Point(4, 1),
+                Point(5, 1),
+                Point(5, 2),
+                Point(4, 2),
+                Point(4, 1),
+            ),
+        ),
+    )
+
+    path, report = export_kicad_with_report(
+        BoardModel(regions=[region]),
+        tmp_path / "inner_holes.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8")
+
+    assert report.exported_region_ids == ["Rinner"]
+    assert report.skipped_regions == 0
+    assert '(1 "In1.Cu" signal)' in text
+    assert '(2 "In2.Cu" signal)' in text
+    assert '(layer "In2.Cu")' in text
+    assert text.count("(polygon (pts ") == 3
+    assert "(filled_polygon " not in text
+    assert "    (fill)\n" in text
 
 
 def test_region_with_unknown_net_is_reported_and_not_relabelled_net_zero(tmp_path: Path):

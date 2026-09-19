@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extended conservative KiCad `CopperRegion` zone export to valid shell-and-hole geometry, including canonical inner-copper layers. The shell is emitted as the first zone polygon and reconstructed holes as subsequent polygons; hole-bearing zones are intentionally left unfilled with no cached `filled_polygon`, so observed voids are never silently refilled using invented copper. Invalid topology remains fail-closed, and the export report records that a KiCad repour is required under exporter-default zone rules.
+
 - Completed KiCad omission accounting across conditional geometry families. Export reports and the unified omission manifest now distinguish exported/skipped slots, exported/skipped copper regions, exported/skipped track segments, and omitted Excellon routed paths; manifest validation checks duplicate IDs, exported/skipped overlap, and family-specific reason codes while remaining compatible with older slot-only manifests.
 
 - Hardened KiCad net-reference export: a non-empty unknown `net_id` is no longer silently rewritten as net 0. Recovered pads and plated-slot pad geometry remain exportable without a net claim when identity is unresolved, while board track segments with unresolved net references are omitted and reported because their KiCad representation requires a net ordinal. Explicitly unassigned objects (`net_id is None`) retain net-0 behavior.
