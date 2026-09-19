@@ -542,6 +542,36 @@ def test_multicontour_can_mix_linear_and_g75_arc_contours(tmp_path: Path):
     assert "gerber_region_arc_tessellation" in kinds[1]
 
 
+def test_valid_cut_in_hole_pattern_is_explicitly_fail_closed(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "cut_in_hole.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X100000Y000000D01*\n"
+            "X100000Y100000D01*\n"
+            "X000000Y100000D01*\n"
+            "X000000Y050000D01*\n"
+            "X030000Y050000D01*\n"
+            "X030000Y070000D01*\n"
+            "X070000Y070000D01*\n"
+            "X070000Y030000D01*\n"
+            "X030000Y030000D01*\n"
+            "X030000Y050000D01*\n"
+            "X000000Y050000D01*\n"
+            "X000000Y000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="cut-in holes are not modeled yet",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
 def test_region_contour_must_begin_with_d02(tmp_path: Path):
     path = _write(
         tmp_path,
