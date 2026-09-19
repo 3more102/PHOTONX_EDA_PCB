@@ -13,6 +13,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - exact rectangular reduction for centered non-zero Code-20 vector-line macros (plus deprecated Code-2 alias), including arbitrarily oriented segments and arbitrary finite primitive rotation;
 - single positive Code-21 center-line aperture macros reduced exactly to centered rectangular apertures with arbitrary finite primitive rotation;
 - deprecated Code-22 lower-left rectangle macros reduced exactly when their lower-left coordinates place the rectangle center at the macro origin, with arbitrary finite primitive rotation;
+- single positive Code-4 outline macros reduced exactly to rectangular apertures when they contain exactly four vertices plus the repeated closing point and those vertices form an explicitly closed, finite, origin-centered rectangle; first-edge orientation and arbitrary finite primitive rotation are preserved exactly;
 - intrinsic rectangular macro rotation is preserved through supported LM/LR/LS aperture transforms and whole-image IR; non-orthogonal material flashes/draws use exact polygonal rectangle geometry rather than axis-aligned approximation;
 - single positive Code-5 polygon macros are reduced exactly to standard P apertures when they use an integer 3–12 vertex count, are centered at the macro origin, have positive circumscribed diameter, and finite rotation;
 - explicit X2 `.FilePolarity,Positive` metadata is recognized without changing positive-image geometry;
