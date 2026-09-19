@@ -1641,16 +1641,6 @@ class GerberRS274XParser:
                 out,
             )
             return
-        if self.layer_polarity != "dark":
-            self._fail_or_warn(
-                path,
-                line_no,
-                line,
-                "GERBER_REGION_CLEAR_POLARITY_UNSUPPORTED",
-                "only dark-polarity filled regions are supported",
-                out,
-            )
-            return
         if self.region_state.active:
             self._region_fail(
                 path,
@@ -2569,15 +2559,15 @@ class GerberRS274XParser:
             cutin_evidence = contour_cutin_evidence[contour_index]
             if cutin_evidence:
                 region_kind = (
-                    "linear_g75_multi_cutin_dark"
+                    f"linear_g75_multi_cutin_{self.layer_polarity}"
                     if arc_evidence
-                    else "linear_multi_cutin_dark"
+                    else f"linear_multi_cutin_{self.layer_polarity}"
                 )
             else:
                 region_kind = (
-                    "linear_g75_multi_contour_dark"
+                    f"linear_g75_multi_contour_{self.layer_polarity}"
                     if arc_evidence
-                    else "linear_multi_contour_dark"
+                    else f"linear_multi_contour_{self.layer_polarity}"
                 )
 
             for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
