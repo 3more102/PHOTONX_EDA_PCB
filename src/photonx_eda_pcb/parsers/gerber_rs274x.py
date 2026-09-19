@@ -132,7 +132,7 @@ class GerberRS274XParser:
 
     Supported: FS, MO, ADD(C/R/O), Dnn selection, G01/D01/D02/D03,
     bounded G74 single-quadrant and G75 multi-quadrant G02/G03 circular
-    interpolation with circular apertures, dark multi-contour linear/G75
+    interpolation with circular apertures, dark multi-contour linear/G74/G75
     G36/G37 regions, G04, M02, and standard linear step-and-repeat
     (%SR...*% / %SR*%).
 
@@ -1937,34 +1937,36 @@ class GerberRS274XParser:
             self.current = nxt
             return
 
-        if self.quadrant_mode != "multi":
+        if self.quadrant_mode not in {"single", "multi"}:
             self._region_fail(
                 path,
                 line_no,
                 line,
                 "GERBER_REGION_ARC_QUADRANT_UNSUPPORTED",
-                "region arcs currently require G75 multi-quadrant mode before G36",
+                "region arcs require explicit G74 or G75 quadrant mode before G36",
                 out,
             )
             self.current = nxt
             return
 
-        if i_raw is None and j_raw is None:
-            self._region_parse_fail(
-                path,
-                line_no,
-                line,
-                "GERBER_REGION_ARC_CENTER_MISSING",
-                "G75 region arc requires I and/or J center offset data",
-                out,
-            )
-            self.current = nxt
-            return
-
-        i_mm = 0.0 if i_raw is None else self._decode(i_raw, "x")
-        j_mm = 0.0 if j_raw is None else self._decode(j_raw, "y")
-        center = Point(self.current.x + i_mm, self.current.y + j_mm)
         clockwise = self.interpolation == "cw_arc"
+        center = self._resolve_arc_center(
+            path,
+            line_no,
+            line,
+            out,
+            nxt,
+            i_raw,
+            j_raw,
+            clockwise,
+        )
+        if center is None:
+            # Center resolution already emitted a precise diagnostic.  Abort the
+            # whole region in permissive mode so no partial contour can leak.
+            if not self.strict:
+                self._abort_region()
+            self.current = nxt
+            return
         spec = ArcSpec(
             GeoPoint(self.current.x, self.current.y),
             GeoPoint(nxt.x, nxt.y),
@@ -2000,7 +2002,7 @@ class GerberRS274XParser:
                 line_no,
                 line,
                 "GERBER_REGION_ARC_INVALID",
-                f"invalid G75 region arc geometry ({exc})",
+                f"invalid {self.quadrant_mode.upper()} region arc geometry ({exc})",
                 out,
             )
             self.current = nxt
@@ -2026,7 +2028,7 @@ class GerberRS274XParser:
         arc_evidence = Evidence(
                 "gerber_region_arc_tessellation",
                 (
-                    f"quadrant_mode=multi; "
+                    f"quadrant_mode={self.quadrant_mode}; "
                     f"direction={'CW' if clockwise else 'CCW'}; "
                     f"source_center_mm=({center.x:.12g},{center.y:.12g}); "
                     f"source_radius_mm={radius:.12g}; "
@@ -2125,7 +2127,7 @@ class GerberRS274XParser:
             ]
             arc_evidence = contour_arc_evidence[contour_index]
             region_kind = (
-                "linear_g75_multi_contour_dark"
+                "linear_arc_multi_contour_dark"
                 if arc_evidence
                 else "linear_multi_contour_dark"
             )
