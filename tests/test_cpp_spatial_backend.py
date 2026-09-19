@@ -196,3 +196,32 @@ def test_cpp_radius_batch_matches_python_when_center_arithmetic_overflows():
     assert expected == []
     assert radius_query(index, 1e308, 0.0, 0.0, backend="native") == expected
 
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_radius_persistent_index_reuses_handle_and_refreshes_after_insert():
+    native_backend._load_library.cache_clear()
+    index = SpatialHashIndex(0.5)
+    index.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+
+    try:
+        assert radius_query(index, 0.0, 0.0, 0.2, backend="native") == [
+            (0.0, "a")
+        ]
+        cached = native_backend._POINT_INDEX_CACHE[index]
+        first_revision = cached.revision
+
+        assert radius_query(index, 0.0, 0.0, 0.2, backend="native") == [
+            (0.0, "a")
+        ]
+        assert native_backend._POINT_INDEX_CACHE[index] is cached
+
+        index.insert("b", AABB(0.1, 0.0, 0.1, 0.0))
+        result = radius_query(index, 0.0, 0.0, 0.2, backend="native")
+        assert result == [(0.0, "a"), (0.1, "b")]
+
+        refreshed = native_backend._POINT_INDEX_CACHE[index]
+        assert refreshed is not cached
+        assert refreshed.revision == first_revision + 1
+    finally:
+        native_backend._load_library.cache_clear()
