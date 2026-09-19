@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Enforced production parser resource budgets through `ParseLimits`: Gerber and Excellon now hard-limit physical line count/length before semantic parsing; Gerber additionally bounds unique aperture D-codes, aperture-macro definitions, and emitted geometry; Excellon bounds unique tool definitions and emitted drill/slot/route objects. Limit violations raise `ParseError` in both strict and permissive modes, with focused low-budget regressions so hostile or accidental oversized inputs fail deterministically instead of growing parser state without bound.
+
 - Added an optional C++17 native spatial-acceleration backend behind a versioned C ABI. The backend provides deterministic AABB candidate-pair generation plus batched point-radius broad-phase queries used by drill association, footprint clustering/metrics, and component inference/metrics; Python remains the correctness reference and automatic fallback, exact Euclidean/connectivity predicates stay authoritative, native discovery is cached, ABI/range failures are explicit, and CI builds/loads the shared library on Python 3.11/3.12/3.13 before running the full regression suite.
 
 - Added specification-compliant Gerber aperture-macro variable semantics and numeric hardening: AD parameters seed macro variables, ordered `$n=expression` assignments are evaluated in source order, undefined variables evaluate to zero, exact token substitution prevents `$1` from aliasing `$10`, and any redefinition is rejected. Code-1 circle reduction now requires exactly four or five finite modifiers and rejects active-unit conversion overflow, with parser/preflight regressions for supported and fail-closed paths.

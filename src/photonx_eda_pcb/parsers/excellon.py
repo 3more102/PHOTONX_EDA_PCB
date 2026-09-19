@@ -24,6 +24,7 @@ from ..excellon_routing.arc_commands import (
 )
 from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
+from .common.limits import ParseLimits
 from .excellon_parts.slots import parse_slot_command
 
 _TOOL_DEF = re.compile(r"^T(\d+)C([0-9.]+)(?:F[0-9.]+)?(?:S[0-9.]+)?$")
@@ -48,11 +49,24 @@ class ExcellonParser:
     existing I/J center-offset subset plus standard XNC X/Y/A radius form,
     and are converted to deterministic polyline points with explicit evidence.
     """
-    def __init__(self, strict: bool = True):
+    def __init__(
+        self,
+        strict: bool = True,
+        limits: ParseLimits | None = None,
+    ):
         self.strict = strict; self.units = "mm"; self.zero = "L"; self.units_declared = False; self.incremental = False
+        self.limits = limits or ParseLimits()
         self.fmt = CoordinateFormat(2, 4, "L"); self.tools = {}; self.tool = None; self.current = Point(0.0, 0.0)
         self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
         self.geometry_enabled=True
+
+    def _reserve_output_object(self, out: ExcellonResult) -> None:
+        try:
+            self.limits.check_objects(
+                len(out.drills) + len(out.slots) + len(out.routes) + 1
+            )
+        except ValueError as exc:
+            raise ParseError(f"Excellon {exc}") from exc
 
     def _disable_geometry(self,out:ExcellonResult):
         self.geometry_enabled=False
@@ -271,12 +285,18 @@ class ExcellonParser:
         if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: route before valid tool selection")
         rid=stable_id("route",p.name,pts,self.tool,self.tools[self.tool])
         prov=Provenance(list(self._route_sources),list(self._route_evidence))
+        self._reserve_output_object(out)
         out.routes.append(RoutedPath(rid,pts,self.tools[self.tool],"unknown",f"T{self.tool}",prov))
         self._route_sources=[];self._route_evidence=[]
 
     def parse(self,path:str|Path)->ExcellonResult:
         p=Path(path);out=ExcellonResult()
-        for line_no,raw in enumerate(p.read_text(encoding="utf-8-sig",errors="strict").splitlines(),1):
+        text=p.read_text(encoding="utf-8-sig",errors="strict")
+        try:
+            self.limits.check_text(text)
+        except ValueError as exc:
+            raise ParseError(f"{p}: {exc}") from exc
+        for line_no,raw in enumerate(text.splitlines(),1):
             line=raw.strip().upper()
             if not line or line in {"M48","%","M30","M95"} or line.startswith(";"):continue
             if line.startswith("METRIC") or line == "M71":
@@ -337,6 +357,7 @@ class ExcellonParser:
                     x1,y1,x2,y2=x1v,y1v,x2v,y2v
                     src=SourceRef(str(p),line_no,line)
                 slot_id=stable_id("slot",p.name,line_no,x1,y1,x2,y2,self.tool)
+                self._reserve_output_object(out)
                 out.slots.append(SlotFeature(slot_id,(x1,y1),(x2,y2),self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],evidence)))
                 self.current=Point(x2,y2);continue
             if line.startswith(("G02","G03")):
@@ -424,6 +445,11 @@ class ExcellonParser:
                     )
                     self._disable_geometry(out)
                     continue
+                if tool not in self.tools:
+                    try:
+                        self.limits.check_tools(len(self.tools) + 1)
+                    except ValueError as exc:
+                        raise ParseError(f"{p}:{line_no}: {exc}") from exc
                 self.tools[tool]=to_mm(diameter_value,self.units);continue
             m=_TOOL_SEL.match(line)
             if m:
@@ -443,6 +469,7 @@ class ExcellonParser:
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: drill hit before valid tool selection")
                 x,y=self._route_xy(m.group(1),m.group(2));pt=Point(x,y)
                 src=SourceRef(str(p),line_no,line);obj_id=stable_id("drill",p.name,line_no,pt.x,pt.y,self.tool)
+                self._reserve_output_object(out)
                 out.drills.append(DrillHit(obj_id,pt,self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],[])));self.current=pt;continue
             if self.strict:raise ParseError(f"{p}:{line_no}: unrecognized Excellon statement: {line}")
             out.diagnostics.append(ParseDiagnostic("warning","UNKNOWN_EXCELLON_STATEMENT",line,str(p),line_no))
