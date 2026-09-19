@@ -11,6 +11,6 @@ def test_plated_slot_with_conflicting_nets_is_skipped(tmp_path):
     p,r=export_kicad_with_report(b,tmp_path/"x.kicad_pcb")
     assert 'RecoveredPlatedSlot' not in p.read_text()
     assert r.skipped_slot_ids==["S"]
-    issue=r.issues[0]
-    assert issue.code=="KICAD_SLOT_PLATED_UNSUPPORTED"
+    issue=next(issue for issue in r.issues if issue.code=="KICAD_SLOT_PLATED_UNSUPPORTED")
     assert "SLOT_PAD_NET_CONFLICT" in issue.message
+    assert any(issue.code=="KICAD_NET_REFERENCE_UNRESOLVED" for issue in r.issues)
