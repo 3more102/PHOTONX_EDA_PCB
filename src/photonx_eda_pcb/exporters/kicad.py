@@ -1,5 +1,5 @@
 from __future__ import annotations
-import shutil,subprocess,uuid
+import re,shutil,subprocess,uuid
 from pathlib import Path
 from math import isfinite
 from ..models import BoardModel
@@ -9,6 +9,21 @@ from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
 def _u(name:str)->str:return str(uuid.uuid5(uuid.NAMESPACE_URL,"https://photonx.local/"+name))
 def _q(text:str)->str:return '"'+text.replace("\\","\\\\").replace('"','\\"')+'"'
+
+
+_INNER_COPPER_LAYER_RE=re.compile(r"^In([1-9]|[12][0-9]|30)\.Cu$")
+
+def _copper_layer_lines(board):
+    observed={getattr(obj,"layer",None) for obj in [*board.tracks,*board.pads,*getattr(board,"regions",())]}
+    inner=[]
+    for name in observed:
+        match=_INNER_COPPER_LAYER_RE.fullmatch(name or "")
+        if match:inner.append((int(match.group(1)),name))
+    return [
+        '    (0 "F.Cu" signal)',
+        *(f'    ({ordinal} "{name}" signal)' for ordinal,name in sorted(inner)),
+        '    (31 "B.Cu" signal)',
+    ]
 
 def _pad_lines(board,net_num,report):
     lines=[]
@@ -79,7 +94,7 @@ def _slot_lines(board,net_num,report):
 
 def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadExportReport]:
     p=Path(path);p.parent.mkdir(parents=True,exist_ok=True);report=KicadExportReport();net_num={net.id:i+1 for i,net in enumerate(board.nets)}
-    lines=['(kicad_pcb (version 20240108) (generator "photonx_eda_pcb")','  (general (thickness 1.6))','  (paper "A4")','  (layers','    (0 "F.Cu" signal)','    (31 "B.Cu" signal)','    (36 "B.SilkS" user "b.silkscreen")','    (37 "F.SilkS" user "f.silkscreen")','    (44 "Edge.Cuts" user)','  )','  (setup (pad_to_mask_clearance 0))','  (net 0 "")']
+    lines=['(kicad_pcb (version 20240108) (generator "photonx_eda_pcb")','  (general (thickness 1.6))','  (paper "A4")','  (layers',*_copper_layer_lines(board),'    (36 "B.SilkS" user "b.silkscreen")','    (37 "F.SilkS" user "f.silkscreen")','    (44 "Edge.Cuts" user)','  )','  (setup (pad_to_mask_clearance 0))','  (net 0 "")']
     for net in board.nets:lines.append(f'  (net {net_num[net.id]} {_q(net.label or net.id)})')
     lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));_record_region_skips(board,report)
     for trk in board.tracks:
