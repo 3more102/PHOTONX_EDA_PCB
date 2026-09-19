@@ -32,6 +32,14 @@ class PadCandidate:
     provenance: Provenance = field(default_factory=Provenance)
 
 @dataclass
+class CopperRegion:
+    id: str
+    points: tuple[Point, ...]
+    layer: str
+    net_id: str | None = None
+    provenance: Provenance = field(default_factory=Provenance)
+
+@dataclass
 class DrillHit:
     id: str
     center: Point
@@ -84,9 +92,10 @@ class BoardModel:
     metadata: dict[str, object] = field(default_factory=dict)
     slots: list[SlotFeature] = field(default_factory=list)
     routes: list[RoutedPath] = field(default_factory=list)
+    regions: list[CopperRegion] = field(default_factory=list)
 
     def object_index(self) -> dict[str, object]:
-        items = [*self.tracks, *self.pads, *self.drills, *self.outline, *self.slots, *self.routes]
+        items = [*self.tracks, *self.pads, *self.drills, *self.outline, *self.slots, *self.routes, *self.regions]
         return {obj.id: obj for obj in items}
 
     def to_dict(self) -> dict[str, object]:
