@@ -290,7 +290,7 @@ class ExcellonParser:
         for line_no,raw in enumerate(p.read_text(encoding="utf-8-sig",errors="strict").splitlines(),1):
             line=raw.strip().upper()
             if terminated:
-                if not line:
+                if not line or line.startswith(";"):
                     continue
                 message="data after Excellon M30 end-of-file command"
                 if self.strict:
@@ -298,7 +298,7 @@ class ExcellonParser:
                 out.diagnostics.append(
                     ParseDiagnostic(
                         "warning",
-                        "EXCELLON_TRAILING_DATA_AFTER_M30",
+                        "INVALID_EXCELLON_DATA_AFTER_M30",
                         message,
                         str(p),
                         line_no,
@@ -454,9 +454,32 @@ class ExcellonParser:
                     self._disable_geometry(out)
                     continue
                 tool,diameter=m.groups()
-                diameter_value=float(diameter)
-                if not isfinite(diameter_value) or diameter_value <= 0:
-                    message="Excellon tool diameter must be positive"
+                if tool in self.tools:
+                    message=f"duplicate Excellon tool definition T{tool}"
+                    if self.strict:
+                        raise ParseError(f"{p}:{line_no}: {message}")
+                    out.diagnostics.append(
+                        ParseDiagnostic(
+                            "warning",
+                            "INVALID_EXCELLON_TOOL_REDEFINITION",
+                            message,
+                            str(p),
+                            line_no,
+                        )
+                    )
+                    self._disable_geometry(out)
+                    continue
+                try:
+                    diameter_value=float(diameter)
+                    diameter_mm=to_mm(diameter_value,self.units)
+                except (OverflowError, ValueError):
+                    diameter_value=diameter_mm=float("nan")
+                if (
+                    not isfinite(diameter_value)
+                    or not isfinite(diameter_mm)
+                    or diameter_value <= 0
+                ):
+                    message="Excellon tool diameter must be positive and finite"
                     if self.strict:
                         raise ParseError(f"{p}:{line_no}: {message}: {line}")
                     out.diagnostics.append(
@@ -470,7 +493,7 @@ class ExcellonParser:
                     )
                     self._disable_geometry(out)
                     continue
-                self.tools[tool]=to_mm(diameter_value,self.units);continue
+                self.tools[tool]=diameter_mm;continue
             if line.startswith("T") and "C" in line:
                 message = f"malformed Excellon tool definition: {line}"
                 if self.strict:
@@ -493,7 +516,23 @@ class ExcellonParser:
                     out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","tool change while route active",str(p),line_no))
                     self._disable_geometry(out)
                     continue
-                self.tool=m.group(1);continue
+                tool=m.group(1)
+                if tool not in self.tools:
+                    message=f"undefined Excellon tool selection T{tool}"
+                    if self.strict:
+                        raise ParseError(f"{p}:{line_no}: {message}")
+                    out.diagnostics.append(
+                        ParseDiagnostic(
+                            "warning",
+                            "INVALID_EXCELLON_TOOL_SELECTION",
+                            message,
+                            str(p),
+                            line_no,
+                        )
+                    )
+                    self._disable_geometry(out)
+                    continue
+                self.tool=tool;continue
             m=_HIT.match(line)
             if m and (m.group(1) is not None or m.group(2) is not None):
                 if self.route.tool_down:
