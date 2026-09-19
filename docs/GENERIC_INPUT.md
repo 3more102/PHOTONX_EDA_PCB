@@ -81,7 +81,7 @@ The generic input path also handles several common real-world variations:
 - modern Gerber LM/LR/LS aperture graphics-state transforms for the exact representable subset: mirror-symmetric C/R/O shapes, arbitrary circle rotation, orthogonal R/O rotation, and positive aperture scaling;
 - deprecated Gerber SF coordinate scaling within the specification range; apertures and step-repeat distances remain unscaled, uniform SF composes with circular arcs, and anisotropic SF arcs fail closed;
 - deprecated Gerber OF image translation in the active MO units, applied after MI/SF and before IR regardless of command appearance;
-- legacy AS axis-select forms are accepted as output-device-only metadata because they do not alter CAD-to-CAM image geometry;
+- legacy AS axis-select forms are accepted as output-device-only metadata because they do not alter CAD-to-CAM image geometry; AS/IN/MI/SF/OF/IR header state must appear before the first coordinate statement, including D02 moves;
 - legacy IN/LN names are preserved as diagnostic comment metadata; G55 and M01 are accepted as no-image-effect commands, while M00 terminates parsing like M02;
 - deprecated whole-image Gerber IR rotation at the specification-defined 0/90/180/270-degree angles, applied exactly to flashes, linear/arc geometry, outlines, and step-repeat instances;
 - Excellon M71/M72 metric/inch selection;
