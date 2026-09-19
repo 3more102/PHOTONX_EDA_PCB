@@ -75,7 +75,7 @@ def test_unnetted_copper_region_exports_on_net_zero(tmp_path: Path):
     assert '(net_name "")' in text
 
 
-def test_region_with_hole_is_reported_and_not_approximated(tmp_path: Path):
+def test_region_with_hole_exports_zone_contours_without_cached_fill(tmp_path: Path):
     hole = (
         Point(0.5, 0.25),
         Point(1.5, 0.25),
@@ -91,12 +91,47 @@ def test_region_with_hole_is_reported_and_not_approximated(tmp_path: Path):
     )
     text = path.read_text(encoding="utf-8")
 
+    assert report.exported_regions == 1
+    assert report.exported_region_ids == ["R1"]
+    assert report.skipped_regions == 0
+    assert text.count("(polygon (pts ") == 2
+    assert "(xy 0.500000 0.250000)" in text
+    assert "(xy 1.500000 0.750000)" in text
+    assert "(filled_polygon " not in text
+    assert any(
+        issue.code == "KICAD_COPPER_REGION_FILL_CACHE_OMITTED"
+        and issue.object_id == "R1"
+        for issue in report.issues
+    )
+    assert any(
+        issue.code == "KICAD_COPPER_REGION_ZONE_RULES_DEFAULTED"
+        and issue.object_id == "R1"
+        for issue in report.issues
+    )
+
+
+def test_region_with_invalid_hole_fails_closed(tmp_path: Path):
+    outside_hole = (
+        Point(3.0, 0.25),
+        Point(4.0, 0.25),
+        Point(4.0, 0.75),
+        Point(3.0, 0.75),
+        Point(3.0, 0.25),
+    )
+    region = _square(holes=(outside_hole,))
+
+    path, report = export_kicad_with_report(
+        BoardModel(regions=[region]),
+        tmp_path / "invalid_hole_region.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8")
+
     assert report.exported_regions == 0
     assert report.skipped_regions == 1
     assert report.skipped_region_ids == ["R1"]
     assert "(zone" not in text
     assert any(
-        issue.code == "KICAD_COPPER_REGION_HOLES_UNSUPPORTED"
+        issue.code == "KICAD_COPPER_REGION_INVALID_GEOMETRY"
         and issue.object_id == "R1"
         for issue in report.issues
     )
