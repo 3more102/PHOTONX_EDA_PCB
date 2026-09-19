@@ -30,9 +30,8 @@ M30
 
     result = ExcellonParser(strict=True).parse(path)
 
-    assert _coords(result) == pytest.approx(
-        [(1.0, 2.0), (1.5, 1.75), (2.0, 1.5), (2.5, 1.25)]
-    )
+    assert [x for x, _ in _coords(result)] == pytest.approx([1.0, 1.5, 2.0, 2.5])
+    assert [y for _, y in _coords(result)] == pytest.approx([2.0, 1.75, 1.5, 1.25])
     assert [drill.tool for drill in result.drills] == ["T01"] * 4
     assert [drill.diameter for drill in result.drills] == pytest.approx([0.8] * 4)
     assert len({drill.id for drill in result.drills}) == 4
@@ -66,9 +65,8 @@ M30
 
     result = ExcellonParser(strict=True).parse(path)
 
-    assert _coords(result) == pytest.approx(
-        [(1.0, 2.0), (1.5, 2.0), (2.0, 2.0), (2.25, 2.0)]
-    )
+    assert [x for x, _ in _coords(result)] == pytest.approx([1.0, 1.5, 2.0, 2.25])
+    assert [y for _, y in _coords(result)] == pytest.approx([2.0, 2.0, 2.0, 2.0])
 
 
 def test_repeat_hole_requires_preceding_drill_anchor(tmp_path):
