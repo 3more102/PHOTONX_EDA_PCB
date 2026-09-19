@@ -3,6 +3,7 @@ from dataclasses import dataclass, field, asdict
 from .provenance import Provenance
 from .mechanical_features.model import SlotFeature
 from .excellon_routing.model import RoutedPath
+from .zones.model import Zone
 
 @dataclass(frozen=True)
 class Point:
@@ -84,9 +85,10 @@ class BoardModel:
     metadata: dict[str, object] = field(default_factory=dict)
     slots: list[SlotFeature] = field(default_factory=list)
     routes: list[RoutedPath] = field(default_factory=list)
+    zones: list[Zone] = field(default_factory=list)
 
     def object_index(self) -> dict[str, object]:
-        items = [*self.tracks, *self.pads, *self.drills, *self.outline, *self.slots, *self.routes]
+        items = [*self.tracks, *self.pads, *self.drills, *self.outline, *self.slots, *self.routes, *self.zones]
         return {obj.id: obj for obj in items}
 
     def to_dict(self) -> dict[str, object]:
