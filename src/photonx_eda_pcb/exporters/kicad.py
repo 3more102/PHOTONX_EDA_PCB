@@ -249,9 +249,18 @@ def _slot_lines(board,net_num,report):
 
 def _track_lines(board,net_num,report):
     lines=[]
+    declared_copper_layers=_declared_copper_layer_names(board)
     for trk in board.tracks:
+        layer_known=trk.layer in declared_copper_layers
+        if not layer_known:
+            report.issues.append(KicadExportIssue(
+                "warning",
+                "KICAD_TRACK_LAYER_UNSUPPORTED",
+                trk.id,
+                f"track layer {trk.layer!r} is not a declared canonical KiCad copper layer",
+            ))
         n,_,net_known=_net_binding(board,net_num,trk.net_id,trk.id,report)
-        if not net_known:
+        if not (layer_known and net_known):
             report.skipped_tracks+=1
             report.skipped_track_ids.append(trk.id)
             continue
