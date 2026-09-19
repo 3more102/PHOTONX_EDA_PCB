@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from photonx_eda_pcb.errors import ParseError
+from photonx_eda_pcb.parsers.gerber_parts.step_repeat import parse_step_repeat
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 from photonx_eda_pcb.preflight import preflight
 
@@ -196,5 +197,95 @@ def test_preflight_blocks_non_finite_standard_aperture(tmp_path: Path):
     assert not report.ready_for_strict_reconstruction
     assert any(
         "INVALID_GERBER_STANDARD_APERTURE" in blocker
+        for blocker in report.strict_blockers
+    )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "%SRX2Y1I.J0*%",
+        "%SRX2Y1I1..0J0*%",
+    ],
+)
+def test_step_repeat_helper_rejects_malformed_decimals(statement: str):
+    with pytest.raises(ValueError, match="invalid step-repeat"):
+        parse_step_repeat(statement)
+
+
+def test_step_repeat_helper_rejects_non_finite_increment():
+    huge = ("9" * 400) + ".0"
+
+    with pytest.raises(ValueError, match="increments must be finite"):
+        parse_step_repeat(f"%SRX2Y1I{huge}J0*%")
+
+
+def test_step_repeat_unit_conversion_overflow_fails_closed(tmp_path: Path):
+    finite_but_overflowing_inch_value = "1" + ("0" * 307) + ".0"
+    header = """%FSLAX24Y24*%
+%MOIN*%
+%ADD10C,0.010*%
+D10*
+"""
+    path = _write(
+        tmp_path,
+        f"%SRX2Y1I{finite_but_overflowing_inch_value}J0*%\n"
+        "X0.0Y0.0D03*\n",
+        header=header,
+    )
+
+    with pytest.raises(ParseError, match="step-and-repeat increments overflow"):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
+def test_permissive_step_repeat_overflow_suppresses_complete_image(
+    tmp_path: Path,
+):
+    finite_but_overflowing_inch_value = "1" + ("0" * 307) + ".0"
+    header = """%FSLAX24Y24*%
+%MOIN*%
+%ADD10C,0.010*%
+D10*
+"""
+    path = _write(
+        tmp_path,
+        "X0.0Y0.0D03*\n"
+        f"%SRX2Y1I{finite_but_overflowing_inch_value}J0*%\n"
+        "X1.0Y1.0D03*\n",
+        header=header,
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=False).parse(path)
+
+    assert result.tracks == []
+    assert result.pads == []
+    assert result.regions == []
+    assert result.outline == []
+    assert any(
+        diagnostic.code == "INVALID_GERBER_STEP_REPEAT"
+        for diagnostic in result.diagnostics
+    )
+
+
+def test_preflight_blocks_step_repeat_unit_conversion_overflow(tmp_path: Path):
+    finite_but_overflowing_inch_value = "1" + ("0" * 307) + ".0"
+    header = """%FSLAX24Y24*%
+%MOIN*%
+%ADD10C,0.010*%
+D10*
+"""
+    path = _write(
+        tmp_path,
+        f"%SRX2Y1I{finite_but_overflowing_inch_value}J0*%\n"
+        "X0.0Y0.0D03*\n",
+        header=header,
+    )
+
+    report = preflight(path)
+
+    assert report.discovered_files == 1
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "INVALID_GERBER_STEP_REPEAT" in blocker
         for blocker in report.strict_blockers
     )
