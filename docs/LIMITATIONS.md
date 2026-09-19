@@ -21,7 +21,6 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - both legacy `ASAXBY` and `ASAYBX` are accepted as output-device-only metadata because AS does not affect CAD-to-CAM image geometry;
 - legacy `IN` and `LN` names are retained as comment diagnostics, `G55` and `M01` are accepted as no-ops, and `M00` terminates parsing with the same stop semantics as `M02`;
 - deprecated whole-image `IR` rotation is supported exactly for its specification-defined 0/90/180/270-degree values, including flashes, linear draws, tessellated arcs, outlines, and step-repeat instances;
-- legacy `SF` is recognized explicitly: identity scaling is accepted, while non-identity scaling fails closed;
 - metric/inch units and coordinate formats for the supported subset;
 - legacy Gerber absolute (`G90` / FS `A`) and incremental (`G91` / FS `I`) X/Y coordinate notation, with I/J retained as arc-center offsets;
 - point Excellon drill hits in absolute or incremental (`G91` / `ICI,ON`) coordinate mode;
