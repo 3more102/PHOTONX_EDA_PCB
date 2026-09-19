@@ -101,6 +101,7 @@ The generic input path also handles several common real-world variations:
   arbitrary segment orientation and finite primitive rotation are preserved exactly;
 - single positive Gerber Code-21 center-line macros are accepted as exact
   rectangular apertures when centered at the macro origin, with arbitrary finite rotation;
+- single positive Gerber Code-4 outline macros are accepted for exact D03 flashes on material layers when they declare 3–5000 vertices, repeat the start point as the final point, form one valid non-self-intersecting non-zero-area contour, and use finite rotation; the outline may be offset from the macro origin, while D01 sweeps and Edge.Cuts flashes remain fail-closed;
 - deprecated Gerber Code-22 lower-left rectangles are accepted when positive-size and
   centered on the macro origin by their lower-left coordinates, with arbitrary finite
   primitive rotation;
