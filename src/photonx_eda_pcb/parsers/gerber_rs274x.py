@@ -20,6 +20,11 @@ from ..gerber_geometry.arc import (
 )
 from ..gerber_geometry.model import GeoPoint
 from ..geometry_kernel import region_shape
+from ..gerber_image import (
+    ImageCompositionStream,
+    canonical_polygon_components,
+    compose_polygon_operations,
+)
 from ..ids import stable_id
 from ..models import CopperRegion, OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
 from ..provenance import Evidence, Provenance, SourceRef
@@ -173,6 +178,10 @@ class GerberRS274XParser:
         self.region_start_line: int | None = None
         self.file_polarity: str | None = None
         self.layer_polarity = "dark"
+        self.layer_polarity_sources: list[SourceRef] = []
+        self.first_clear_polarity_source: SourceRef | None = None
+        self.clear_polarity_seen = False
+        self.region_image_operations = ImageCompositionStream[CopperRegion]()
         self.image_geometry_enabled = True
         self.incremental = False
         self.image_rotation_deg = 0
@@ -210,6 +219,7 @@ class GerberRS274XParser:
         out.pads.clear()
         out.regions.clear()
         out.outline.clear()
+        self.region_image_operations.clear()
 
     def _declare_units(
         self,
@@ -353,20 +363,25 @@ class GerberRS274XParser:
 
         polarity = "clear" if match.group(1).upper() == "C" else "dark"
         self.layer_polarity = polarity
+        source = SourceRef(str(path), line_no, line)
+        self.layer_polarity_sources.append(source)
         if polarity == "clear":
-            self._fail_or_warn(
-                path,
-                line_no,
-                line,
-                "UNSUPPORTED_GERBER_CLEAR_POLARITY",
-                (
-                    "clear Gerber layer polarity subtracts from previously created "
-                    "objects; ordered clear/dark image composition is not modeled safely"
-                ),
-                out,
+            self.clear_polarity_seen = True
+            if self.first_clear_polarity_source is None:
+                self.first_clear_polarity_source = source
+            out.diagnostics.append(
+                ParseDiagnostic(
+                    "info",
+                    "GERBER_CLEAR_POLARITY_REGION_COMPOSITION",
+                    (
+                        "clear layer polarity is enabled for exact ordered G36/G37 "
+                        "region composition; files containing tracks, flashes, or "
+                        "outline geometry remain fail-closed"
+                    ),
+                    str(path),
+                    line_no,
+                )
             )
-            if not self.strict:
-                self._disable_image_geometry(out)
 
     def _handle_aperture_transform(
         self,
@@ -2648,15 +2663,15 @@ class GerberRS274XParser:
                         end_src,
                     )
                 )
-                out.regions.append(
-                    CopperRegion(
-                        obj_id,
-                        transformed,
-                        self.layer,
-                        provenance=prov,
-                        holes=transformed_holes,
-                    )
+                region = CopperRegion(
+                    obj_id,
+                    transformed,
+                    self.layer,
+                    provenance=prov,
+                    holes=transformed_holes,
                 )
+                out.regions.append(region)
+                self.region_image_operations.append(self.layer_polarity, region)
 
     def _arc_radius_tolerance_mm(self) -> float:
         x_resolution = to_mm(10 ** (-self.xfmt.decimal), self.units)
@@ -3042,6 +3057,126 @@ class GerberRS274XParser:
                     )
 
         self.current = nxt
+
+    def _finalize_layer_polarity_image(
+        self,
+        path: Path,
+        out: GerberLayerResult,
+    ) -> None:
+        """Materialize the bounded region-only LPC image subset.
+
+        Gerber clear polarity is an ordered image operation. PHOTONX currently
+        materializes that semantic only when every material-producing object in
+        the file is a supported G36/G37 CopperRegion. Tracks, flashes, and
+        outline segments remain fail-closed because flattening them into region
+        geometry would change the existing exactness boundary.
+        """
+        if not self.clear_polarity_seen:
+            return
+
+        clear_source = self.first_clear_polarity_source
+        source_line = clear_source.line if clear_source is not None else None
+        source_raw = clear_source.raw if clear_source is not None else "%LPC*%"
+
+        if out.tracks or out.pads or out.outline:
+            self._fail_or_warn(
+                path,
+                source_line or 0,
+                source_raw or "%LPC*%",
+                "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_REGION_GEOMETRY",
+                (
+                    "clear Gerber layer polarity is currently supported only for "
+                    "region-only files; tracks, flashes, or outline geometry are "
+                    "present and cannot be composed exactly into CopperRegion output"
+                ),
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        shape_stream = ImageCompositionStream()
+        for operation in self.region_image_operations.operations:
+            shape_stream.append(
+                operation.polarity,
+                region_shape(operation.geometry),
+            )
+
+        try:
+            composed = compose_polygon_operations(shape_stream.operations)
+            components = canonical_polygon_components(composed)
+        except (TypeError, ValueError) as exc:
+            self._parse_error_or_warn(
+                path,
+                source_line or 0,
+                source_raw or "%LPC*%",
+                "INVALID_GERBER_LAYER_POLARITY_COMPOSITION",
+                f"ordered Gerber layer-polarity composition failed: {exc}",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        operations = self.region_image_operations.operations
+        ordered_signature = tuple(
+            (operation.polarity, operation.geometry.id)
+            for operation in operations
+        )
+        dark_count = sum(operation.polarity == "dark" for operation in operations)
+        clear_count = sum(operation.polarity == "clear" for operation in operations)
+        output_count = len(components)
+        composed_regions: list[CopperRegion] = []
+
+        for component_index, component in enumerate(components):
+            shell = tuple(Point(x, y) for x, y in component.shell)
+            holes = tuple(
+                tuple(Point(x, y) for x, y in ring)
+                for ring in component.holes
+            )
+            obj_id = stable_id(
+                "regcmp",
+                path.name,
+                self.layer,
+                ordered_signature,
+                component_index,
+                component.shell,
+                component.holes,
+            )
+            prov = Provenance()
+            for operation in operations:
+                for source in operation.geometry.provenance.sources:
+                    prov.add_source(source)
+                for evidence in operation.geometry.provenance.evidence:
+                    prov.add_evidence(evidence)
+            for source in self.layer_polarity_sources:
+                prov.add_source(source)
+
+            region = CopperRegion(
+                obj_id,
+                shell,
+                self.layer,
+                provenance=prov,
+                holes=holes,
+            )
+            output_area = float(region_shape(region).area)
+            prov.add_evidence(
+                Evidence(
+                    "gerber_layer_polarity_composition",
+                    (
+                        f"ordered_operations={len(operations)}; "
+                        f"dark_operations={dark_count}; "
+                        f"clear_operations={clear_count}; "
+                        f"output_component={component_index + 1}/{output_count}; "
+                        f"output_area_mm2={output_area:.12g}"
+                    ),
+                    1.0,
+                    clear_source,
+                )
+            )
+            composed_regions.append(region)
+
+        out.regions[:] = composed_regions
 
     def parse(self, path: str | Path) -> GerberLayerResult:
         p = Path(path)
@@ -3686,5 +3821,8 @@ class GerberRS274XParser:
                 )
             )
             self._abort_region()
+
+        if self.clear_polarity_seen and self.image_geometry_enabled:
+            self._finalize_layer_polarity_image(p, out)
 
         return out
