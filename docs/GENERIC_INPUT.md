@@ -86,9 +86,16 @@ The generic input path also handles several common real-world variations:
 - headerless Excellon-like packages are detected, but PHOTONX will not silently
   guess their units;
 - simple parameterized Gerber aperture macros that resolve to one positive,
-  origin-centered circle are accepted as exact circular apertures;
+  origin-centered circle are accepted as exact circular apertures; circle rotation
+  is geometry-invariant when its center is the macro origin;
+- single positive Gerber Code-20 vector-line macros (plus deprecated Code-2)
+  are accepted when the segment is non-zero, axis-aligned, midpoint-centered on
+  the macro origin, and rotated only in 90-degree steps;
 - single positive Gerber Code-21 center-line macros are accepted as exact
-  rectangular apertures only when centered at the macro origin with zero rotation;
+  rectangular apertures when centered at the macro origin with 90-degree-step rotation;
+- deprecated Gerber Code-22 lower-left rectangles are accepted only when positive-size,
+  centered on the macro origin by their lower-left coordinates, and rotated in
+  90-degree steps;
 - legacy Gerber G74 single-quadrant arcs are accepted only when unsigned I/J
   distances resolve to one unambiguous center with a sweep of at most 90 degrees.
 
