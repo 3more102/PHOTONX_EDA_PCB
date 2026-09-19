@@ -5,6 +5,7 @@ from math import isfinite
 from .models import BoardModel
 from .excellon_routing.validation import validate_route
 from .geometry_kernel import region_shape
+from .core.numeric import is_finite_number
 
 @dataclass(frozen=True)
 class ValidationIssue:
@@ -54,8 +55,14 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
         if missing:r.issues.append(ValidationIssue("error","COMPONENT_PAD_MISSING",f"{comp.id} references missing pads {missing}",(comp.id,*missing)))
         if not 0<=comp.confidence<=1:r.issues.append(ValidationIssue("error","INVALID_COMPONENT_CONFIDENCE",f"invalid confidence for {comp.id}",(comp.id,)))
     for slot in getattr(board,"slots",()):
-        if float(slot.width_mm)<=0:r.issues.append(ValidationIssue("error","SLOT_WIDTH_INVALID","slot width must be positive",(slot.id,)))
-        if tuple(slot.start)==tuple(slot.end):r.issues.append(ValidationIssue("warning","SLOT_ZERO_LENGTH","slot start and end are identical",(slot.id,)))
+        if not is_finite_number(slot.width_mm) or slot.width_mm<=0:
+            r.issues.append(ValidationIssue("error","SLOT_WIDTH_INVALID","slot width must be a positive finite number",(slot.id,)))
+        try:slot_coords=(*slot.start,*slot.end)
+        except TypeError:slot_coords=()
+        if len(slot_coords)!=4 or not all(is_finite_number(value) for value in slot_coords):
+            r.issues.append(ValidationIssue("error","SLOT_COORDINATE_INVALID","slot coordinates must be finite numbers",(slot.id,)))
+        elif slot_coords[:2]==slot_coords[2:]:
+            r.issues.append(ValidationIssue("warning","SLOT_ZERO_LENGTH","slot start and end are identical",(slot.id,)))
         if slot.plated not in {"unknown","plated","non-plated","non_plated"}:r.issues.append(ValidationIssue("warning","SLOT_PLATING_UNKNOWN_ENUM",f"unexpected slot plating value {slot.plated}",(slot.id,)))
     for route in getattr(board,"routes",()):
         for code in validate_route(route):
