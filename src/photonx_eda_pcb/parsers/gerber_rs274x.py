@@ -1675,15 +1675,21 @@ class GerberRS274XParser:
             isclose(first.x, last.x, rel_tol=0.0, abs_tol=closure_tol_mm)
             and isclose(first.y, last.y, rel_tol=0.0, abs_tol=closure_tol_mm)
         ):
+            message = (
+                "G37 does not implicitly close a region contour; "
+                "final point must coincide with its first point"
+                if reason == "G37"
+                else (
+                    f"{reason} cannot finalize an open region contour; "
+                    "final point must coincide with its first point"
+                )
+            )
             self._region_parse_fail(
                 path,
                 line_no,
                 raw,
                 "GERBER_REGION_NOT_CLOSED",
-                (
-                    f"{reason} cannot finalize an open region contour; "
-                    "final point must coincide with its first point"
-                ),
+                message,
                 out,
             )
             return False
