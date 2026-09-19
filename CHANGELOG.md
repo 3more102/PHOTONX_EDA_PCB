@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added exact production reduction for single positive origin-centered Gerber aperture-macro polygon primitive Code 5. Valid 3–12 vertex polygons with positive circumscribed diameter and finite rotation are normalized to standard P apertures, inheriting exact D03 polygon flashes, exact solid D01 convex sweeps, aperture transforms, step-repeat, LPC composition, provenance, active-unit conversion, and preflight behavior; non-centered, exposure-off, zero-size, or invalid-vertex cases remain fail-closed.
+
 - Hardened deprecated Gerber IP image-polarity handling: `%IPPOS*%` is now a once-only image-header command that must precede coordinate data, with explicit positive-polarity diagnostics and preflight coverage. Late or duplicate IPPOS declarations fail closed and suppress permissive geometry; `%IPNEG*%` remains fail-closed because whole-image inversion is not modeled. Also synchronized LPC capability text with the already-supported standard P aperture paths.
 
 - Extended standard P aperture support to solid linear D01 draws on material layers. Because the regular polygon aperture is convex, PHOTONX materializes the exact swept image as the convex hull of the transformed aperture at the segment endpoints, preserving template rotation, LM-before-LR, LS, whole-image IR, step-repeat, provenance and ordered LPD/LPC composition. Holed P D01 remains fail-closed.
