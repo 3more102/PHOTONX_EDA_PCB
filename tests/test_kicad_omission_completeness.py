@@ -69,3 +69,20 @@ def test_omission_validation_rejects_duplicate_omission_ids():
         "OMISSION_REGION_DUPLICATE_ID",
         "OMISSION_ROUTE_DUPLICATE_ID",
     ]
+
+
+def test_omission_validation_rejects_wrong_region_and_route_reason_codes():
+    data={
+        "exported_slots":[],
+        "skipped_slots":[],
+        "skipped_regions":["region-1"],
+        "omitted_routes":["route-1"],
+        "issues":[
+            {"object_id":"region-1","code":"SOME_OTHER_REASON"},
+            {"object_id":"route-1","code":"SOME_OTHER_REASON"},
+        ],
+    }
+    assert validate_omission_manifest(data)==[
+        "OMISSION_REGION_WITHOUT_REASON",
+        "OMISSION_ROUTE_WITHOUT_REASON",
+    ]
