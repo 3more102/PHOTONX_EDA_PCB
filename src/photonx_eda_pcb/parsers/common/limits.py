@@ -6,9 +6,9 @@ class ParseLimits:
     max_lines: int = 1_000_000
     max_line_length: int = 65_536
     max_apertures: int = 100_000
+    max_objects: int = 5_000_000
     max_aperture_macros: int = 100_000
     max_tools: int = 100_000
-    max_objects: int = 5_000_000
 
     def check_line(self, line: str, number: int) -> None:
         if number > self.max_lines:
