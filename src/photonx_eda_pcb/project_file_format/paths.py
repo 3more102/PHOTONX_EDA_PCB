@@ -1,5 +1,5 @@
-from pathlib import PurePosixPath
+from ..core.paths import normalize_portable_relative_path
+
+
 def normalize_project_path(path):
-    p=PurePosixPath(str(path).replace("\\","/"))
-    if p.is_absolute() or ".." in p.parts:raise ValueError("project paths must be relative")
-    return str(p)
+    return normalize_portable_relative_path(path)
