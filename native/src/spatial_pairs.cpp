@@ -267,10 +267,13 @@ int compute_point_radius_candidates(
     std::vector<double> center_y(box_count, 0.0);
 
     for (uint32_t i = 0; i < box_count; ++i) {
+        if (!finite_box(boxes[i])) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
         if (!box_center(boxes[i], center_x[i], center_y[i])) {
-            // Python computes the same center as +/-inf and its exact
-            // distance predicate can never accept the point for a finite
-            // query.  Skip it rather than changing that reference result.
+            // Finite endpoints can still overflow during Python's binary64
+            // center calculation. Its exact distance predicate cannot accept
+            // that +/-inf center for a finite query, so skip it here too.
             continue;
         }
 
