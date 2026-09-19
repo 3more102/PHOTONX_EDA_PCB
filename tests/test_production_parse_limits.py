@@ -1,3 +1,4 @@
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -196,3 +197,39 @@ def test_gerber_limit_path_reads_through_physical_line_guard(tmp_path: Path, mon
     ).parse(path)
 
     assert len(result.pads) == 1
+
+
+class _TrackingReader(StringIO):
+    def __init__(self, text: str):
+        super().__init__(text)
+        self.readline_sizes: list[int] = []
+
+    def readline(self, size: int = -1) -> str:
+        self.readline_sizes.append(size)
+        if size < 0:
+            raise AssertionError("parser must bound physical-line reads")
+        return super().readline(size)
+
+
+def test_excellon_oversize_line_is_rejected_after_bounded_read(tmp_path: Path, monkeypatch):
+    path = tmp_path / "bounded.drl"
+    reader = _TrackingReader("X" * 100)
+
+    monkeypatch.setattr(Path, "open", lambda *_args, **_kwargs: reader)
+
+    with pytest.raises(ParseError, match="maximum length"):
+        ExcellonParser(limits=ParseLimits(max_line_length=8)).parse(path)
+
+    assert reader.readline_sizes == [10]
+
+
+def test_gerber_oversize_line_is_rejected_after_bounded_read(tmp_path: Path, monkeypatch):
+    path = tmp_path / "bounded.gbr"
+    reader = _TrackingReader("X" * 100)
+
+    monkeypatch.setattr(Path, "open", lambda *_args, **_kwargs: reader)
+
+    with pytest.raises(ParseError, match="maximum length"):
+        GerberRS274XParser("F.Cu", limits=ParseLimits(max_line_length=8)).parse(path)
+
+    assert reader.readline_sizes == [10]
