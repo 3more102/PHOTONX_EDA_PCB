@@ -10,20 +10,34 @@ from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 def _u(name:str)->str:return str(uuid.uuid5(uuid.NAMESPACE_URL,"https://photonx.local/"+name))
 def _q(text:str)->str:return '"'+text.replace("\\","\\\\").replace('"','\\"').replace("\n","\\n").replace("\r","\\r")+'"'
 
+def _pad_export_layers(pad):
+    layer=str(pad.layer)
+    ref_layer="B.SilkS" if layer=="B.Cu" else "F.SilkS"
+    if pad.drill:
+        return '"*.Cu" "*.Mask"',ref_layer,None
+    if layer=="F.Cu":
+        return '"F.Cu" "F.Paste" "F.Mask"',ref_layer,None
+    if layer=="B.Cu":
+        return '"B.Cu" "B.Paste" "B.Mask"',ref_layer,None
+    return _q(layer),ref_layer,(
+        "SMD pad is on a non-surface copper layer; paste/mask layers were not invented"
+    )
+
 def _pad_lines(board,net_num,report):
     lines=[]
     for pad in board.pads:
         n=net_num.get(pad.net_id,0);net_name=next((net.label or net.id for net in board.nets if net.id==pad.net_id),"")
         shape=pad_shape_name(pad.shape);pad_type="thru_hole" if pad.drill else "smd"
-        layers='"*.Cu" "*.Mask"' if pad.drill else f'"{pad.layer}" "F.Paste" "F.Mask"'
+        layers,ref_layer,layer_warning=_pad_export_layers(pad)
         angle=float(getattr(pad,"rotation_deg",getattr(pad,"rotation",0.0)) or 0.0)
         lines += [f'  (footprint "PHOTONX:RecoveredPad" (layer {_q(pad.layer)}) (uuid {_u("fp:"+pad.id)})',
                   f'    (at {pad.center.x:.6f} {pad.center.y:.6f})',
-                  f'    (property "Reference" {_q(pad.id)} (at 0 -2 0) (layer "F.SilkS") hide (uuid {_u("ref:"+pad.id)}))']
+                  f'    (property "Reference" {_q(pad.id)} (at 0 -2 0) (layer {_q(ref_layer)}) hide (uuid {_u("ref:"+pad.id)}))']
         drill=f' (drill {pad.drill:.6f})' if pad.drill else ""
         lines.append(f'    (pad "1" {pad_type} {shape} (at 0 0 {angle:.6f}) (size {pad.size_x:.6f} {pad.size_y:.6f}){drill} (layers {layers}) (net {n} {_q(net_name)}) (uuid {_u("pad:"+pad.id)}))')
         lines.append('  )')
         if str(pad.shape).upper() not in {"C","R","O"}:report.issues.append(KicadExportIssue("warning","KICAD_PAD_SHAPE_FALLBACK",pad.id,f"unsupported reconstructed pad shape {pad.shape}; exported as rect"))
+        if layer_warning:report.issues.append(KicadExportIssue("warning","KICAD_SMD_NON_SURFACE_LAYER",pad.id,layer_warning))
     return lines
 
 def _record_skip(report,slot,code,msg):
