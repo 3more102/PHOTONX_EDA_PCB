@@ -1450,13 +1450,13 @@ class GerberRS274XParser:
         values = primitive["values"]
 
         if primitive["kind"] == "circle":
-            if len(values) < 4:
+            if len(values) not in {4, 5}:
                 self._fail_or_warn(
                     path,
                     line_no,
                     line,
                     "INVALID_GERBER_APERTURE_MACRO",
-                    f"circle aperture macro {name!r} has too few modifiers",
+                    f"circle aperture macro {name!r} requires four or five modifiers",
                     out,
                 )
                 self.unsupported_apertures.add(code)
