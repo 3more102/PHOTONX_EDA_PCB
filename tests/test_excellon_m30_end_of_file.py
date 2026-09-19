@@ -76,7 +76,7 @@ def test_permissive_parser_suppresses_geometry_after_m30(tmp_path: Path):
     assert result.routes == []
     assert any(
         diagnostic.code == "INVALID_EXCELLON_DATA_AFTER_M30"
-        and diagnostic.line == 9
+        and diagnostic.line == 8
         for diagnostic in result.diagnostics
     )
 
