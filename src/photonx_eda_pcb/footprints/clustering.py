@@ -1,3 +1,4 @@
+from collections import deque
 from math import hypot
 from photonx_eda_pcb.spatial_connectivity.points import build_point_index,radius_queries
 
@@ -13,19 +14,19 @@ def cluster_pads_bruteforce(pads,max_gap_mm=5.0):
         groups.append(sorted(group,key=lambda p:p.id))
     return groups
 
-def cluster_pads(pads,max_gap_mm=5.0,*,use_spatial_index=True,cell_size_mm=None):
+def cluster_pads(pads,max_gap_mm=5.0,*,use_spatial_index=True,cell_size_mm=None,backend="auto"):
     pads=list(pads)
     if not use_spatial_index:return cluster_pads_bruteforce(pads,max_gap_mm)
     if not pads:return []
     by={p.id:p for p in pads}
     idx=build_point_index(((p.id,p) for p in pads),lambda p:(p.center.x,p.center.y),float(cell_size_mm or max(1.0,max_gap_mm)))
-    neighbor_lists=radius_queries(idx,((p.center.x,p.center.y,max_gap_mm) for p in pads))
+    neighbor_lists=radius_queries(idx,((p.center.x,p.center.y,max_gap_mm) for p in pads),backend=backend)
     neighbors={p.id:items for p,items in zip(pads,neighbor_lists)}
     unvisited=set(by);groups=[]
     while unvisited:
-        seed=min(unvisited);queue=[seed];unvisited.remove(seed);group=[]
+        seed=min(unvisited);queue=deque([seed]);unvisited.remove(seed);group=[]
         while queue:
-            pid=queue.pop(0);p=by[pid];group.append(p)
+            pid=queue.popleft();p=by[pid];group.append(p)
             for _,nid in neighbors[pid]:
                 if nid in unvisited:
                     unvisited.remove(nid);queue.append(nid)
