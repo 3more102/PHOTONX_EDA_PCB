@@ -69,6 +69,7 @@ def reconstruct(
             board.tracks.extend(r.tracks)
             board.pads.extend(r.pads)
             board.outline.extend(r.outline)
+            board.zones.extend(r.zones)
             board.diagnostics.extend(r.diagnostics)
 
         attach_drills(board, cfg.drill_attach_tolerance_mm)
