@@ -509,6 +509,7 @@ class ExcellonParser:
                 continue
             if self.strict:raise ParseError(f"{p}:{line_no}: unrecognized Excellon statement: {line}")
             out.diagnostics.append(ParseDiagnostic("warning","UNKNOWN_EXCELLON_STATEMENT",line,str(p),line_no))
+            self._disable_geometry(out)
         if self.route.tool_down:
             if self.strict:raise ParseError(f"{p}: EOF while route tool is down")
             out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_UNTERMINATED","EOF while route tool is down",str(p),None))
