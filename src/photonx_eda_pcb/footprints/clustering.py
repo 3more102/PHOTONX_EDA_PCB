@@ -1,5 +1,5 @@
 from math import hypot
-from photonx_eda_pcb.spatial_connectivity.points import build_point_index,radius_query
+from photonx_eda_pcb.spatial_connectivity.points import build_point_index,radius_queries
 
 def cluster_pads_bruteforce(pads,max_gap_mm=5.0):
     remaining={p.id:p for p in pads};groups=[]
@@ -24,7 +24,7 @@ def cluster_pads(pads,max_gap_mm=5.0,*,use_spatial_index=True,cell_size_mm=None)
         seed=min(unvisited);queue=[seed];unvisited.remove(seed);group=[]
         while queue:
             pid=queue.pop(0);p=by[pid];group.append(p)
-            for _,nid in radius_query(idx,p.center.x,p.center.y,max_gap_mm):
+            for _,nid in neighbors_by_id[pid]:
                 if nid in unvisited:
                     unvisited.remove(nid);queue.append(nid)
         groups.append(sorted(group,key=lambda p:p.id))
