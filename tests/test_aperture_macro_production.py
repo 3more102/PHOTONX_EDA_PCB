@@ -97,17 +97,19 @@ def test_centered_circle_macro_accepts_rotation_as_geometry_invariant(tmp_path: 
 
 
 @pytest.mark.parametrize(
-    ("diameter", "center_x", "center_y", "rotation"),
+    ("exposure", "diameter", "center_x", "center_y", "rotation"),
     [
-        ("1e309", "0", "0", "0"),
-        ("1e309-1e309", "0", "0", "0"),
-        ("0.800", "1e309", "0", "0"),
-        ("0.800", "0", "1e309-1e309", "0"),
-        ("0.800", "0", "0", "1e309"),
+        ("1e309", "0.800", "0", "0", "0"),
+        ("1", "1e309", "0", "0", "0"),
+        ("1", "1e309-1e309", "0", "0", "0"),
+        ("1", "0.800", "1e309", "0", "0"),
+        ("1", "0.800", "0", "1e309-1e309", "0"),
+        ("1", "0.800", "0", "0", "1e309"),
     ],
 )
 def test_circle_macro_nonfinite_values_fail_closed(
     tmp_path: Path,
+    exposure: str,
     diameter: str,
     center_x: str,
     center_y: str,
@@ -117,7 +119,7 @@ def test_circle_macro_nonfinite_values_fail_closed(
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
-        f"%AMROUND*1,1,{diameter},{center_x},{center_y},{rotation}*%\n"
+        f"%AMROUND*1,{exposure},{diameter},{center_x},{center_y},{rotation}*%\n"
         "%ADD10ROUND*%\n"
         "D10*\n"
         "X000000Y000000D03*\n"
