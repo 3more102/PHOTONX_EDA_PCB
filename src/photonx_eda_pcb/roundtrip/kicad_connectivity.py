@@ -117,14 +117,14 @@ def _check_embedded_net_name(item, binding, issues, object_kind, object_id):
                 }
             )
         return
-    if embedded is not None and str(embedded) != binding["name"]:
+    if embedded is None or str(embedded) != binding["name"]:
         issues.append(
             {
                 "code": "KICAD_ROUNDTRIP_NET_NAME_MISMATCH",
                 "object_kind": object_kind,
                 "object_id": str(object_id),
                 "expected_name": binding["name"],
-                "observed_name": str(embedded),
+                "observed_name": None if embedded is None else str(embedded),
             }
         )
 
