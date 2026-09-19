@@ -96,6 +96,32 @@ def test_centered_circle_macro_accepts_rotation_as_geometry_invariant(tmp_path: 
 
 
 
+def test_circle_macro_extra_modifier_fails_closed(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMROUND*1,1,0.800,0,0,0,123*%\n"
+        "%ADD10ROUND*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="requires four or five modifiers",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "INVALID_GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
+
+
 @pytest.mark.parametrize(
     ("exposure", "diameter", "center_x", "center_y", "rotation"),
     [
