@@ -6,7 +6,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 
 - strict linear Gerber draws and flashes using C/R/O apertures;
 - Gerber step-and-repeat expansion for supported linear geometry and regions, with deterministic IDs and source provenance;
-- dark single-contour Gerber G36/G37 regions with linear segments and G75 G02/G03 circular boundaries; circular boundaries are deterministically tessellated to a 0.005 mm maximum output chord-error target and support incremental endpoints, anisotropic legacy SF via transformed boundary vertices, supported whole-image transforms, step-repeat expansion, provenance, connectivity, validation, DRC participation, and explicit KiCad-export omission reporting;
+- dark Gerber G36/G37 region statements with multiple explicitly closed contours, linear segments, and G75 G02/G03 circular boundaries; each contour is filled individually and the statement is represented with union semantics. Circular boundaries are deterministically tessellated to a 0.005 mm maximum output chord-error target and support incremental endpoints, anisotropic legacy SF via transformed boundary vertices, supported whole-image transforms, step-repeat expansion, provenance, connectivity, validation, DRC participation, and explicit KiCad-export omission reporting;
 - G75 multi-quadrant G02/G03 circular arcs with signed I/J center offsets and circular draw apertures, tessellated with explicit approximation evidence;
 - bounded legacy G74 single-quadrant G02/G03 arcs using unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90 degrees;
 - single positive origin-centered circle aperture macros, including parameterized diameters, reduced exactly to circular apertures; centered-circle rotation is geometry-invariant;
@@ -38,7 +38,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 
 ## Deliberately rejected instead of faked
 
-- ambiguous/invalid G74 center cases and complex aperture macros; G74 circular boundaries inside regions, multiple contours/holes, clear-polarity regions, Edge.Cuts regions, and aperture blocks remain fail-closed rather than being approximated or leaked as ordinary tracks/flashes;
+- ambiguous/invalid G74 center cases and complex aperture macros; G74 circular boundaries inside regions, cut-in hole contours, clear-polarity regions, Edge.Cuts regions, and aperture blocks remain fail-closed rather than being approximated or leaked as ordinary tracks/flashes;
 - standard C/R/O apertures with round-hole modifiers, because aperture-hole image subtraction is not yet represented by the reconstruction model;
 - linear D01 draws with rectangular or obround apertures, because PHOTONX does not flatten their swept geometry into an incorrect width-only track;
 - X2 `.FilePolarity,Negative` image inversion: strict mode rejects it, while permissive mode records the unsupported semantic and suppresses all geometry from that file rather than treating clearances as positive material;
