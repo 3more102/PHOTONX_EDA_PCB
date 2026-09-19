@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isclose
 from typing import Generic, Iterable, Literal, TypeVar
 
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.geometry.polygon import orient
+
+from .gerber_geometry.arc import ArcSpec, arc_points, segments_for_chord_error
+from .gerber_geometry.model import GeoPoint
 
 Polarity = Literal["dark", "clear"]
 T = TypeVar("T")
@@ -32,6 +36,206 @@ class PolygonComponent:
 
     shell: tuple[tuple[float, float], ...]
     holes: tuple[tuple[tuple[float, float], ...], ...] = ()
+
+
+@dataclass(frozen=True)
+class FlashPolygonization:
+    """Polygonal flash image plus explicit approximation metadata."""
+
+    geometry: Polygon
+    shape: str
+    curved_segments: int
+    max_chord_error_mm: float
+    approximated: bool
+
+
+def polygonize_flash(
+    center_x: float,
+    center_y: float,
+    size_x: float,
+    size_y: float,
+    shape: str,
+    *,
+    max_chord_error_mm: float = 0.005,
+    max_arc_segments: int = 4096,
+) -> FlashPolygonization:
+    """Return deterministic polygon geometry for solid C/R/O Gerber flashes.
+
+    Rectangles are exact. Circles and obround end-caps are represented by
+    inscribed chords chosen with the same sagitta bound used for Gerber arc
+    tessellation. The approximation is therefore conservative for both dark
+    and clear image operations and has an explicit maximum boundary error.
+    """
+
+    cx = float(center_x)
+    cy = float(center_y)
+    sx = float(size_x)
+    sy = float(size_y)
+    kind = str(shape).upper()
+
+    if sx <= 0.0 or sy <= 0.0:
+        raise ValueError("Gerber flash dimensions must be positive")
+    if max_chord_error_mm <= 0.0:
+        raise ValueError("max_chord_error_mm must be positive")
+    if max_arc_segments < 1:
+        raise ValueError("max_arc_segments must be positive")
+
+    if kind == "R":
+        geometry = Polygon(
+            (
+                (cx - sx / 2.0, cy - sy / 2.0),
+                (cx + sx / 2.0, cy - sy / 2.0),
+                (cx + sx / 2.0, cy + sy / 2.0),
+                (cx - sx / 2.0, cy + sy / 2.0),
+            )
+        )
+        return FlashPolygonization(
+            geometry=geometry,
+            shape=kind,
+            curved_segments=0,
+            max_chord_error_mm=0.0,
+            approximated=False,
+        )
+
+    if kind == "C":
+        if not isclose(sx, sy, rel_tol=1e-12, abs_tol=1e-12):
+            raise ValueError("circular Gerber flash must have equal X/Y dimensions")
+        points = _circle_points(
+            cx,
+            cy,
+            sx / 2.0,
+            max_chord_error_mm=max_chord_error_mm,
+            max_arc_segments=max_arc_segments,
+        )
+        geometry = Polygon(points)
+        _validate_flash_polygon(geometry)
+        return FlashPolygonization(
+            geometry=geometry,
+            shape=kind,
+            curved_segments=len(points) - 1,
+            max_chord_error_mm=max_chord_error_mm,
+            approximated=True,
+        )
+
+    if kind == "O":
+        if isclose(sx, sy, rel_tol=1e-12, abs_tol=1e-12):
+            points = _circle_points(
+                cx,
+                cy,
+                sx / 2.0,
+                max_chord_error_mm=max_chord_error_mm,
+                max_arc_segments=max_arc_segments,
+            )
+            geometry = Polygon(points)
+            _validate_flash_polygon(geometry)
+            return FlashPolygonization(
+                geometry=geometry,
+                shape=kind,
+                curved_segments=len(points) - 1,
+                max_chord_error_mm=max_chord_error_mm,
+                approximated=True,
+            )
+
+        if sx > sy:
+            radius = sy / 2.0
+            half_straight = (sx - sy) / 2.0
+            left = _arc_polygon_points(
+                start=GeoPoint(cx - half_straight, cy + radius),
+                end=GeoPoint(cx - half_straight, cy - radius),
+                center=GeoPoint(cx - half_straight, cy),
+                max_chord_error_mm=max_chord_error_mm,
+                max_arc_segments=max_arc_segments,
+            )
+            right = _arc_polygon_points(
+                start=GeoPoint(cx + half_straight, cy - radius),
+                end=GeoPoint(cx + half_straight, cy + radius),
+                center=GeoPoint(cx + half_straight, cy),
+                max_chord_error_mm=max_chord_error_mm,
+                max_arc_segments=max_arc_segments,
+            )
+            coords = [*left, *right]
+        else:
+            radius = sx / 2.0
+            half_straight = (sy - sx) / 2.0
+            bottom = _arc_polygon_points(
+                start=GeoPoint(cx - radius, cy - half_straight),
+                end=GeoPoint(cx + radius, cy - half_straight),
+                center=GeoPoint(cx, cy - half_straight),
+                max_chord_error_mm=max_chord_error_mm,
+                max_arc_segments=max_arc_segments,
+            )
+            top = _arc_polygon_points(
+                start=GeoPoint(cx + radius, cy + half_straight),
+                end=GeoPoint(cx - radius, cy + half_straight),
+                center=GeoPoint(cx, cy + half_straight),
+                max_chord_error_mm=max_chord_error_mm,
+                max_arc_segments=max_arc_segments,
+            )
+            coords = [*bottom, *top]
+
+        geometry = Polygon(coords)
+        _validate_flash_polygon(geometry)
+        return FlashPolygonization(
+            geometry=geometry,
+            shape=kind,
+            curved_segments=(len(coords) - 2),
+            max_chord_error_mm=max_chord_error_mm,
+            approximated=True,
+        )
+
+    raise ValueError(f"unsupported Gerber flash shape for polygonization: {kind!r}")
+
+
+def _circle_points(
+    cx: float,
+    cy: float,
+    radius: float,
+    *,
+    max_chord_error_mm: float,
+    max_arc_segments: int,
+) -> list[tuple[float, float]]:
+    start = GeoPoint(cx + radius, cy)
+    spec = ArcSpec(start=start, end=start, center=GeoPoint(cx, cy), clockwise=False)
+    segments = segments_for_chord_error(
+        spec,
+        max_chord_error_mm,
+        max_segments=max_arc_segments,
+    )
+    segments += (-segments) % 4
+    if segments > max_arc_segments:
+        raise ValueError(
+            "circle flash tessellation symmetry would exceed max_arc_segments"
+        )
+    points = arc_points(spec, segments=segments)
+    return [(point.x, point.y) for point in points]
+
+
+def _arc_polygon_points(
+    *,
+    start: GeoPoint,
+    end: GeoPoint,
+    center: GeoPoint,
+    max_chord_error_mm: float,
+    max_arc_segments: int,
+) -> list[tuple[float, float]]:
+    spec = ArcSpec(start=start, end=end, center=center, clockwise=False)
+    segments = segments_for_chord_error(
+        spec,
+        max_chord_error_mm,
+        max_segments=max_arc_segments,
+    )
+    segments += segments % 2
+    if segments > max_arc_segments:
+        raise ValueError(
+            "obround cap tessellation symmetry would exceed max_arc_segments"
+        )
+    points = arc_points(spec, segments=segments)
+    return [(point.x, point.y) for point in points]
+
+
+def _validate_flash_polygon(geometry: Polygon) -> None:
+    if geometry.is_empty or float(geometry.area) <= 0.0 or not geometry.is_valid:
+        raise ValueError("Gerber flash polygonization produced invalid geometry")
 
 
 class ImageCompositionStream(Generic[T]):

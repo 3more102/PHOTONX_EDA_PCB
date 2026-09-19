@@ -19,11 +19,12 @@ from ..gerber_geometry.arc import (
     validate_arc,
 )
 from ..gerber_geometry.model import GeoPoint
-from ..geometry_kernel import pad_shape, region_shape
+from ..geometry_kernel import region_shape
 from ..gerber_image import (
     ImageCompositionStream,
     canonical_polygon_components,
     compose_polygon_operations,
+    polygonize_flash,
 )
 from ..ids import stable_id
 from ..models import CopperRegion, OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
@@ -374,10 +375,10 @@ class GerberRS274XParser:
                     "info",
                     "GERBER_CLEAR_POLARITY_REGION_COMPOSITION",
                     (
-                        "clear layer polarity is enabled for exact ordered polygon "
-                        "composition of supported G36/G37 regions and rectangular D03 "
-                        "flashes; tracks, outlines, and circular/obround flashes remain "
-                        "fail-closed"
+                        "clear layer polarity is enabled for ordered polygon "
+                        "composition of supported G36/G37 regions and solid C/R/O D03 "
+                        "flashes; C/O boundaries use bounded inscribed-chord "
+                        "polygonization while tracks and outlines remain fail-closed"
                     ),
                     str(path),
                     line_no,
@@ -3050,13 +3051,53 @@ class GerberRS274XParser:
         self.current = nxt
 
     def _composition_geometry_shape(self, geometry):
-        """Return exact polygonal geometry for the bounded LPC material subset."""
+        """Return bounded polygonal geometry for the LPC material subset."""
         if isinstance(geometry, CopperRegion):
             return region_shape(geometry)
-        if isinstance(geometry, PadCandidate) and geometry.shape.upper() == "R":
-            return pad_shape(geometry)
+        if isinstance(geometry, PadCandidate) and geometry.shape.upper() in {"C", "R", "O"}:
+            return polygonize_flash(
+                geometry.center.x,
+                geometry.center.y,
+                geometry.size_x,
+                geometry.size_y,
+                geometry.shape,
+                max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+                max_arc_segments=_MAX_ARC_SEGMENTS,
+            ).geometry
         raise TypeError(
-            "LPC composition supports CopperRegion and rectangular PadCandidate geometry"
+            "LPC composition supports CopperRegion and solid C/R/O PadCandidate geometry"
+        )
+
+    def _composition_polygonization_evidence(
+        self,
+        geometry,
+    ) -> Evidence | None:
+        """Describe bounded curved-flash polygonization when a component uses it."""
+        if not isinstance(geometry, PadCandidate):
+            return None
+        if geometry.shape.upper() not in {"C", "O"}:
+            return None
+
+        polygonization = polygonize_flash(
+            geometry.center.x,
+            geometry.center.y,
+            geometry.size_x,
+            geometry.size_y,
+            geometry.shape,
+            max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+            max_arc_segments=_MAX_ARC_SEGMENTS,
+        )
+        source = geometry.provenance.sources[0] if geometry.provenance.sources else None
+        return Evidence(
+            "gerber_flash_polygonization",
+            (
+                f"shape={geometry.shape.upper()}; "
+                f"method=inscribed_chords; "
+                f"curved_segments={polygonization.curved_segments}; "
+                f"max_chord_error_mm={polygonization.max_chord_error_mm:.12g}"
+            ),
+            1.0,
+            source,
         )
 
     def _composition_operation_affects_component(
@@ -3106,13 +3147,12 @@ class GerberRS274XParser:
         path: Path,
         out: GerberLayerResult,
     ) -> None:
-        """Materialize the bounded polygon-exact LPC image subset.
+        """Materialize the bounded polygonal LPC image subset.
 
-        Gerber clear polarity is an ordered image operation. PHOTONX currently
-        materializes supported G36/G37 regions plus axis-aligned rectangular
-        D03 flashes, whose geometry maps exactly to polygons. Tracks, outline
-        segments, and non-rectangular flashes remain fail-closed rather than
-        being flattened through an approximation boundary.
+        Supported G36/G37 regions and rectangular D03 flashes are exact.
+        Circular and obround D03 flashes use deterministic inscribed-chord
+        polygonization with the same 0.005 mm maximum chord-error policy used
+        for Gerber arcs. Tracks and outline segments remain fail-closed.
         """
         if not self.clear_polarity_seen:
             return
@@ -3129,8 +3169,8 @@ class GerberRS274XParser:
                 "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY",
                 (
                     "clear Gerber layer polarity supports G36/G37 regions and "
-                    "rectangular D03 flashes only; tracks or outline geometry are "
-                    "present and remain outside the exact polygon-composition subset"
+                    "solid C/R/O D03 flashes; tracks or outline geometry are present "
+                    "and remain outside the bounded polygon-composition subset"
                 ),
                 out,
             )
@@ -3138,16 +3178,18 @@ class GerberRS274XParser:
                 self._disable_image_geometry(out)
             return
 
-        unsupported_pads = [pad for pad in out.pads if pad.shape.upper() != "R"]
+        unsupported_pads = [
+            pad for pad in out.pads if pad.shape.upper() not in {"C", "R", "O"}
+        ]
         if unsupported_pads:
             self._fail_or_warn(
                 path,
                 source_line or 0,
                 source_raw or "%LPC*%",
-                "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_RECTANGULAR_FLASH",
+                "UNSUPPORTED_GERBER_CLEAR_POLARITY_FLASH_SHAPE",
                 (
-                    "clear Gerber layer polarity currently composes only rectangular "
-                    "D03 flashes exactly; circular or obround flashes remain fail-closed"
+                    "clear Gerber layer polarity supports only solid C/R/O D03 "
+                    "flashes in the bounded polygon-composition subset"
                 ),
                 out,
             )
@@ -3224,6 +3266,11 @@ class GerberRS274XParser:
                     prov.add_source(source)
                 for evidence in operation.geometry.provenance.evidence:
                     prov.add_evidence(evidence)
+                polygonization_evidence = self._composition_polygonization_evidence(
+                    operation.geometry
+                )
+                if polygonization_evidence is not None:
+                    prov.add_evidence(polygonization_evidence)
                 polarity_source = self._layer_polarity_source_for_operation(operation)
                 if polarity_source is not None:
                     prov.add_source(polarity_source)

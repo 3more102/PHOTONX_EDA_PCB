@@ -170,7 +170,7 @@ def test_lpc_with_track_remains_fail_closed(tmp_path: Path):
     )
 
 
-def test_lpc_with_flash_remains_fail_closed(tmp_path: Path):
+def test_lpc_clear_circular_flash_before_material_is_supported_noop(tmp_path: Path):
     path = _write(
         tmp_path,
         "lpc_flash.gtl",
@@ -180,8 +180,13 @@ def test_lpc_with_flash_remains_fail_closed(tmp_path: Path):
         "X050000Y050000D03*\n",
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="rectangular D03 flashes|tracks or outline geometry"):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.pads == []
+    assert result.regions == []
+    report = preflight(path)
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
 
 
 def test_lpc_mixed_dark_track_and_clear_region_fails_closed(tmp_path: Path):
@@ -197,7 +202,7 @@ def test_lpc_mixed_dark_track_and_clear_region_fails_closed(tmp_path: Path):
         + _rectangle("030000", "030000", "070000", "070000"),
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="rectangular D03 flashes|tracks or outline geometry"):
+    with pytest.raises(UnsupportedFeatureError, match="tracks or outline geometry"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     report = preflight(path)

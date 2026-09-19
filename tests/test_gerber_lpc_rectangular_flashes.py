@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from photonx_eda_pcb.errors import UnsupportedFeatureError
 from photonx_eda_pcb.geometry_kernel import region_shape
+from photonx_eda_pcb.gerber_image import polygonize_flash
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 from photonx_eda_pcb.preflight import preflight
 
@@ -172,27 +172,95 @@ def test_lpc_rectangular_flash_step_repeat_composes_each_instance(tmp_path: Path
     )
 
 
-def test_lpc_circular_flash_remains_fail_closed(tmp_path: Path):
+def test_lpc_circular_flash_subtracts_with_bounded_polygonization(tmp_path: Path):
     path = _write(
         tmp_path,
         "circle_flash.gtl",
-        "%ADD10C,2*%\n"
-        "%LPC*%\n"
+        "%ADD10R,10X10*%\n"
+        "%ADD11C,2*%\n"
+        "%LPD*%\n"
         "D10*\n"
+        "X050000Y050000D03*\n"
+        "%LPC*%\n"
+        "D11*\n"
         "X050000Y050000D03*\n",
     )
 
-    with pytest.raises(
-        UnsupportedFeatureError,
-        match="rectangular D03 flashes",
-    ):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    expected_clear = polygonize_flash(5.0, 5.0, 2.0, 2.0, "C").geometry.area
+    assert result.pads == []
+    assert len(result.regions) == 1
+    assert len(result.regions[0].holes) == 1
+    assert region_shape(result.regions[0]).area == pytest.approx(100.0 - expected_clear)
+
+    polygonization = [
+        evidence
+        for evidence in result.regions[0].provenance.evidence
+        if evidence.kind == "gerber_flash_polygonization"
+    ]
+    assert len(polygonization) == 1
+    assert "shape=C" in polygonization[0].detail
+    assert "method=inscribed_chords" in polygonization[0].detail
+    assert "max_chord_error_mm=0.005" in polygonization[0].detail
 
     report = preflight(path)
-    assert not report.ready_for_strict_reconstruction
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_lpc_obround_flash_subtracts_with_bounded_polygonization(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "obround_flash.gtl",
+        "%ADD10R,10X10*%\n"
+        "%ADD11O,4X2*%\n"
+        "%LPD*%\n"
+        "D10*\n"
+        "X050000Y050000D03*\n"
+        "%LPC*%\n"
+        "D11*\n"
+        "X050000Y050000D03*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    expected_clear = polygonize_flash(5.0, 5.0, 4.0, 2.0, "O").geometry.area
+    assert len(result.regions) == 1
+    assert len(result.regions[0].holes) == 1
+    assert region_shape(result.regions[0]).area == pytest.approx(100.0 - expected_clear)
     assert any(
-        "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_RECTANGULAR_FLASH" in blocker
-        for blocker in report.strict_blockers
+        evidence.kind == "gerber_flash_polygonization"
+        and "shape=O" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+
+def test_lpc_rounded_flash_dark_refill_preserves_order(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "rounded_refill.gtl",
+        "%ADD10R,10X10*%\n"
+        "%ADD11C,4*%\n"
+        "%ADD12C,2*%\n"
+        "%LPD*%\n"
+        "D10*\n"
+        "X050000Y050000D03*\n"
+        "%LPC*%\n"
+        "D11*\n"
+        "X050000Y050000D03*\n"
+        "%LPD*%\n"
+        "D12*\n"
+        "X050000Y050000D03*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    large = polygonize_flash(5.0, 5.0, 4.0, 4.0, "C").geometry.area
+    small = polygonize_flash(5.0, 5.0, 2.0, 2.0, "C").geometry.area
+    assert len(result.regions) == 2
+    assert sum(region_shape(region).area for region in result.regions) == pytest.approx(
+        100.0 - large + small
     )
 
 def test_lpc_rectangular_flash_follows_whole_image_rotation(tmp_path: Path):
