@@ -69,8 +69,9 @@ This makes parity testing and deployment policy explicit at the workflow boundar
 Candidate-pair calls now keep an immutable native AABB spatial hash attached to each
 `SpatialHashIndex` revision. Repeated tolerance queries reuse the same C++ grid
 instead of rebuilding it. A successful Python-side insert increments the index
-revision; the next native query destroys the stale handle and rebuilds from the
-new sorted ID/box snapshot. Generic index-like objects without a revision remain
+revision; the next native query replaces the cached handle and rebuilds from the
+new sorted ID/box snapshot. A stale handle is retired only after its last in-flight
+Python wrapper reference is released, avoiding use-after-free during concurrent queries. Generic index-like objects without a revision remain
 safe by using a temporary native handle for that call only.
 
 The handle stores broad-phase state only. Pair acceptance remains inclusive AABB
