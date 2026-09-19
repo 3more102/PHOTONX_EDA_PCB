@@ -44,9 +44,9 @@ def test_incremental_fs_notation_accumulates_xy_deltas(
     result = GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     assert len(result.tracks) == 2
-    assert result.tracks[0].start == pytest.approx((1.0, 1.0))
-    assert result.tracks[0].end == pytest.approx((2.0, 1.0))
-    assert result.tracks[1].end == pytest.approx((2.0, 0.5))
+    assert (result.tracks[0].start.x, result.tracks[0].start.y) == pytest.approx((1.0, 1.0))
+    assert (result.tracks[0].end.x, result.tracks[0].end.y) == pytest.approx((2.0, 1.0))
+    assert (result.tracks[1].end.x, result.tracks[1].end.y) == pytest.approx((2.0, 0.5))
 
 
 def test_g90_switches_incremental_fs_file_back_to_absolute_notation(
@@ -82,8 +82,8 @@ def test_incremental_fs_arc_endpoint_accumulates_but_ij_remains_offset(
     result = GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     assert result.tracks
-    assert result.tracks[0].start == pytest.approx((1.0, 0.0))
-    assert result.tracks[-1].end == pytest.approx((0.0, 1.0))
+    assert (result.tracks[0].start.x, result.tracks[0].start.y) == pytest.approx((1.0, 0.0))
+    assert (result.tracks[-1].end.x, result.tracks[-1].end.y) == pytest.approx((0.0, 1.0))
 
 
 def test_absolute_fs_notation_remains_supported(tmp_path: Path):
