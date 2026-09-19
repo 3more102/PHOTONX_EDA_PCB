@@ -538,7 +538,7 @@ class GerberRS274XParser:
             (
                 f"Gerber LR{self.aperture_rotation_deg:.12g} rotates "
                 f"{aperture.shape} aperture D{aperture.code} to a non-axis-aligned "
-                "flash shape outside the current PadCandidate representation"
+                "shape for a flash outside the current PadCandidate representation"
             ),
             out,
         )
