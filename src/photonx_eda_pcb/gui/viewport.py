@@ -45,11 +45,13 @@ def board_bounds(board: BoardModel) -> Bounds | None:
         )
 
     for pad in board.pads:
+        half_x = max(0.0, pad.size_x) / 2
+        half_y = max(0.0, pad.size_y) / 2
         bounds = _include_points(
             bounds,
             (
-                (pad.center.x - pad.size_x / 2, pad.center.y - pad.size_y / 2),
-                (pad.center.x + pad.size_x / 2, pad.center.y + pad.size_y / 2),
+                (pad.center.x - half_x, pad.center.y - half_y),
+                (pad.center.x + half_x, pad.center.y + half_y),
             ),
         )
 
@@ -100,7 +102,7 @@ def fit_viewport(
     canvas_height: float,
     *,
     padding: float = 30.0,
-    min_scale: float = 2.0,
+    min_scale: float = 0.05,
     max_scale: float = 100.0,
 ) -> tuple[float, float, float] | None:
     """Return scale and offsets that center all board evidence."""
