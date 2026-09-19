@@ -261,8 +261,10 @@ def test_cpp_candidate_pairs_reuses_persistent_index_and_invalidates_on_mutation
 
     second_cache = index._photonx_native_aabb_cache
     assert second_cache is not first_cache
-    assert first_cache.handle is None
+    assert first_cache.handle is not None
     assert second_cache.revision == index.revision
+    first_cache.close()
+    assert first_cache.handle is None
 
 
 @pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
