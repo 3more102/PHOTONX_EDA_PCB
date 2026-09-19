@@ -5,6 +5,7 @@ from photonx_eda_pcb.spatial_connectivity import native_backend
 from photonx_eda_pcb.spatial_connectivity.points import radius_query, radius_queries
 from photonx_eda_pcb.spatial_connectivity.native_backend import (
     NativeBackendLoadError,
+    NativeBackendUnavailable,
     native_available,
 )
 
@@ -59,6 +60,31 @@ def test_broken_native_library_does_not_silently_fallback(monkeypatch):
         assert attempts == 1
     finally:
         native_backend._load_library.cache_clear()
+
+
+def test_candidate_pairs_rejects_out_of_range_native_indices(monkeypatch):
+    class FakeLibrary:
+        def photonx_candidate_pairs(
+            self,
+            _boxes,
+            box_count,
+            _tolerance,
+            _cell_size,
+            out_pairs,
+            _out_capacity,
+            out_count,
+        ):
+            out_count._obj.value = 1
+            if out_pairs is None:
+                return native_backend._BUFFER_TOO_SMALL
+            out_pairs[0].first = int(box_count.value)
+            out_pairs[0].second = 0
+            return native_backend._OK
+
+    monkeypatch.setattr(native_backend, "_load_library", lambda: FakeLibrary())
+
+    with pytest.raises(NativeBackendUnavailable, match="out-of-range"):
+        candidate_pairs(_sample_index(), 0.1, backend="native")
 
 
 def test_missing_native_library_discovery_is_cached(monkeypatch):
