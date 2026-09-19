@@ -31,7 +31,7 @@ Windows with a CMake-supported Visual Studio toolchain:
 
 Point Python at the resulting shared library with `PHOTONX_NATIVE_LIBRARY`.
 
-The CI workflow builds the native library and executes the full pytest suite with it enabled so native/Python parity regressions are exercised continuously.
+The Linux CI workflow builds the native library and executes the full pytest suite with it enabled so native/Python parity regressions are exercised continuously. Dedicated smoke jobs also build and load the native library on macOS and Windows and run the native parity regression module, guarding the C ABI and platform-specific shared-library layout.
 
 ## Stage 2: batch point-radius broad phase
 
