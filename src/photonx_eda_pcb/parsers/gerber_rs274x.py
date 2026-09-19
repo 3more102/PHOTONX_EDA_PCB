@@ -374,9 +374,10 @@ class GerberRS274XParser:
                     "info",
                     "GERBER_CLEAR_POLARITY_REGION_COMPOSITION",
                     (
-                        "clear layer polarity is enabled for exact ordered G36/G37 "
-                        "region composition; files containing tracks, flashes, or "
-                        "outline geometry remain fail-closed"
+                        "clear layer polarity is enabled for exact ordered polygon "
+                        "composition of supported G36/G37 regions and rectangular D03 "
+                        "flashes; tracks, outlines, and circular/obround flashes remain "
+                        "fail-closed"
                     ),
                     str(path),
                     line_no,
