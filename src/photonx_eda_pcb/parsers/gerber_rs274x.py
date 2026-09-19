@@ -1870,8 +1870,10 @@ class GerberRS274XParser:
 
             if loop_shapes[0].contains(loop_shapes[1]):
                 shell, hole = loop_a, loop_b
+                hole_area = float(loop_shapes[1].area)
             elif loop_shapes[1].contains(loop_shapes[0]):
                 shell, hole = loop_b, loop_a
+                hole_area = float(loop_shapes[0].area)
             else:
                 self._region_fail(
                     path,
@@ -1924,7 +1926,7 @@ class GerberRS274XParser:
                         f"bridge_orientation={bridge_orientation}; "
                         f"bridge_start_mm=({a0.x:.12g},{a0.y:.12g}); "
                         f"bridge_end_mm=({a1.x:.12g},{a1.y:.12g}); "
-                        f"hole_area_mm2={float(loop_shapes[0].area if hole is loop_a else loop_shapes[1].area):.12g}; "
+                        f"hole_area_mm2={hole_area:.12g}; "
                         f"filled_area_mm2={float(shape.area):.12g}"
                     ),
                     1.0,
