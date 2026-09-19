@@ -95,15 +95,35 @@ def test_centered_circle_macro_accepts_rotation_as_geometry_invariant(tmp_path: 
     assert pad.size_y == pytest.approx(0.8)
 
 
+def test_undefined_longer_macro_variable_does_not_alias_shorter_modifier(
+    tmp_path: Path,
+):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMROUND*1,1,$10,0,0*%\n"
+        "%ADD10ROUND,0.800*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
 
-def test_undefined_longer_macro_variable_does_not_alias_shorter_modifier(\n    tmp_path: Path,\n):\n    path = _write(\n        tmp_path,\n        "%FSLAX24Y24*%
-"\n        "%MOMM*%
-"\n        "%AMROUND*1,1,$10,0,0*%
-"\n        "%ADD10ROUND,0.800*%
-"\n        "D10*
-"\n        "X000000Y000000D03*
-"\n        "M02*
-",\n    )\n\n    with pytest.raises(\n        UnsupportedFeatureError,\n        match="could not be evaluated",\n    ):\n        GerberRS274XParser("F.Cu", strict=True).parse(path)\n\n    report = preflight(path)\n    assert not report.ready_for_strict_reconstruction\n    assert any(\n        "INVALID_GERBER_APERTURE_MACRO" in blocker\n        for blocker in report.strict_blockers\n    )\n\n\ndef test_circle_macro_extra_modifier_fails_closed(tmp_path: Path):
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="could not be evaluated",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "INVALID_GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
+
+
+def test_circle_macro_extra_modifier_fails_closed(tmp_path: Path):
     path = _write(
         tmp_path,
         "%FSLAX24Y24*%\n"
