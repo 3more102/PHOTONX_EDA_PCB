@@ -39,6 +39,14 @@ The native ABI also supports batched point-radius candidate generation. PHOTONX 
 
 The batch path is used by drill association, footprint clustering and metrics, and component-pair inference and metrics. This reduces repeated Python-to-native transitions while preserving the previous Python result contract.
 
+The main spatial consumers expose the same backend contract as the low-level API:
+
+- `attach_drills(..., backend="auto" | "python" | "native")`
+- `infer_component_hypotheses(..., backend="auto" | "python" | "native")`
+- `cluster_pads(..., backend="auto" | "python" | "native")`
+
+This makes parity testing and deployment policy explicit at the workflow boundary instead of requiring callers to depend on environment discovery alone.
+
 ## Safety contract
 
 The native backend:
