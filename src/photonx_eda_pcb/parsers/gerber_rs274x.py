@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import isclose, isfinite, pi
+from math import cos, isclose, isfinite, pi
 from pathlib import Path
 import re
 
@@ -26,6 +26,7 @@ from ..gerber_image import (
     polygonize_aperture_track,
     polygonize_flash,
     polygonize_holed_flash,
+    polygonize_regular_polygon_flash,
     polygonize_rotated_flash,
     polygonize_track,
     trace_polygon_operation_contributions,
@@ -42,7 +43,9 @@ from .gerber_parts.tokenizer import iter_gerber_statements
 _FS = re.compile(r"^%FS([LT])([AI])?X(\d)(\d)Y(\d)(\d)\*%$")
 _MO = re.compile(r"^%MO(MM|IN)\*%$")
 _AD_STANDARD = re.compile(
-    r"^%ADD(\d+)([CRO]),?([0-9.]+(?:X[0-9.]+)*)\*%$"
+    r"^%ADD(\d+)([CROP]),?"
+    r"([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
+    r"(?:X[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))*)\*%$"
 )
 _AD_MACRO = re.compile(r"^%ADD(\d+)([A-Za-z_.$][A-Za-z0-9_.$-]*)(?:,([^*]*))?\*%$")
 _SELECT = re.compile(r"^(?:G54)?D(\d+)\*$")
@@ -107,6 +110,8 @@ class Aperture:
     x: float
     y: float
     hole_diameter: float | None = None
+    polygon_vertices: int | None = None
+    polygon_rotation_deg: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -144,8 +149,9 @@ class GerberLayerResult:
 class GerberRS274XParser:
     """Strict, auditable RS-274X subset parser.
 
-    Supported: FS, MO, ADD(C/R/O), Dnn selection, G01/D01/D02/D03,
-    linear C/R/O aperture draws on material layers, bounded G74 single-quadrant
+    Supported: FS, MO, ADD(C/R/O/P), Dnn selection, G01/D01/D02/D03,
+    linear C/R/O aperture draws plus standard P D03 flashes on material layers,
+    bounded G74 single-quadrant
     and G75 multi-quadrant G02/G03 circular
     interpolation with circular apertures, dark multi-contour linear/G74/G75
     G36/G37 regions with bounded multi-hole cut-ins, G04, M02, and standard
@@ -1052,6 +1058,111 @@ class GerberRS274XParser:
                 out,
             )
             self.unsupported_apertures.add(code)
+            return
+
+        if shape == "P":
+            if len(values) not in {2, 3, 4}:
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_STANDARD_POLYGON_APERTURE",
+                    (
+                        "P standard aperture requires outer diameter and vertex "
+                        "count, with optional rotation and round-hole diameter"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            outer_diameter = values[0]
+            vertices_value = values[1]
+            rotation = values[2] if len(values) >= 3 else 0.0
+            hole_diameter = values[3] if len(values) == 4 else None
+
+            if outer_diameter <= 0:
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_STANDARD_APERTURE_SIZE",
+                    "P standard aperture outer diameter must be positive",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+            if (
+                not isfinite(vertices_value)
+                or not vertices_value.is_integer()
+                or not 3 <= int(vertices_value) <= 12
+            ):
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_POLYGON_VERTEX_COUNT",
+                    "P standard aperture vertex count must be an integer in 3..12",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+            if not isfinite(rotation):
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_POLYGON_ROTATION",
+                    "P standard aperture rotation must be finite",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            vertices = int(vertices_value)
+            if hole_diameter is not None:
+                if hole_diameter <= 0:
+                    self._parse_error_or_warn(
+                        path,
+                        line_no,
+                        line,
+                        "INVALID_GERBER_APERTURE_HOLE",
+                        "standard aperture hole diameter must be positive",
+                        out,
+                    )
+                    self.unsupported_apertures.add(code)
+                    return
+                max_hole = outer_diameter * cos(pi / vertices)
+                if hole_diameter >= max_hole:
+                    self._parse_error_or_warn(
+                        path,
+                        line_no,
+                        line,
+                        "INVALID_GERBER_APERTURE_HOLE_FIT",
+                        (
+                            "P standard aperture round hole must strictly fit "
+                            "inside the regular polygon"
+                        ),
+                        out,
+                    )
+                    self.unsupported_apertures.add(code)
+                    return
+
+            outer_mm = to_mm(outer_diameter, self.units)
+            hole_mm = (
+                None
+                if hole_diameter is None
+                else to_mm(hole_diameter, self.units)
+            )
+            self.apertures[code] = Aperture(
+                code,
+                "P",
+                outer_mm,
+                outer_mm,
+                hole_mm,
+                polygon_vertices=vertices,
+                polygon_rotation_deg=rotation % 360.0,
+            )
             return
 
         solid_parameter_count = 1 if shape == "C" else 2
