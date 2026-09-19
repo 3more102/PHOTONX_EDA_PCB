@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-_RE=re.compile(r"%ADD(?P<code>\d+)(?P<shape>[CROP]),?(?P<a>[0-9.]+)?(?:X(?P<b>[0-9.]+))?\*%")
+_RE=re.compile(r"%ADD(?P<code>[0-9]+)(?P<shape>[CROP]),?(?P<a>[0-9.]+)?(?:X(?P<b>[0-9.]+))?\*%")
 @dataclass(frozen=True)
 class ApertureDefinition:
     code:int
