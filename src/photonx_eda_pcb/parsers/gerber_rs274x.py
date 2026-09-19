@@ -57,6 +57,14 @@ _APERTURE_SCALING = re.compile(
     r"^%LS([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))\*%$",
     re.IGNORECASE,
 )
+_IMAGE_ROTATION = re.compile(r"^%IR(0|90|180|270)\*%$", re.IGNORECASE)
+_LEGACY_SCALE_FACTOR = re.compile(
+    r"^%SF"
+    r"(?:A([0-9]+(?:\.[0-9]*)?|\.[0-9]+))?"
+    r"(?:B([0-9]+(?:\.[0-9]*)?|\.[0-9]+))?"
+    r"\*%$",
+    re.IGNORECASE,
+)
 
 _MAX_STEP_REPEAT_INSTANCES = 10_000
 _ARC_MAX_CHORD_ERROR_MM = 0.005
@@ -133,6 +141,8 @@ class GerberRS274XParser:
         self.layer_polarity = "dark"
         self.image_geometry_enabled = True
         self.incremental = False
+        self.image_rotation_deg = 0
+        self.image_rotation_source: SourceRef | None = None
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -380,6 +390,112 @@ class GerberRS274XParser:
         )
         if not self.strict:
             self._disable_image_geometry(out)
+
+    def _handle_image_rotation(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        match = _IMAGE_ROTATION.match(line)
+        if match is None:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_IMAGE_ROTATION",
+                "legacy Gerber IR rotation must be one of 0, 90, 180, or 270 degrees",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        if self.image_rotation_source is not None:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "DUPLICATE_GERBER_IMAGE_ROTATION",
+                "legacy Gerber IR may only be declared once",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        if out.tracks or out.pads or out.outline:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "LATE_GERBER_IMAGE_ROTATION",
+                "legacy Gerber IR must precede emitted image geometry",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        self.image_rotation_deg = int(match.group(1))
+        self.image_rotation_source = SourceRef(str(path), line_no, line)
+
+    def _handle_legacy_scale_factor(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        match = _LEGACY_SCALE_FACTOR.match(line)
+        if match is None:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_SCALE_FACTOR",
+                "invalid legacy Gerber SF scale-factor command",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        a_scale = 1.0 if match.group(1) is None else float(match.group(1))
+        b_scale = 1.0 if match.group(2) is None else float(match.group(2))
+        if isclose(a_scale, 1.0, rel_tol=0.0, abs_tol=1e-12) and isclose(
+            b_scale, 1.0, rel_tol=0.0, abs_tol=1e-12
+        ):
+            return
+
+        self._fail_or_warn(
+            path,
+            line_no,
+            line,
+            "UNSUPPORTED_GERBER_TRANSFORM",
+            (
+                "non-identity legacy Gerber SF scale factor changes coordinate "
+                "geometry and is not implemented safely"
+            ),
+            out,
+        )
+        if not self.strict:
+            self._disable_image_geometry(out)
+
+    def _rotate_image_point(self, point: Point) -> Point:
+        if self.image_rotation_deg == 90:
+            return Point(-point.y, point.x)
+        if self.image_rotation_deg == 180:
+            return Point(-point.x, -point.y)
+        if self.image_rotation_deg == 270:
+            return Point(point.y, -point.x)
+        return point
+
+    def _rotate_image_size(self, x: float, y: float) -> tuple[float, float]:
+        if self.image_rotation_deg in {90, 270}:
+            return y, x
+        return x, y
 
     def _decode(self, raw, axis):
         if raw is None:
@@ -842,6 +958,15 @@ class GerberRS274XParser:
                     src,
                 )
             )
+        if self.image_rotation_source is not None and self.image_rotation_deg:
+            prov.add_evidence(
+                Evidence(
+                    "gerber_image_rotation",
+                    f"rotation_deg_ccw={self.image_rotation_deg}",
+                    1.0,
+                    self.image_rotation_source,
+                )
+            )
         return prov
 
     def _configure_step_repeat(
@@ -1224,12 +1349,18 @@ class GerberRS274XParser:
         width = max(aperture.x, aperture.y)
 
         for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
-            repeated_center = Point(center.x + dx_mm, center.y + dy_mm)
+            repeated_center = self._rotate_image_point(
+                Point(center.x + dx_mm, center.y + dy_mm)
+            )
             for segment_index in range(segment_count):
                 start_geo = points[segment_index]
                 end_geo = points[segment_index + 1]
-                start = Point(start_geo.x + dx_mm, start_geo.y + dy_mm)
-                end = Point(end_geo.x + dx_mm, end_geo.y + dy_mm)
+                start = self._rotate_image_point(
+                    Point(start_geo.x + dx_mm, start_geo.y + dy_mm)
+                )
+                end = self._rotate_image_point(
+                    Point(end_geo.x + dx_mm, end_geo.y + dy_mm)
+                )
 
                 id_parts = [
                     path.name,
@@ -1359,6 +1490,19 @@ class GerberRS274XParser:
                 continue
             if line in {"G91*", "G091*"}:
                 self.incremental = True
+                continue
+
+            # Deprecated whole-image rotation is exactly representable for the
+            # four orthogonal angles allowed by the Gerber specification.
+            if line.startswith("%IR"):
+                self._handle_image_rotation(line, p, line_no, out)
+                continue
+
+            # Legacy SF is recognized explicitly. Identity scaling is harmless;
+            # non-identity scaling remains fail-closed until coordinate scaling,
+            # arc semantics, and the non-scaled aperture/SR rules are modeled.
+            if line.startswith("%SF"):
+                self._handle_legacy_scale_factor(line, p, line_no, out)
                 continue
 
             # Older generators may emit explicit default transform statements.
@@ -1636,10 +1780,12 @@ class GerberRS274XParser:
                     width = ap.x
 
                     for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
-                        start = Point(
-                            self.current.x + dx_mm, self.current.y + dy_mm
+                        start = self._rotate_image_point(
+                            Point(self.current.x + dx_mm, self.current.y + dy_mm)
                         )
-                        end = Point(nxt.x + dx_mm, nxt.y + dy_mm)
+                        end = self._rotate_image_point(
+                            Point(nxt.x + dx_mm, nxt.y + dy_mm)
+                        )
                         if self.step_repeat is None:
                             obj_id = stable_id(
                                 "trk",
@@ -1687,8 +1833,11 @@ class GerberRS274XParser:
                             )
 
                 elif operation == "3":
+                    size_x, size_y = self._rotate_image_size(ap.x, ap.y)
                     for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
-                        center = Point(nxt.x + dx_mm, nxt.y + dy_mm)
+                        center = self._rotate_image_point(
+                            Point(nxt.x + dx_mm, nxt.y + dy_mm)
+                        )
                         if self.step_repeat is None:
                             obj_id = stable_id(
                                 "pad",
@@ -1719,8 +1868,8 @@ class GerberRS274XParser:
                             PadCandidate(
                                 obj_id,
                                 center,
-                                ap.x,
-                                ap.y,
+                                size_x,
+                                size_y,
                                 ap.shape,
                                 self.layer,
                                 provenance=prov,
