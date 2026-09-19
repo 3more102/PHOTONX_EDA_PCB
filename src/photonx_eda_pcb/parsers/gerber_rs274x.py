@@ -184,6 +184,7 @@ class GerberRS274XParser:
         self.region_points: list[Point] = []
         self.region_sources: list[SourceRef] = []
         self.region_contour_started = False
+        self.region_discard_until_g37 = False
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -951,6 +952,358 @@ class GerberRS274XParser:
         if self.image_rotation_deg:
             parts.extend(["ir", self.image_rotation_deg])
         return parts
+
+    def _reset_region(self) -> None:
+        self.region_active = False
+        self.region_start_source = None
+        self.region_points = []
+        self.region_sources = []
+        self.region_contour_started = False
+
+    def _region_fail(
+        self,
+        path: Path,
+        line_no: int,
+        line: str,
+        code: str,
+        message: str,
+        out: GerberLayerResult,
+        *,
+        discard_until_g37: bool = True,
+    ) -> None:
+        self._fail_or_warn(path, line_no, line, code, message, out)
+        if not self.strict:
+            self._disable_image_geometry(out)
+            self._reset_region()
+            self.region_discard_until_g37 = discard_until_g37
+
+    def _begin_region(
+        self,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+    ) -> None:
+        if self.region_active:
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_REGION_STATE",
+                "nested G36 region statements are invalid",
+                out,
+            )
+            return
+        self.region_active = True
+        self.region_start_source = SourceRef(str(path), line_no, line)
+        self.region_sources = [self.region_start_source]
+        self.region_points = []
+        self.region_contour_started = False
+
+    def _consume_linear_region_coordinate(
+        self,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+    ) -> bool:
+        match = _COORD.match(line)
+        if match is None:
+            return False
+
+        x_raw, y_raw, op = match.groups()
+        operation = op or self.current_operation
+        if op is not None:
+            self.current_operation = op
+        nxt = self._coordinate_point(x_raw, y_raw)
+        self.image_body_started = True
+        src = SourceRef(str(path), line_no, line)
+
+        if operation == "2":
+            if self.region_contour_started:
+                self._region_fail(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_REGION_MULTICONTOUR",
+                    (
+                        "the production region subset supports exactly one contour; "
+                        "a second D02 would begin another contour"
+                    ),
+                    out,
+                )
+                return True
+            self.region_contour_started = True
+            self.region_points = [nxt]
+            self.region_sources.append(src)
+            self.current = nxt
+            return True
+
+        if operation == "3":
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_REGION_FLASH",
+                "D03 flash is not valid inside a Gerber region statement",
+                out,
+            )
+            return True
+
+        if operation != "1":
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_REGION_OPERATION",
+                "region coordinate requires D01 or D02",
+                out,
+            )
+            return True
+
+        if not self.region_contour_started:
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_REGION_CONTOUR_START",
+                "a region contour must start with D02 before D01 segments",
+                out,
+            )
+            return True
+
+        if self.interpolation != "linear":
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "UNSUPPORTED_GERBER_REGION_ARC",
+                "the production region subset supports linear G01 segments only",
+                out,
+            )
+            return True
+
+        self.region_points.append(nxt)
+        self.region_sources.append(src)
+        self.current = nxt
+        return True
+
+    def _finish_region(
+        self,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+    ) -> None:
+        if not self.region_active:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_REGION_STATE",
+                "G37 encountered without an active G36 region statement",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        end_source = SourceRef(str(path), line_no, line)
+        self.region_sources.append(end_source)
+
+        if not self.region_contour_started or not self.region_points:
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_REGION_EMPTY",
+                "G36/G37 region contains no contour",
+                out,
+                discard_until_g37=False,
+            )
+            return
+
+        if len(self.region_points) < 4:
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_REGION_CONTOUR",
+                "region contour needs at least three edges and explicit closure",
+                out,
+                discard_until_g37=False,
+            )
+            return
+
+        if self.region_points[-1] != self.region_points[0]:
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_REGION_OPEN_CONTOUR",
+                "G37 does not implicitly close a region contour; last point must equal first",
+                out,
+                discard_until_g37=False,
+            )
+            return
+
+        source_polygon = self.region_points[:-1]
+        source_xy = [(point.x, point.y) for point in source_polygon]
+        if len(set(source_xy)) < 3:
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_REGION_CONTOUR",
+                "region contour must contain at least three distinct vertices",
+                out,
+                discard_until_g37=False,
+            )
+            return
+
+        polygon = Polygon(source_xy)
+        if polygon.is_empty or polygon.area <= 0 or not polygon.is_valid or not polygon.exterior.is_simple:
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_REGION_CONTOUR",
+                "region contour must be a positive-area simple non-self-intersecting polygon",
+                out,
+                discard_until_g37=False,
+            )
+            return
+
+        start_source = self.region_start_source or end_source
+        source_signature = tuple(source_xy)
+        for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
+            transformed = tuple(
+                (
+                    point_out.x,
+                    point_out.y,
+                )
+                for point_out in (
+                    self._transform_output_point(point, dx_mm, dy_mm)
+                    for point in source_polygon
+                )
+            )
+            transformed_polygon = Polygon(transformed)
+            id_parts = [
+                path.name,
+                start_source.line,
+                line_no,
+                source_signature,
+                self.layer,
+            ]
+            id_parts.extend(self._image_transform_id_parts())
+            if self.step_repeat is not None:
+                id_parts.extend(["sr", x_index, y_index])
+            zone_id = stable_id("zone", *id_parts)
+            island_id = stable_id("island", zone_id, 0)
+
+            prov = self._step_repeat_provenance(
+                end_source,
+                x_index or 0,
+                y_index or 0,
+                dx_mm,
+                dy_mm,
+            )
+            for source in self.region_sources:
+                prov.add_source(source)
+            prov.add_evidence(
+                Evidence(
+                    "gerber_region",
+                    (
+                        "subset=linear_single_contour; "
+                        f"vertices={len(transformed)}; "
+                        f"area_mm2={transformed_polygon.area:.12g}"
+                    ),
+                    1.0,
+                    start_source,
+                )
+            )
+            out.zones.append(
+                Zone(
+                    zone_id,
+                    self.layer,
+                    islands=[ZoneIsland(island_id, transformed)],
+                    provenance=prov,
+                )
+            )
+
+        self._reset_region()
+
+    def _consume_region_statement(
+        self,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+    ) -> bool:
+        if self.region_discard_until_g37:
+            if line in {"G37*", "G037*"}:
+                self.region_discard_until_g37 = False
+                self._reset_region()
+            return True
+
+        if line in {"G36*", "G036*"}:
+            self._begin_region(path, line_no, line, out)
+            return True
+
+        if line in {"G37*", "G037*"}:
+            self._finish_region(path, line_no, line, out)
+            return True
+
+        if not self.region_active:
+            return False
+
+        if line in {"G01*", "G1*"}:
+            self.interpolation = "linear"
+            return True
+
+        if line in {"G02*", "G2*", "G03*", "G3*"} or _ARC_COORD.match(line):
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "UNSUPPORTED_GERBER_REGION_ARC",
+                "the production region subset does not yet support circular contour segments",
+                out,
+            )
+            return True
+
+        if line in {"D01*", "D1*"}:
+            self.current_operation = "1"
+            return True
+        if line in {"D02*", "D2*"}:
+            self.current_operation = "2"
+            return True
+        if line in {"D03*", "D3*"}:
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_REGION_FLASH",
+                "D03 flash is not valid inside a Gerber region statement",
+                out,
+            )
+            return True
+
+        if self._consume_linear_region_coordinate(path, line_no, line, out):
+            return True
+
+        self._region_fail(
+            path,
+            line_no,
+            line,
+            "UNSUPPORTED_GERBER_REGION_COMMAND",
+            (
+                "the production region subset allows only D01/D02 coordinate "
+                "operations and linear G01 plotting between G36 and G37"
+            ),
+            out,
+        )
+        return True
 
     def _decode(self, raw, axis):
         if raw is None:
