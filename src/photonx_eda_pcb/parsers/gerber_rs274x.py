@@ -1837,7 +1837,6 @@ class GerberRS274XParser:
                     self.current = nxt
                     return
             self.region_state.add(nxt.x, nxt.y)
-            self.region_current_edge_kinds.append("linear")
             self.region_current_sources.append(src)
             self.region_sources.append(src)
             self.current = nxt
@@ -1867,6 +1866,7 @@ class GerberRS274XParser:
                 self.current = nxt
                 return
             self.region_state.add(nxt.x, nxt.y)
+            self.region_current_edge_kinds.append("linear")
             self.region_current_sources.append(src)
             self.region_sources.append(src)
             self.current = nxt
