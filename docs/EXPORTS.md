@@ -33,14 +33,15 @@ The bundle and individual flags are additive and may be combined. They do not al
 
 ## KiCad export audit artifacts
 
-When `photonx reconstruct ... --kicad` is requested, the CLI writes four KiCad-facing artifacts:
+When `photonx reconstruct ... --kicad` is requested, the CLI writes five KiCad-facing artifacts:
 
 - `reconstructed.kicad_pcb` — the experimental editable board representation;
 - `kicad_export_report.json` — the complete current `KicadExportReport`, including counts, exported/skipped IDs, structured issues, and `ok`;
 - `kicad_omissions.json` — the stable omission-manifest view covering slots, copper regions, tracks, and arbitrary routed paths;
+- `kicad_connectivity_roundtrip.json` — a format-aware readback comparison of net-table, track, recovered-pad, copper-region, and recovered-slot connectivity, with explicit separation between readback equality and source-equivalence losses;
 - `kicad_validation.txt` — the independent native `kicad-cli pcb drc` result when the validator is available.
 
-Exporter warnings remain warnings and do not change reconstruction exit-code semantics. The audit files make conservative omissions, defaulted zone rules, omitted fill caches, and unresolved references visible instead of discarding that evidence in the normal CLI workflow.
+Exporter warnings and connectivity-audit findings do not change reconstruction exit-code semantics. The audit files make conservative omissions, defaulted zone rules, omitted fill caches, unresolved references, and any readback connectivity drift visible instead of discarding that evidence in the normal CLI workflow.
 
 ## KiCad native validation
 
