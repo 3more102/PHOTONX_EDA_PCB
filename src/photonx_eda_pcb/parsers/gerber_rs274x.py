@@ -62,6 +62,7 @@ _ARC_COORD = re.compile(
     r"(?:J([+-]?[0-9.]+))?"
     r"(?:D0?([12]))?\*$"
 )
+_COORDINATE_LIKE = re.compile(r"^(?:G0?[123](?=[XYIJD*])|[XYIJ])")
 _FILE_POLARITY = re.compile(
     r"^%TF\.FilePolarity,(Positive|Negative)\*%$",
     re.IGNORECASE,
@@ -4356,6 +4357,19 @@ class GerberRS274XParser:
                     )
                     continue
 
+                if _COORDINATE_LIKE.match(line):
+                    self._region_parse_fail(
+                        p,
+                        line_no,
+                        line,
+                        "INVALID_GERBER_COORDINATE",
+                        "malformed Gerber coordinate/interpolation statement",
+                        out,
+                    )
+                    if not self.strict:
+                        self._disable_image_geometry(out)
+                    continue
+
                 self._region_fail(
                     p,
                     line_no,
@@ -5748,6 +5762,19 @@ class GerberRS274XParser:
                             )
 
                 self.current = nxt
+                continue
+
+            if _COORDINATE_LIKE.match(line):
+                self._parse_error_or_warn(
+                    p,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_COORDINATE",
+                    "malformed Gerber coordinate/interpolation statement",
+                    out,
+                )
+                if not self.strict:
+                    self._disable_image_geometry(out)
                 continue
 
             self._fail_or_warn(
