@@ -5,7 +5,7 @@ from .spatial import layer_candidate_pairs
 from ..models import BoardModel
 
 def _prepare(board):
-    objects=[*board.tracks,*board.pads]
+    objects=[*board.tracks,*board.pads,*getattr(board,"regions",())]
     g=nx.Graph()
     for obj in objects:g.add_node(obj.id,layer=obj.layer,kind=type(obj).__name__)
     shapes={obj.id:copper_shape(obj) for obj in objects}
