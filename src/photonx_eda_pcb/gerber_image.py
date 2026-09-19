@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import isclose
+from math import atan2, degrees, hypot, isclose
 from typing import Generic, Iterable, Literal, TypeVar
 
+from shapely.affinity import rotate
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.geometry.polygon import orient
@@ -47,6 +48,95 @@ class FlashPolygonization:
     curved_segments: int
     max_chord_error_mm: float
     approximated: bool
+
+
+@dataclass(frozen=True)
+class TrackPolygonization:
+    """Polygonal circular-aperture linear stroke plus approximation metadata."""
+
+    geometry: Polygon
+    length_mm: float
+    curved_segments: int
+    max_chord_error_mm: float
+    approximated: bool
+
+
+def polygonize_track(
+    start_x: float,
+    start_y: float,
+    end_x: float,
+    end_y: float,
+    width: float,
+    *,
+    max_chord_error_mm: float = 0.005,
+    max_arc_segments: int = 4096,
+) -> TrackPolygonization:
+    """Return a deterministic bounded polygon for a circular-aperture D01 stroke.
+
+    The analytic image is a capsule: an exact rectangular sweep plus two round
+    end-caps. Only the curved caps are approximated, using the same symmetric
+    inscribed-chord policy as rounded flash polygonization.
+    """
+
+    x0 = float(start_x)
+    y0 = float(start_y)
+    x1 = float(end_x)
+    y1 = float(end_y)
+    stroke_width = float(width)
+    if stroke_width <= 0.0:
+        raise ValueError("Gerber track width must be positive")
+
+    length = hypot(x1 - x0, y1 - y0)
+    if length <= 1e-15:
+        circle = polygonize_flash(
+            x0,
+            y0,
+            stroke_width,
+            stroke_width,
+            "C",
+            max_chord_error_mm=max_chord_error_mm,
+            max_arc_segments=max_arc_segments,
+        )
+        return TrackPolygonization(
+            geometry=circle.geometry,
+            length_mm=0.0,
+            curved_segments=circle.curved_segments,
+            max_chord_error_mm=circle.max_chord_error_mm,
+            approximated=True,
+        )
+
+    cx = (x0 + x1) / 2.0
+    cy = (y0 + y1) / 2.0
+    capsule = polygonize_flash(
+        cx,
+        cy,
+        length + stroke_width,
+        stroke_width,
+        "O",
+        max_chord_error_mm=max_chord_error_mm,
+        max_arc_segments=max_arc_segments,
+    )
+    angle_deg = degrees(atan2(y1 - y0, x1 - x0))
+    geometry = (
+        capsule.geometry
+        if isclose(angle_deg % 360.0, 0.0, rel_tol=0.0, abs_tol=1e-15)
+        else rotate(
+            capsule.geometry,
+            angle_deg,
+            origin=(cx, cy),
+            use_radians=False,
+        )
+    )
+    if geometry.is_empty or float(geometry.area) <= 0.0 or not geometry.is_valid:
+        raise ValueError("Gerber track polygonization produced invalid geometry")
+
+    return TrackPolygonization(
+        geometry=geometry,
+        length_mm=length,
+        curved_segments=capsule.curved_segments,
+        max_chord_error_mm=capsule.max_chord_error_mm,
+        approximated=True,
+    )
 
 
 @dataclass(frozen=True)
