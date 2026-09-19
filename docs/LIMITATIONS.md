@@ -16,11 +16,11 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - Gerber `%LPD*%` dark layer polarity is accepted as the supported positive-object state;
 - identity Gerber aperture transforms (`%LMN*%`, zero/full-turn `LR`, and `%LS1*%`) are accepted;
 - deprecated `MI` mirroring is supported exactly for A/B coordinate data, including flashes, linear draws, tessellated arcs, outlines, and incremental coordinates; apertures and step-repeat distances are intentionally not mirrored;
+- deprecated `SF` coordinate scaling is supported for flashes and linear geometry with independent A/B factors in the specification range; apertures and step-repeat distances remain unscaled, uniform SF supports circular arcs, and anisotropic SF arcs fail closed because they become non-circular;
 - deprecated `OF` translation is supported exactly in the active MO units, including flashes, linear draws, arcs, outlines, and step-repeat instances, and composes after MI/SF and before IR;
 - both legacy `ASAXBY` and `ASAYBX` are accepted as output-device-only metadata because AS does not affect CAD-to-CAM image geometry;
 - legacy `IN` and `LN` names are retained as comment diagnostics, `G55` and `M01` are accepted as no-ops, and `M00` terminates parsing with the same stop semantics as `M02`;
 - deprecated whole-image `IR` rotation is supported exactly for its specification-defined 0/90/180/270-degree values, including flashes, linear draws, tessellated arcs, outlines, and step-repeat instances;
-- legacy `SF` is recognized explicitly: identity scaling is accepted, while non-identity scaling fails closed;
 - metric/inch units and coordinate formats for the supported subset;
 - legacy Gerber absolute (`G90` / FS `A`) and incremental (`G91` / FS `I`) X/Y coordinate notation, with I/J retained as arc-center offsets;
 - point Excellon drill hits in absolute or incremental (`G91` / `ICI,ON`) coordinate mode;
@@ -43,7 +43,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - X2 `.FilePolarity,Negative` image inversion: strict mode rejects it, while permissive mode records the unsupported semantic and suppresses all geometry from that file rather than treating clearances as positive material;
 - Gerber `%LPC*%` clear layer polarity: strict mode rejects it, while permissive mode suppresses the file geometry because clear objects subtract from previously created image content and object ordering matters;
 - non-identity Gerber aperture mirroring/rotation/scaling (`LM/LR/LS`): strict mode rejects them, while permissive mode suppresses file geometry because these graphics-state transforms alter flashes, draws, and arcs;
-- unsupported legacy Gerber `IP/SF` semantics: strict mode rejects them and permissive mode suppresses file geometry rather than emitting incorrect image semantics; `AS` is output-device-only and `MI`, `OF`, and `IR` are modeled within their declared subsets;
+- unsupported legacy Gerber `IP` semantics and anisotropic-SF circular interpolation: strict mode rejects them and permissive mode suppresses file geometry rather than emitting incorrect image semantics; `AS` is output-device-only and `MI`, `SF`, `OF`, and `IR` are modeled within their declared subsets;
 - Gerber dimensional data before an explicit `MO/G70/G71` unit declaration, or a later conflicting unit switch: strict mode rejects it and permissive mode clears/suppresses file geometry rather than inheriting the parser's default millimeter state or mixing unit systems;
 
 - invalid Gerber step-and-repeat state (malformed syntax, non-positive counts, or expansion beyond the configured safety limit): strict mode rejects it and permissive mode clears/suppresses file geometry rather than silently treating repeated content as a single instance;

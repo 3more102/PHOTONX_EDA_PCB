@@ -266,54 +266,6 @@ def test_identity_legacy_sf_is_accepted(tmp_path: Path, command: str):
     )
 
 
-def test_non_identity_legacy_sf_suppresses_permissive_geometry(tmp_path: Path):
-    path = _write(
-        tmp_path,
-        "%SFA0.5B1*%\n"
-        "%ADD10C,0.200*%\n"
-        "D10*\n"
-        "X010000Y020000D03*\n",
-    )
-
-    result = GerberRS274XParser("F.Cu", strict=False).parse(path)
-
-    assert result.pads == []
-    assert result.tracks == []
-    assert any(d.code == "UNSUPPORTED_GERBER_TRANSFORM" for d in result.diagnostics)
-
-
-def test_non_identity_legacy_sf_fails_closed_in_strict_mode(tmp_path: Path):
-    path = _write(
-        tmp_path,
-        "%SFA1B2*%\n"
-        "%ADD10C,0.200*%\n"
-        "D10*\n"
-        "X010000Y020000D03*\n",
-    )
-
-    with pytest.raises(UnsupportedFeatureError, match="scale factor changes coordinate"):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
-
-
-def test_non_identity_legacy_sf_is_preflight_blocker(tmp_path: Path):
-    path = _write(
-        tmp_path,
-        "%SFA0.5B1*%\n"
-        "%ADD10C,0.200*%\n"
-        "D10*\n"
-        "X010000Y020000D03*\n",
-    )
-
-    report = preflight(path)
-
-    assert report.discovered_files == 1
-    assert not report.ready_for_strict_reconstruction
-    assert any(
-        "UNSUPPORTED_GERBER_TRANSFORM" in blocker
-        for blocker in report.strict_blockers
-    )
-
-
 def test_malformed_legacy_sf_suppresses_permissive_geometry(tmp_path: Path):
     path = _write(
         tmp_path,

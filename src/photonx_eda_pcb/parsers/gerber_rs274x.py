@@ -163,6 +163,9 @@ class GerberRS274XParser:
         self.offset_a_mm = 0.0
         self.offset_b_mm = 0.0
         self.offset_source: SourceRef | None = None
+        self.scale_a = 1.0
+        self.scale_b = 1.0
+        self.scale_source: SourceRef | None = None
         self.axis_select_source: SourceRef | None = None
         self.image_name_source: SourceRef | None = None
 
@@ -742,26 +745,52 @@ class GerberRS274XParser:
                 self._disable_image_geometry(out)
             return
 
-        a_scale = 1.0 if match.group(1) is None else float(match.group(1))
-        b_scale = 1.0 if match.group(2) is None else float(match.group(2))
-        if isclose(a_scale, 1.0, rel_tol=0.0, abs_tol=1e-12) and isclose(
-            b_scale, 1.0, rel_tol=0.0, abs_tol=1e-12
-        ):
+        if self.scale_source is not None:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "DUPLICATE_GERBER_SCALE_FACTOR",
+                "legacy Gerber SF may only be declared once",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
             return
 
-        self._fail_or_warn(
-            path,
-            line_no,
-            line,
-            "UNSUPPORTED_GERBER_TRANSFORM",
-            (
-                "non-identity legacy Gerber SF scale factor changes coordinate "
-                "geometry and is not implemented safely"
-            ),
-            out,
-        )
-        if not self.strict:
-            self._disable_image_geometry(out)
+        if out.tracks or out.pads or out.outline:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "LATE_GERBER_SCALE_FACTOR",
+                "legacy Gerber SF must precede emitted image geometry",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        a_scale = 1.0 if match.group(1) is None else float(match.group(1))
+        b_scale = 1.0 if match.group(2) is None else float(match.group(2))
+        if not (0.0001 <= a_scale <= 999.99999) or not (
+            0.0001 <= b_scale <= 999.99999
+        ):
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_SCALE_FACTOR",
+                "legacy Gerber SF factors must be between 0.0001 and 999.99999",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        self.scale_a = a_scale
+        self.scale_b = b_scale
+        self.scale_source = SourceRef(str(path), line_no, line)
 
     def _mirror_coordinate_point(self, point: Point) -> Point:
         return Point(
@@ -790,10 +819,14 @@ class GerberRS274XParser:
         dy_mm: float = 0.0,
     ) -> Point:
         mirrored = self._mirror_coordinate_point(point)
-        # Per the Gerber specification MI mirrors coordinate data only.
-        # Step-repeat distances are not coordinate data and are therefore added
-        # after MI, before the whole-image IR rotation.
-        repeated = Point(mirrored.x + dx_mm, mirrored.y + dy_mm)
+        scaled = Point(
+            mirrored.x * self.scale_a,
+            mirrored.y * self.scale_b,
+        )
+        # MI/SF affect coordinate data only. Step-repeat distances are not
+        # coordinate data, so they are added afterwards and are neither mirrored
+        # nor scaled. OF then translates the whole image before IR.
+        repeated = Point(scaled.x + dx_mm, scaled.y + dy_mm)
         offset = Point(
             repeated.x + self.offset_a_mm,
             repeated.y + self.offset_b_mm,
@@ -804,6 +837,10 @@ class GerberRS274XParser:
         parts: list[object] = []
         if self.mirror_a or self.mirror_b:
             parts.extend(["mi", int(self.mirror_a), int(self.mirror_b)])
+        if not isclose(self.scale_a, 1.0, rel_tol=0.0, abs_tol=1e-12) or not isclose(
+            self.scale_b, 1.0, rel_tol=0.0, abs_tol=1e-12
+        ):
+            parts.extend(["sf", self.scale_a, self.scale_b])
         if self.offset_a_mm or self.offset_b_mm:
             parts.extend(["of", self.offset_a_mm, self.offset_b_mm])
         if self.image_rotation_deg:
@@ -1288,6 +1325,19 @@ class GerberRS274XParser:
                     self.mirror_image_source,
                 )
             )
+        if self.scale_source is not None and (
+            not isclose(self.scale_a, 1.0, rel_tol=0.0, abs_tol=1e-12)
+            or not isclose(self.scale_b, 1.0, rel_tol=0.0, abs_tol=1e-12)
+        ):
+            prov.add_source(self.scale_source)
+            prov.add_evidence(
+                Evidence(
+                    "gerber_scale_factor",
+                    f"scale_a={self.scale_a:.12g}; scale_b={self.scale_b:.12g}",
+                    1.0,
+                    self.scale_source,
+                )
+            )
         if self.offset_source is not None and (self.offset_a_mm or self.offset_b_mm):
             prov.add_source(self.offset_source)
             prov.add_evidence(
@@ -1636,6 +1686,23 @@ class GerberRS274XParser:
             self.current = nxt
             return
 
+        if not isclose(self.scale_a, self.scale_b, rel_tol=0.0, abs_tol=1e-12):
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "UNSUPPORTED_GERBER_ANISOTROPIC_ARC_SCALE",
+                (
+                    "anisotropic legacy SF scaling turns circular interpolation "
+                    "into non-circular geometry and is not modeled exactly"
+                ),
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            self.current = nxt
+            return
+
         center = self._resolve_arc_center(
             path,
             line_no,
@@ -1663,9 +1730,11 @@ class GerberRS274XParser:
                 rel_tol=1e-6,
                 abs_tol=radius_tolerance,
             )
+            output_scale = self.scale_a
+            source_chord_error = _ARC_MAX_CHORD_ERROR_MM / output_scale
             segment_count = segments_for_chord_error(
                 spec,
-                _ARC_MAX_CHORD_ERROR_MM,
+                source_chord_error,
                 max_segments=_MAX_ARC_SEGMENTS,
                 rel_tol=1e-6,
                 abs_tol=radius_tolerance,
@@ -1741,7 +1810,7 @@ class GerberRS274XParser:
                             f"direction={direction}; "
                             f"center_mm=({repeated_center.x:.12g},"
                             f"{repeated_center.y:.12g}); "
-                            f"radius_mm={radius:.12g}; "
+                            f"radius_mm={radius * self.scale_a:.12g}; "
                             f"segment={segment_index + 1}/{segment_count}; "
                             f"max_chord_error_mm={_ARC_MAX_CHORD_ERROR_MM:.12g}"
                         ),
