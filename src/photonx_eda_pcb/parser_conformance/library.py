@@ -30,4 +30,7 @@ def builtin_cases():
         ConformanceCase("excellon-linear-route","excellon","M48\nMETRIC\nT01C0.800\n%\nT01\nG00X1.000Y1.000\nM15\nG01X2.000Y1.000\nM16\nM30\n",ConformanceExpectation({"drills":0,"slots":0,"routes":1})),
         ConformanceCase("excellon-ij-route-arc","excellon","M48\nMETRIC\nT01C0.800\n%\nT01\nG00X10.000Y0.000\nM15\nG03X0.000Y10.000I-10.000J0.000\nM16\nM30\n",ConformanceExpectation({"drills":0,"slots":0,"routes":1})),
         ConformanceCase("excellon-radius-route-arc","excellon","M48\nMETRIC\nT01C0.800\n%\nT01\nG00X10.000Y0.000\nM15\nG03X0.000Y10.000A10.000\nM16\nM30\n",ConformanceExpectation({"drills":0,"slots":0,"routes":1})),
+        ConformanceCase("excellon-data-after-m30-permissive","excellon","M48\nMETRIC\nT01C0.800\n%\nT01\nX1.000Y1.000\nM30\nX2.000Y2.000\n",ConformanceExpectation({"drills":0,"slots":0,"routes":0},("INVALID_EXCELLON_DATA_AFTER_M30",)),strict=False),
+        ConformanceCase("excellon-undefined-tool-permissive","excellon","M48\nMETRIC\nT01C0.800\n%\nT02\nM30\n",ConformanceExpectation({"drills":0,"slots":0,"routes":0},("INVALID_EXCELLON_TOOL_SELECTION",)),strict=False),
+        ConformanceCase("excellon-duplicate-tool-permissive","excellon","M48\nMETRIC\nT01C0.800\nT01C0.900\n%\nM30\n",ConformanceExpectation({"drills":0,"slots":0,"routes":0},("INVALID_EXCELLON_TOOL_REDEFINITION",)),strict=False),
     ]
