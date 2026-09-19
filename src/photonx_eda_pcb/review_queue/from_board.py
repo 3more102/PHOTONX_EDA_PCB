@@ -66,7 +66,8 @@ def build_board_review_queue(
                 None,
             )
             target = selectable or f"validation:{issue.code}"
-            _add_deduplicated(queue,
+            _add_deduplicated(
+                queue,
                 ReviewItem(
                     stable_id(
                         "review",
@@ -203,7 +204,8 @@ def build_board_review_queue(
                 if diagnostic.line is not None
                 else diagnostic.path
             )
-            _add_deduplicated(queue,
+            _add_deduplicated(
+                queue,
                 ReviewItem(
                     stable_id(
                         "review",
