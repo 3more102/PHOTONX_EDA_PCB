@@ -20,7 +20,7 @@ def _write(tmp_path: Path, body: str, *, header: str = HEADER) -> Path:
     return path
 
 
-@pytest.mark.parametrize("token", [".", "1..0"])
+@pytest.mark.parametrize("token", [".", "1..0", "+", "1e2", "nan"])
 def test_malformed_explicit_decimal_coordinate_fails_closed(
     tmp_path: Path,
     token: str,
@@ -96,7 +96,7 @@ def test_invalid_region_coordinate_fails_closed(tmp_path: Path):
         tmp_path,
         "G36*\n"
         "X000000Y000000D02*\n"
-        "X1..0Y010000D01*\n"
+        "X1e2Y010000D01*\n"
         "G37*\n",
     )
 
