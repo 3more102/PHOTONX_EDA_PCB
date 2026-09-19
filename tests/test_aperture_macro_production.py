@@ -651,7 +651,7 @@ def test_irregular_outline_macro_clear_flash_composes_with_lpc(tmp_path: Path):
     assert region_shape(result.regions[0]).area == pytest.approx(3.875)
 
 
-def test_general_outline_macro_d01_sweep_remains_fail_closed(tmp_path: Path):
+def test_general_outline_macro_d01_sweep_is_supported(tmp_path: Path):
     path = _write(
         tmp_path,
         "%FSLAX24Y24*%\n"
@@ -664,11 +664,23 @@ def test_general_outline_macro_d01_sweep_remains_fail_closed(tmp_path: Path):
         "M02*\n",
     )
 
-    with pytest.raises(
-        UnsupportedFeatureError,
-        match="D03 flashes only",
-    ):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    shape = region_shape(result.regions[0])
+    assert shape.is_valid
+    assert shape.area > 0.0
+    assert any(
+        evidence.kind == "gerber_outline_macro_track"
+        and "method=exact_linear_polygon_sweep" in evidence.detail
+        and "approximated=false" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+    report = preflight(path)
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
 
 
 def test_outline_macro_requires_exact_explicit_closure(tmp_path: Path):
