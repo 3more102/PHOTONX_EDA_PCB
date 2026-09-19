@@ -1603,6 +1603,209 @@ class GerberRS274XParser:
             )
             return
 
+        if primitive["kind"] == "outline":
+            if len(values) < 11:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"outline aperture macro {name!r} has too few modifiers",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            exposure = values[0]
+            vertex_count_value = values[1]
+            if (
+                not isfinite(float(exposure))
+                or not isfinite(float(vertex_count_value))
+                or not float(vertex_count_value).is_integer()
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"outline aperture macro {name!r} has an invalid vertex count",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            vertex_count = int(vertex_count_value)
+            expected_values = 2 * vertex_count + 5
+            if (
+                exposure != 1
+                or not 3 <= vertex_count <= 5000
+                or len(values) != expected_values
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    (
+                        f"outline aperture macro {name!r} requires exposure on, "
+                        "3..5000 vertices, one closing coordinate pair, and rotation"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            coordinate_values = values[2:-1]
+            rotation = values[-1]
+            if not isfinite(float(rotation)) or not all(
+                isfinite(float(value)) for value in coordinate_values
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"outline aperture macro {name!r} contains non-finite geometry",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            points = [
+                (
+                    float(coordinate_values[index]),
+                    float(coordinate_values[index + 1]),
+                )
+                for index in range(0, len(coordinate_values), 2)
+            ]
+            start_x, start_y = points[0]
+            end_x, end_y = points[-1]
+            if not (
+                isclose(start_x, end_x, rel_tol=0.0, abs_tol=1e-12)
+                and isclose(start_y, end_y, rel_tol=0.0, abs_tol=1e-12)
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"outline aperture macro {name!r} is not explicitly closed",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            vertices = points[:-1]
+            epsilon = 1e-12
+
+            # Exact centered rectangles can reuse the existing R aperture path.
+            if vertex_count == 4:
+                sides = [
+                    (
+                        vertices[(index + 1) % 4][0] - vertices[index][0],
+                        vertices[(index + 1) % 4][1] - vertices[index][1],
+                    )
+                    for index in range(4)
+                ]
+                lengths = [hypot(dx, dy) for dx, dy in sides]
+                centered = (
+                    abs(sum(x for x, _ in vertices) / 4.0) <= epsilon
+                    and abs(sum(y for _, y in vertices) / 4.0) <= epsilon
+                )
+                opposite = (
+                    abs(sides[0][0] + sides[2][0]) <= epsilon
+                    and abs(sides[0][1] + sides[2][1]) <= epsilon
+                    and abs(sides[1][0] + sides[3][0]) <= epsilon
+                    and abs(sides[1][1] + sides[3][1]) <= epsilon
+                )
+                perpendicular = (
+                    lengths[0] > epsilon
+                    and lengths[1] > epsilon
+                    and lengths[2] > epsilon
+                    and lengths[3] > epsilon
+                    and abs(sides[0][0] * sides[1][0] + sides[0][1] * sides[1][1])
+                    <= epsilon * max(1.0, lengths[0] * lengths[1])
+                    and abs(sides[1][0] * sides[2][0] + sides[1][1] * sides[2][1])
+                    <= epsilon * max(1.0, lengths[1] * lengths[2])
+                )
+                if centered and opposite and perpendicular:
+                    base_rotation = degrees(atan2(sides[0][1], sides[0][0]))
+                    self.apertures[code] = Aperture(
+                        code,
+                        "R",
+                        to_mm(lengths[0], self.units),
+                        to_mm(lengths[1], self.units),
+                        base_rotation_deg=(base_rotation + float(rotation)) % 360.0,
+                    )
+                    return
+
+            # A centered Code-4 regular polygon is exactly representable by P.
+            if 3 <= vertex_count <= 12:
+                radii = [hypot(x, y) for x, y in vertices]
+                radius = radii[0]
+                centered = (
+                    abs(sum(x for x, _ in vertices) / vertex_count) <= epsilon
+                    and abs(sum(y for _, y in vertices) / vertex_count) <= epsilon
+                )
+                same_radius = radius > epsilon and all(
+                    isclose(value, radius, rel_tol=1e-12, abs_tol=1e-12)
+                    for value in radii[1:]
+                )
+                expected_edge = 2.0 * radius * sin(pi / vertex_count)
+                edge_lengths = [
+                    hypot(
+                        vertices[(index + 1) % vertex_count][0] - vertices[index][0],
+                        vertices[(index + 1) % vertex_count][1] - vertices[index][1],
+                    )
+                    for index in range(vertex_count)
+                ]
+                regular_edges = expected_edge > epsilon and all(
+                    isclose(
+                        value,
+                        expected_edge,
+                        rel_tol=1e-12,
+                        abs_tol=1e-12,
+                    )
+                    for value in edge_lengths
+                )
+                radial_crosses = [
+                    vertices[index][0] * vertices[(index + 1) % vertex_count][1]
+                    - vertices[index][1] * vertices[(index + 1) % vertex_count][0]
+                    for index in range(vertex_count)
+                ]
+                consistent_winding = all(value > epsilon for value in radial_crosses) or all(
+                    value < -epsilon for value in radial_crosses
+                )
+                if centered and same_radius and regular_edges and consistent_winding:
+                    self.apertures[code] = Aperture(
+                        code,
+                        "P",
+                        to_mm(2.0 * radius, self.units),
+                        to_mm(2.0 * radius, self.units),
+                        polygon_vertices=vertex_count,
+                        polygon_rotation_deg=(
+                            degrees(atan2(vertices[0][1], vertices[0][0]))
+                            + float(rotation)
+                        )
+                        % 360.0,
+                    )
+                    return
+
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                (
+                    f"outline aperture macro {name!r} is valid Code 4 syntax but "
+                    "is not an origin-centered exact rectangle or a centered "
+                    "regular polygon with 3..12 vertices"
+                ),
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
         if primitive["kind"] == "polygon":
             if len(values) != 6:
                 self._fail_or_warn(
