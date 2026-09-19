@@ -50,6 +50,11 @@ def test_simple_copper_region_exports_as_zone_with_saved_fill(tmp_path: Path):
     assert "(fill yes " in text
     assert "(island_removal_mode 1)" in text
     assert '(filled_polygon (layer "F.Cu")' in text
+    assert any(
+        issue.code == "KICAD_COPPER_REGION_ZONE_RULES_DEFAULTED"
+        and issue.object_id == "R1"
+        for issue in report.issues
+    )
 
     # PhotonX regions are explicitly closed; KiCad polygon point lists need only
     # the corner vertices. The first point therefore appears once in the zone
