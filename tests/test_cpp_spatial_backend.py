@@ -187,3 +187,12 @@ def test_cpp_radius_batch_matches_python_reference():
         index, queries, backend="python"
     )
 
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_radius_batch_matches_python_when_center_arithmetic_overflows():
+    index = SpatialHashIndex(1e308)
+    index.insert("huge", AABB(1e308, 0.0, 1e308, 0.0))
+
+    expected = radius_query(index, 1e308, 0.0, 0.0, backend="python")
+    assert expected == []
+    assert radius_query(index, 1e308, 0.0, 0.0, backend="native") == expected
+
