@@ -37,6 +37,14 @@ def assign_physical_nets(board: BoardModel, graph: nx.Graph) -> list[NetGroup]:
                     1.0,
                 )
             )
+        elif x2_names == ["N/C"]:
+            prov.add_evidence(
+                Evidence(
+                    "gerber_x2_reserved_nc",
+                    "reserved X2 net name N/C is preserved as evidence, not a unique net label",
+                    1.0,
+                )
+            )
         elif len(x2_names) == 1:
             label = x2_names[0]
             prov.add_evidence(
@@ -59,4 +67,24 @@ def assign_physical_nets(board: BoardModel, graph: nx.Graph) -> list[NetGroup]:
         for member in members:
             obj = index.get(member)
             if hasattr(obj, "net_id"): obj.net_id = net_id
+    label_counts: dict[str, int] = {}
+    for net in nets:
+        if net.label:
+            label_counts[net.label] = label_counts.get(net.label, 0) + 1
+
+    for net in nets:
+        if net.label and label_counts.get(net.label, 0) > 1:
+            duplicate = net.label
+            net.label = None
+            net.provenance.add_evidence(
+                Evidence(
+                    "gerber_x2_duplicate_net_label",
+                    (
+                        f"name={duplicate}; physical_groups={label_counts[duplicate]}; "
+                        "label left unresolved"
+                    ),
+                    1.0,
+                )
+            )
+
     board.nets = nets; return nets
