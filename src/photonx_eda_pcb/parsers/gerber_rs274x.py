@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import isclose, pi
+from math import isclose, isfinite, pi
 from pathlib import Path
 import re
 
@@ -361,14 +361,27 @@ class GerberRS274XParser:
 
         match = _APERTURE_ROTATION.match(line)
         if match is not None:
-            self.aperture_rotation_deg = float(match.group(1)) % 360.0
+            value = float(match.group(1))
+            if not isfinite(value):
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_TRANSFORM",
+                    "Gerber LR rotation must be finite",
+                    out,
+                )
+                if not self.strict:
+                    self._disable_image_geometry(out)
+                return
+            self.aperture_rotation_deg = value % 360.0
             self.aperture_rotation_source = SourceRef(str(path), line_no, line)
             return
 
         match = _APERTURE_SCALING.match(line)
         if match is not None:
             value = float(match.group(1))
-            if value <= 0:
+            if not isfinite(value) or value <= 0:
                 self._parse_error_or_warn(
                     path,
                     line_no,
