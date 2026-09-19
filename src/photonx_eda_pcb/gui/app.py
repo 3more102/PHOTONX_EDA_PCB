@@ -56,7 +56,10 @@ def launch(input_dir: str | Path) -> None:
 
     nets.bind("<<ComboboxSelected>>", highlight)
 
-    review_queue = build_board_review_queue(result.board)
+    review_queue = build_board_review_queue(
+        result.board,
+        validation=result.validation,
+    )
     review = ttk.Treeview(
         side,
         columns=("kind", "target", "confidence", "reason"),
@@ -99,8 +102,12 @@ def launch(input_dir: str | Path) -> None:
             nets.set(item.target_id)
             state.selected_id = None
             inspector.show(item.target_id)
-        elif item.kind == "diagnostic":
-            state.selected_id = None
+        elif item.kind in {"diagnostic", "validation"}:
+            selectable = item.metadata.get("selectable_object_id")
+            if selectable in result.board.object_index():
+                state.selected_id = selectable
+            else:
+                state.selected_id = None
             inspector.show_review(item)
         else:
             if item.target_id in result.board.object_index():
