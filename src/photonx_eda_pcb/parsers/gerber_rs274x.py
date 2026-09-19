@@ -62,6 +62,9 @@ _MIRROR_IMAGE = re.compile(
     r"^%MI(?:A([01]))?(?:B([01]))?\*%$",
     re.IGNORECASE,
 )
+_AXIS_SELECT = re.compile(r"^%AS(AXBY|AYBX)\*%$", re.IGNORECASE)
+_IMAGE_NAME = re.compile(r"^%IN([^*%]+)\*%$")
+_LOAD_NAME = re.compile(r"^%LN([^*%]+)\*%$")
 _LEGACY_OFFSET = re.compile(
     r"^%OF"
     r"(?:A([+-]?(?:[0-9]+(?:\.[0-9]{1,5})?|\.[0-9]{1,5})))?"
@@ -160,6 +163,8 @@ class GerberRS274XParser:
         self.offset_a_mm = 0.0
         self.offset_b_mm = 0.0
         self.offset_source: SourceRef | None = None
+        self.axis_select_source: SourceRef | None = None
+        self.image_name_source: SourceRef | None = None
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -407,6 +412,144 @@ class GerberRS274XParser:
         )
         if not self.strict:
             self._disable_image_geometry(out)
+
+    def _handle_axis_select(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        match = _AXIS_SELECT.match(line)
+        if match is None:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_AXIS_SELECT",
+                "legacy Gerber AS must be AXBY or AYBX",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        if self.axis_select_source is not None:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "DUPLICATE_GERBER_AXIS_SELECT",
+                "legacy Gerber AS may only be declared once",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        if out.tracks or out.pads or out.outline:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "LATE_GERBER_AXIS_SELECT",
+                "legacy Gerber AS must appear before emitted image geometry",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        self.axis_select_source = SourceRef(str(path), line_no, line)
+        out.diagnostics.append(
+            ParseDiagnostic(
+                "info",
+                "GERBER_AXIS_SELECT_OUTPUT_DEVICE_ONLY",
+                (
+                    f"legacy AS {match.group(1).upper()} affects only output-device "
+                    "axis assignment and does not alter CAD-to-CAM image geometry"
+                ),
+                str(path),
+                line_no,
+            )
+        )
+
+    def _handle_image_name(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        match = _IMAGE_NAME.match(line)
+        if match is None:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_IMAGE_NAME",
+                "invalid legacy Gerber IN image-name command",
+                out,
+            )
+            return
+        if self.image_name_source is not None:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "DUPLICATE_GERBER_IMAGE_NAME",
+                "legacy Gerber IN may only be declared once",
+                out,
+            )
+            return
+        if out.tracks or out.pads or out.outline:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "LATE_GERBER_IMAGE_NAME",
+                "legacy Gerber IN must appear before emitted image geometry",
+                out,
+            )
+            return
+        self.image_name_source = SourceRef(str(path), line_no, line)
+        out.diagnostics.append(
+            ParseDiagnostic(
+                "info",
+                "GERBER_IMAGE_NAME_COMMENT",
+                f"legacy IN image name: {match.group(1)}",
+                str(path),
+                line_no,
+            )
+        )
+
+    def _handle_load_name(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        match = _LOAD_NAME.match(line)
+        if match is None:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_LOAD_NAME",
+                "invalid legacy Gerber LN load-name command",
+                out,
+            )
+            return
+        out.diagnostics.append(
+            ParseDiagnostic(
+                "info",
+                "GERBER_LOAD_NAME_COMMENT",
+                f"legacy LN section name: {match.group(1)}",
+                str(path),
+                line_no,
+            )
+        )
 
     def _handle_mirror_image(
         self,
@@ -1631,7 +1774,29 @@ class GerberRS274XParser:
         for line_no, line in iter_gerber_statements(text):
             if not line or line.startswith("G04"):
                 continue
-            if line == "M02*":
+            if line in {"M02*", "M00*"}:
+                break
+            if line == "M01*":
+                out.diagnostics.append(
+                    ParseDiagnostic(
+                        "info",
+                        "GERBER_OPTIONAL_STOP_IGNORED",
+                        "legacy M01 optional stop has no image effect",
+                        str(p),
+                        line_no,
+                    )
+                )
+                continue
+            if line == "G55*":
+                out.diagnostics.append(
+                    ParseDiagnostic(
+                        "info",
+                        "GERBER_PREPARE_FLASH_IGNORED",
+                        "legacy G55 prepare-for-flash code has no image effect",
+                        str(p),
+                        line_no,
+                    )
+                )
                 continue
             if line.startswith("%LP"):
                 self._handle_layer_polarity(line, p, line_no, out)
@@ -1694,6 +1859,18 @@ class GerberRS274XParser:
                 self.incremental = True
                 continue
 
+            if line.startswith("%AS"):
+                self._handle_axis_select(line, p, line_no, out)
+                continue
+
+            if line.startswith("%IN"):
+                self._handle_image_name(line, p, line_no, out)
+                continue
+
+            if line.startswith("%LN"):
+                self._handle_load_name(line, p, line_no, out)
+                continue
+
             # Deprecated MI mirrors coordinate data only. Apertures and
             # step-repeat distances are intentionally left unmirrored.
             if line.startswith("%MI"):
@@ -1722,9 +1899,9 @@ class GerberRS274XParser:
             # Older generators may emit explicit default transform statements.
             # Only the identity forms are accepted; non-identity transforms
             # remain unsupported rather than being silently ignored.
-            if line in {"%ASAXBY*%", "%IPPOS*%"}:
+            if line == "%IPPOS*%":
                 continue
-            if line.startswith(("%AS", "%IP")):
+            if line.startswith("%IP"):
                 self._fail_or_warn(
                     p,
                     line_no,
