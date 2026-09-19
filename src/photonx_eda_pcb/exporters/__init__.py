@@ -1,7 +1,8 @@
 from .csv_export import export_csv_tables
 from .graphml import export_graphml
 from .json_export import export_json
-from .kicad import export_kicad, validate_with_kicad_cli
+from .kicad import export_kicad, export_kicad_with_report, validate_with_kicad_cli
+from .omission_manifest import omission_manifest, write_omission_manifest
 from .svg import export_svg
 
 __all__ = [
@@ -9,6 +10,9 @@ __all__ = [
     "export_graphml",
     "export_json",
     "export_kicad",
+    "export_kicad_with_report",
+    "omission_manifest",
     "export_svg",
     "validate_with_kicad_cli",
+    "write_omission_manifest",
 ]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 from .capabilities import CAPABILITIES
@@ -10,9 +11,10 @@ from .exporters import (
     export_csv_tables,
     export_graphml,
     export_json,
-    export_kicad,
+    export_kicad_with_report,
     export_svg,
     validate_with_kicad_cli,
+    write_omission_manifest,
 )
 from .io import write_reconstruction_bundle
 from .pipeline import reconstruct
@@ -56,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument(
         "--kicad",
         action="store_true",
-        help="also emit reconstructed.kicad_pcb",
+        help="also emit reconstructed.kicad_pcb plus KiCad audit and validation artifacts",
     )
     r.add_argument(
         "--review-artifacts",
@@ -95,6 +97,13 @@ def _write_json(path: Path, payload: dict) -> None:
 def _write_text(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _write_kicad_export_report(path: Path, report) -> Path:
+    payload = asdict(report)
+    payload["ok"] = bool(report.ok)
+    _write_json(path, payload)
     return path
 
 
@@ -161,7 +170,18 @@ def main(argv=None) -> int:
         export_csv_tables(result.board, args.output / "csv")
 
     if args.kicad:
-        kpath = export_kicad(result.board, args.output / "reconstructed.kicad_pcb")
+        kpath, export_report = export_kicad_with_report(
+            result.board,
+            args.output / "reconstructed.kicad_pcb",
+        )
+        _write_kicad_export_report(
+            args.output / "kicad_export_report.json",
+            export_report,
+        )
+        write_omission_manifest(
+            export_report,
+            args.output / "kicad_omissions.json",
+        )
         ok, detail = validate_with_kicad_cli(kpath)
         (args.output / "kicad_validation.txt").write_text(
             f"status={ok}\n{detail}\n",
