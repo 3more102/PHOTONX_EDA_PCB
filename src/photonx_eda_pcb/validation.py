@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections import Counter
 from dataclasses import dataclass,field
 from .models import BoardModel
 from .excellon_routing.validation import validate_route
@@ -36,7 +37,12 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
     for obj in [*board.tracks,*board.pads,*getattr(board,"regions",())]:
         if obj.net_id and obj.id not in net_members:r.issues.append(ValidationIssue("error","OBJECT_NET_BACKREF_MISMATCH",f"{obj.id} has net_id but is not listed in that net",(obj.id,)))
     pad_ids={p.id for p in board.pads}
+    component_id_counts=Counter(comp.id for comp in board.components)
+    for component_id,count in sorted(component_id_counts.items()):
+        if count>1:r.issues.append(ValidationIssue("error","DUPLICATE_COMPONENT_ID",f"duplicate component hypothesis id {component_id}",(component_id,)))
     for comp in board.components:
+        duplicate_pad_ids=sorted(pid for pid,count in Counter(comp.pad_ids).items() if count>1)
+        if duplicate_pad_ids:r.issues.append(ValidationIssue("error","COMPONENT_PAD_DUPLICATE",f"{comp.id} repeats pad ids {duplicate_pad_ids}",(comp.id,*duplicate_pad_ids)))
         missing=[pid for pid in comp.pad_ids if pid not in pad_ids]
         if missing:r.issues.append(ValidationIssue("error","COMPONENT_PAD_MISSING",f"{comp.id} references missing pads {missing}",(comp.id,*missing)))
         if not 0<=comp.confidence<=1:r.issues.append(ValidationIssue("error","INVALID_COMPONENT_CONFIDENCE",f"invalid confidence for {comp.id}",(comp.id,)))
