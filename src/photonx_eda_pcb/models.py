@@ -3,6 +3,7 @@ from dataclasses import dataclass, field, asdict
 from .provenance import Provenance
 from .mechanical_features.model import SlotFeature
 from .excellon_routing.model import RoutedPath
+from .core.board_objects import iter_physical_objects
 
 @dataclass(frozen=True)
 class Point:
@@ -96,8 +97,7 @@ class BoardModel:
     regions: list[CopperRegion] = field(default_factory=list)
 
     def object_index(self) -> dict[str, object]:
-        items = [*self.tracks, *self.pads, *self.drills, *self.outline, *self.slots, *self.routes, *self.regions]
-        return {obj.id: obj for obj in items}
+        return {obj.id: obj for obj in iter_physical_objects(self)}
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
