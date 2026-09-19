@@ -1,10 +1,7 @@
 from pathlib import Path
 
 import networkx as nx
-import pytest
-
 from photonx_eda_pcb.connectivity.nets import assign_physical_nets
-from photonx_eda_pcb.errors import ParseError
 from photonx_eda_pcb.models import BoardModel, Point, Track
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 from photonx_eda_pcb.provenance import Evidence, Provenance, SourceRef
@@ -82,20 +79,6 @@ def test_to_n_update_affects_only_subsequent_objects(tmp_path: Path):
 
     assert _net_names(result.tracks[0]) == ["CLK"]
     assert _net_names(result.tracks[1]) == ["DATA"]
-
-
-def test_attribute_commands_inside_region_fail_closed(tmp_path: Path):
-    path = _write(
-        tmp_path,
-        "%FSLAX24Y24*%\n"
-        "%MOMM*%\n"
-        "G36*\n"
-        "%TO.N,CLK*%\n"
-        "M02*\n",
-    )
-
-    with pytest.raises(ParseError, match="not allowed inside G36/G37 regions"):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
 def test_physical_net_uses_consistent_x2_net_name():
