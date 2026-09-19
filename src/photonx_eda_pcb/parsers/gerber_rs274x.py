@@ -41,15 +41,15 @@ from .gerber_parts.step_repeat import parse_step_repeat
 from .gerber_parts.tokenizer import iter_gerber_statements
 
 
-_FS = re.compile(r"^%FS([LT])([AI])?X(\d)(\d)Y(\d)(\d)\*%$")
+_FS = re.compile(r"^%FS([LT])([AI])?X([0-9])([0-9])Y([0-9])([0-9])\*%$")
 _MO = re.compile(r"^%MO(MM|IN)\*%$")
 _AD_STANDARD = re.compile(
-    r"^%ADD(\d+)([CROP]),?"
+    r"^%ADD([0-9]+)([CROP]),?"
     r"([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
     r"(?:X[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))*)\*%$"
 )
-_AD_MACRO = re.compile(r"^%ADD(\d+)([A-Za-z_.$][A-Za-z0-9_.$-]*)(?:,([^*]*))?\*%$")
-_SELECT = re.compile(r"^(?:G54)?D(\d+)\*$")
+_AD_MACRO = re.compile(r"^%ADD([0-9]+)([A-Za-z_.$][A-Za-z0-9_.$-]*)(?:,([^*]*))?\*%$")
+_SELECT = re.compile(r"^(?:G54)?D([0-9]+)\*$")
 _OP_SELECT = re.compile(r"^D0?([123])\*$")
 _COORD = re.compile(
     r"^(?:G0?1)?(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?(?:D0?([123]))?\*$"
@@ -103,6 +103,25 @@ _MAX_STEP_REPEAT_INSTANCES = 10_000
 _ARC_MAX_CHORD_ERROR_MM = 0.005
 _MAX_ARC_SEGMENTS = 4096
 
+_ASCII_DECIMAL_DIGITS = frozenset("0123456789")
+
+
+def _contains_non_ascii_decimal_digit(text: str) -> bool:
+    """Return whether text contains a Unicode decimal digit outside ASCII."""
+    return any(
+        character.isdecimal() and character not in _ASCII_DECIMAL_DIGITS
+        for character in text
+    )
+
+
+def _is_structured_numeric_statement(line: str) -> bool:
+    """Return whether line carries syntax-level numeric identifiers."""
+    return (
+        line.startswith("%FS")
+        or line.startswith("%ADD")
+        or line.startswith("D")
+        or line.startswith("G54D")
+    )
 
 @dataclass(frozen=True)
 class Aperture:
@@ -4094,6 +4113,24 @@ class GerberRS274XParser:
                 continue
             if line in {"M02*", "M00*"}:
                 break
+
+            if (
+                _is_structured_numeric_statement(line)
+                and _contains_non_ascii_decimal_digit(line)
+            ):
+                self._parse_error_or_warn(
+                    p,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_NUMERIC_TOKEN",
+                    "Gerber numeric syntax requires ASCII decimal digits",
+                    out,
+                )
+                if not self.strict:
+                    self._disable_image_geometry(out)
+                    if self.region_state.active:
+                        self._abort_region()
+                continue
 
             if self.region_state.active:
                 if line in {"G37*", "G037*"}:
