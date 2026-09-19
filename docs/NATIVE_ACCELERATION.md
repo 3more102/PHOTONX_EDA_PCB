@@ -64,6 +64,14 @@ The main spatial consumers expose the same backend contract as the low-level API
 
 This makes parity testing and deployment policy explicit at the workflow boundary instead of requiring callers to depend on environment discovery alone.
 
+## Stage 3: persistent native spatial indexes
+
+Repeated connectivity and radius-query calls now reuse opaque C++ spatial-index handles instead of rebuilding native grids on every ctypes transition. Both AABB broad-phase and point-center broad-phase indexes are cached per `SpatialHashIndex` revision.
+
+`SpatialHashIndex` exposes a monotonic mutation revision. An insert invalidates the cached native view automatically on the next call. Duck-typed indexes without a trustworthy weak-key + revision contract use ephemeral native handles, so mutable custom indexes cannot accidentally reuse stale native geometry.
+
+Cache invalidation only removes the cache reference. An active query keeps a strong borrowed reference until it returns, preventing use-after-free when another thread clears or replaces the cache. Python still owns exact Euclidean filtering, deterministic ID mapping, and all PCB connectivity meaning.
+
 ## Safety contract
 
 The native backend:
@@ -81,8 +89,8 @@ Unsupported native inputs fall back to the Python reference path in `auto` mode.
 
 The next safe candidates are:
 
-1. persistent/batch AABB index handles to avoid rebuilding native grids across independent calls;
-2. benchmark-gated connectivity candidate acceleration and crossover thresholds;
+1. benchmark-gated crossover thresholds so small workloads stay on the Python reference path when that is faster;
+2. benchmark coverage for repeated-query workloads to quantify persistent-index wins;
 3. automated release-wheel production/signing for supported platform/Python combinations;
 4. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
 
