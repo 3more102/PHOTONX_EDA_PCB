@@ -14,6 +14,15 @@ def _write(tmp_path: Path, name: str, text: str) -> Path:
     return path
 
 
+def test_parse_limits_preserve_existing_positional_field_order():
+    limits = ParseLimits(10, 20, 30, 40)
+
+    assert limits.max_lines == 10
+    assert limits.max_line_length == 20
+    assert limits.max_apertures == 30
+    assert limits.max_objects == 40
+
+
 @pytest.mark.parametrize("strict", [True, False])
 def test_gerber_line_budget_is_hard_safety_limit(tmp_path: Path, strict: bool):
     path = _write(
