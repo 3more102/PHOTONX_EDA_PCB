@@ -8,7 +8,7 @@ from .kicad_policy import pad_shape_name,slot_geometry,slot_export_status
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
 def _u(name:str)->str:return str(uuid.uuid5(uuid.NAMESPACE_URL,"https://photonx.local/"+name))
-def _q(text:str)->str:return '"'+text.replace("\\","\\\\").replace('"','\\"')+'"'
+def _q(text:str)->str:return '"'+text.replace("\\","\\\\").replace('"','\\"').replace("\n","\\n").replace("\r","\\r")+'"'
 
 def _pad_lines(board,net_num,report):
     lines=[]
