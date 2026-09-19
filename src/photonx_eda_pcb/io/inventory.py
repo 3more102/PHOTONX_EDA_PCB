@@ -4,12 +4,9 @@ from pathlib import Path
 def inventory(root: str | Path) -> list[dict[str, object]]:
     root = Path(root)
     files = sorted(
-        (
-            p
-            for p in root.rglob("*")
-            if p.is_file() and not p.is_symlink()
-        ),
-        key=lambda p: (p.as_posix().lower(), p.as_posix()),
+        p
+        for p in root.rglob("*")
+        if p.is_file() and not p.is_symlink()
     )
     return [
         {
