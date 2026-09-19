@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added exact deprecated Gerber `OF` image translation using active MO units, with deterministic composition after MI/SF and before IR regardless of command appearance; translations propagate through flashes, tracks, outlines, tessellated arcs, and step-repeat instances with provenance and transform-aware stable IDs.
 - Added exact deprecated Gerber `MI` mirror-image support for A/B coordinate data, preserving the specification rule that apertures and step-repeat distances are not mirrored; MI composes deterministically before IR and is recorded in provenance.
 - Included active MI/IR image-transform semantics in generated track/pad/arc stable IDs so geometrically different transformed objects cannot retain the same deterministic ID.
 - Added exact deprecated Gerber whole-image `IR` rotation for 0/90/180/270 degrees, applied to flashes, linear draws, outlines, tessellated arcs, incremental-coordinate geometry, and step-repeat instances with explicit provenance evidence.

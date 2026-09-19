@@ -31,7 +31,7 @@ Deprecated Gerber `IR` image rotation is applied as an exact origin-centered tra
 
 The transform is applied consistently to linear tracks, outlines, flashes, tessellated arcs, and expanded step-repeat instances. Rectangular and obround flash X/Y dimensions are swapped at 90/270 degrees. Non-zero rotation is recorded as `gerber_image_rotation` provenance evidence.
 
-The transformation order follows the legacy Gerber rule independently of command appearance: MI is applied before IR in the currently supported subset. Legacy `SF` scale-factor syntax is also recognized. Identity scaling is accepted; non-identity scaling remains fail-closed because Gerber scales coordinate data but not apertures or step-repeat distances, and anisotropic scaling can change circular interpolation into non-circular geometry.
+Deprecated `OF` applies an absolute translation in the active MO units to the complete image. The transformation order follows the legacy Gerber rule independently of command appearance: MI is applied first, identity SF next, then OF translation, then IR rotation. Legacy `SF` scale-factor syntax is also recognized. Identity scaling is accepted; non-identity scaling remains fail-closed because Gerber scales coordinate data but not apertures or step-repeat distances, and anisotropic scaling can change circular interpolation into non-circular geometry.
 
 ## Deliberately unsupported
 
