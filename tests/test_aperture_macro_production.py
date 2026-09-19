@@ -836,7 +836,7 @@ def test_invalid_lower_left_rectangle_macro_preflight_blocks(tmp_path: Path):
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
-        "%AMLL*22,1,2.0,1.0,-1.0,-0.5,45*%\n"
+        "%AMLL*22,1,2.0,1.0,0,-0.5,45*%\n"
         "%ADD10LL*%\n"
         "D10*\n"
         "X000000Y000000D03*\n"
@@ -929,7 +929,7 @@ def test_permissive_unsupported_macro_skips_geometry_and_continues(tmp_path: Pat
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
-        "%AMBOX*21,1,1.0,2.0,0,0,30*%\n"
+        "%AMBOX*21,1,1.0,2.0,0.1,0,30*%\n"
         "%ADD10BOX*%\n"
         "%ADD11C,0.300*%\n"
         "D10*\n"
