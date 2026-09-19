@@ -32,6 +32,7 @@ _FILE_FUNCTION = re.compile(
     r"%TF\.FileFunction,(?P<value>[^*%]+)\*%",
     re.IGNORECASE,
 )
+_FILE_FUNCTION_PRESENT = re.compile(r"%TF\.FileFunction(?=[,*%])", re.IGNORECASE)
 
 
 def _side_token(tokens: list[str]) -> str | None:
@@ -55,8 +56,8 @@ def _x2_file_function_layer(text: str) -> str | None:
     if not match:
         return None
 
-    parts = [p.strip() for p in match.group("value").split(",") if p.strip()]
-    if not parts:
+    parts = [p.strip() for p in match.group("value").split(",")]
+    if not parts or any(not p for p in parts):
         return None
 
     function = parts[0].lower()
@@ -171,6 +172,6 @@ def infer_layer(path: str | Path, text: str | None = None) -> str | None:
     x2 = _x2_file_function_layer(source)
     if x2 is not None:
         return x2
-    if _FILE_FUNCTION.search(source):
+    if _FILE_FUNCTION_PRESENT.search(source):
         return None
     return _filename_layer(Path(path))
