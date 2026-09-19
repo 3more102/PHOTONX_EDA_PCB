@@ -20,6 +20,19 @@ set_target_properties(photonx_native PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
 )
 
+# Keep the loadable library in one predictable directory on both
+# single-config and multi-config generators (for example Visual Studio).
+# Without the per-config properties, multi-config generators append
+# Release/Debug below the configured output directory.
+foreach(config IN ITEMS Debug Release RelWithDebInfo MinSizeRel)
+    string(TOUPPER "${config}" config_upper)
+    set_target_properties(photonx_native PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY_${config_upper} "${CMAKE_BINARY_DIR}/lib"
+        RUNTIME_OUTPUT_DIRECTORY_${config_upper} "${CMAKE_BINARY_DIR}/lib"
+        ARCHIVE_OUTPUT_DIRECTORY_${config_upper} "${CMAKE_BINARY_DIR}/lib"
+    )
+endforeach()
+
 if(MSVC)
     target_compile_options(photonx_native PRIVATE /W4 /permissive-)
 else()
