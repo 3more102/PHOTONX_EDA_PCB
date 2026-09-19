@@ -51,15 +51,29 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
     for region in getattr(board,"regions",()):
         points=tuple(region.points)
         if len(points)<4 or points[0]!=points[-1]:
-            r.issues.append(ValidationIssue("error","REGION_NOT_CLOSED","copper region must have a closed contour",(region.id,)))
+            r.issues.append(ValidationIssue("error","REGION_NOT_CLOSED","copper region must have a closed outer contour",(region.id,)))
             continue
         unique={(float(p.x),float(p.y)) for p in points[:-1]}
         if len(unique)<3:
-            r.issues.append(ValidationIssue("error","REGION_VERTEX_COUNT_INVALID","copper region needs at least three unique vertices",(region.id,)))
+            r.issues.append(ValidationIssue("error","REGION_VERTEX_COUNT_INVALID","copper region needs at least three unique outer vertices",(region.id,)))
+            continue
+        invalid_hole=False
+        for hole_index,hole in enumerate(getattr(region,"holes",())):
+            ring=tuple(hole)
+            if len(ring)<4 or ring[0]!=ring[-1]:
+                r.issues.append(ValidationIssue("error","REGION_HOLE_NOT_CLOSED",f"copper region hole {hole_index + 1} must be closed",(region.id,)))
+                invalid_hole=True
+                break
+            hole_unique={(float(p.x),float(p.y)) for p in ring[:-1]}
+            if len(hole_unique)<3:
+                r.issues.append(ValidationIssue("error","REGION_HOLE_VERTEX_COUNT_INVALID",f"copper region hole {hole_index + 1} needs at least three unique vertices",(region.id,)))
+                invalid_hole=True
+                break
+        if invalid_hole:
             continue
         shape=region_shape(region)
         if shape.is_empty or float(shape.area)<=0 or not shape.is_valid:
-            r.issues.append(ValidationIssue("error","REGION_GEOMETRY_INVALID","copper region polygon is empty, zero-area, or invalid",(region.id,)))
+            r.issues.append(ValidationIssue("error","REGION_GEOMETRY_INVALID","copper region polygon with holes is empty, zero-area, or invalid",(region.id,)))
     if board.outline:
         degree={}
         def key(pt):return (round(pt.x/outline_tolerance_mm)*outline_tolerance_mm,round(pt.y/outline_tolerance_mm)*outline_tolerance_mm)
