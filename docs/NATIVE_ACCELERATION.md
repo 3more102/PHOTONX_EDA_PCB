@@ -64,6 +64,20 @@ The main spatial consumers expose the same backend contract as the low-level API
 
 This makes parity testing and deployment policy explicit at the workflow boundary instead of requiring callers to depend on environment discovery alone.
 
+## Benchmark evidence
+
+`benchmark_comparisons.benchmark_candidate_pair_backends()` measures Python vs native AABB candidate-pair generation, while `benchmark_radius_query_backends()` measures the batched point-radius path.
+
+Both helpers refuse to emit timing evidence until the native result exactly matches the Python reference result for the supplied workload. `backend_timing_summary()` reports measured medians and the native/Python ratio without defining a universal crossover threshold.
+
+This evidence is intended to support a later benchmark-gated `auto` backend policy. Thresholds must be based on identified hardware, Python version, fixture size, spatial density, cell size, tolerance, radius distribution, and query batch size rather than inferred from implementation language.
+
+A deterministic command-line workload is available when the native backend is installed or configured:
+
+    photonx native-benchmark --objects 1000 --iterations 3
+
+Add `--output build/native-benchmark.json` to preserve the report. The command returns a non-zero exit status if native loading, supported-range checks, or parity fails, so a Python fallback cannot be mistaken for native benchmark evidence.
+
 ## Safety contract
 
 The native backend:
@@ -82,7 +96,7 @@ Unsupported native inputs fall back to the Python reference path in `auto` mode.
 The next safe candidates are:
 
 1. persistent/batch AABB index handles to avoid rebuilding native grids across independent calls;
-2. benchmark-gated connectivity candidate acceleration and crossover thresholds;
+2. benchmark-gated connectivity candidate acceleration and crossover thresholds using parity-checked benchmark evidence;
 3. automated release-wheel production/signing for supported platform/Python combinations;
 4. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
 
