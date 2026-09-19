@@ -41,15 +41,15 @@ from .gerber_parts.step_repeat import parse_step_repeat
 from .gerber_parts.tokenizer import iter_gerber_statements
 
 
-_FS = re.compile(r"^%FS([LT])([AI])?X(\d)(\d)Y(\d)(\d)\*%$")
+_FS = re.compile(r"^%FS([LT])([AI])?X([0-9])([0-9])Y([0-9])([0-9])\*%$")
 _MO = re.compile(r"^%MO(MM|IN)\*%$")
 _AD_STANDARD = re.compile(
-    r"^%ADD(\d+)([CROP]),?"
+    r"^%ADD([0-9]+)([CROP]),?"
     r"([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
     r"(?:X[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))*)\*%$"
 )
-_AD_MACRO = re.compile(r"^%ADD(\d+)([A-Za-z_.$][A-Za-z0-9_.$-]*)(?:,([^*]*))?\*%$")
-_SELECT = re.compile(r"^(?:G54)?D(\d+)\*$")
+_AD_MACRO = re.compile(r"^%ADD([0-9]+)([A-Za-z_.$][A-Za-z0-9_.$-]*)(?:,([^*]*))?\*%$")
+_SELECT = re.compile(r"^(?:G54)?D([0-9]+)\*$")
 _OP_SELECT = re.compile(r"^D0?([123])\*$")
 _COORD = re.compile(
     r"^(?:G0?1)?(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?(?:D0?([123]))?\*$"
