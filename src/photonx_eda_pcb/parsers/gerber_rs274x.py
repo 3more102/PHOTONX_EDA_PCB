@@ -664,7 +664,7 @@ class GerberRS274XParser:
                 "UNSUPPORTED_GERBER_TRANSFORM",
                 (
                     "negative or malformed legacy Gerber IP image polarity changes "
-                    "whole-image semantics and is not implemented safely"
+                    "image geometry and whole-image semantics and is not implemented safely"
                 ),
                 out,
             )
