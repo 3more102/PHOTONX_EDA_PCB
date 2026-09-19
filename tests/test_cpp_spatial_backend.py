@@ -349,6 +349,7 @@ def test_native_pair_output_rejects_duplicate_or_unsorted_records(monkeypatch, r
 def test_native_radius_output_rejects_duplicate_records(monkeypatch):
     index = SpatialHashIndex(1.0)
     index.insert("p", AABB(0.0, 0.0, 0.0, 0.0))
+    index.insert("q", AABB(0.0, 0.0, 0.0, 0.0))
 
     class FakeLibrary:
         def photonx_point_radius_candidates(
