@@ -99,6 +99,44 @@ def test_composite_aperture_block_remains_fail_closed(tmp_path: Path):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
+def test_aperture_block_inside_region_remains_fail_closed(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%ADD10C,1.000*%\n"
+        "G36*\n"
+        "X000000Y000000D02*\n"
+        "%ABD11*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "%AB*%\n"
+        "G37*\n",
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="no active G36 region",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
+def test_aperture_block_definition_rejects_legacy_image_transform(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%IR90*%\n"
+        "%ADD10C,1.000*%\n"
+        "%ABD11*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "%AB*%\n",
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="identity LM/LR/LS and MI/SF/OF/IR state",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
 def test_permissive_unsupported_block_cannot_leak_body_or_surrounding_geometry(
     tmp_path: Path,
 ):
