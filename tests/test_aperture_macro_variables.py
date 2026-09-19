@@ -152,3 +152,29 @@ def test_production_parser_does_not_alias_undefined_longer_variable(tmp_path: Pa
 
     assert len(result.pads) == 1
     assert result.pads[0].size_x == pytest.approx(0.8)
+
+
+def test_production_parser_fails_closed_on_macro_numeric_literal_overflow(
+    tmp_path: Path,
+):
+    huge_literal = "9" * 400
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        f"%AMOVERFLOW*$2={huge_literal}*1,1,$2,0,0*%\n"
+        "%ADD10OVERFLOW*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(UnsupportedFeatureError, match="could not be evaluated"):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "INVALID_GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
