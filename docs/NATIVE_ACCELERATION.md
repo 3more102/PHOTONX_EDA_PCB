@@ -64,6 +64,19 @@ The main spatial consumers expose the same backend contract as the low-level API
 
 This makes parity testing and deployment policy explicit at the workflow boundary instead of requiring callers to depend on environment discovery alone.
 
+## Stage 3: persistent AABB handles
+
+Candidate-pair calls now keep an immutable native AABB spatial hash attached to each
+`SpatialHashIndex` revision. Repeated tolerance queries reuse the same C++ grid
+instead of rebuilding it. A successful Python-side insert increments the index
+revision; the next native query destroys the stale handle and rebuilds from the
+new sorted ID/box snapshot. Generic index-like objects without a revision remain
+safe by using a temporary native handle for that call only.
+
+The handle stores broad-phase state only. Pair acceptance remains inclusive AABB
+intersection, output ordering stays deterministic by sorted string ID, and exact
+connectivity/DRC geometry continues to run outside the native layer.
+
 ## Safety contract
 
 The native backend:
@@ -81,9 +94,8 @@ Unsupported native inputs fall back to the Python reference path in `auto` mode.
 
 The next safe candidates are:
 
-1. persistent/batch AABB index handles to avoid rebuilding native grids across independent calls;
-2. benchmark-gated connectivity candidate acceleration and crossover thresholds;
-3. automated release-wheel production/signing for supported platform/Python combinations;
-4. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
+1. benchmark-gated connectivity candidate acceleration and crossover thresholds;
+2. automated release-wheel production/signing for supported platform/Python combinations;
+3. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
 
 Gerber/Excellon parsing, provenance, fail-closed diagnostics, and semantic inference should not be migrated merely for language uniformity. They should move only when a measured bottleneck and a parity strategy exist.
