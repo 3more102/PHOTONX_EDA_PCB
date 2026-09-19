@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added Gerber aperture-macro variable-definition semantics: ordered `$n=expression` assignments are evaluated before subsequent primitives, AD-supplied variables cannot be redefined, previously defined macro variables cannot be redefined, and undefined variables evaluate as zero per the current Gerber specification. Production parser/preflight coverage verifies valid definitions and fail-closed redefinition handling.
+
 - Extended Code-4 aperture-macro support beyond centered rectangle/regular-polygon reduction: any valid single-positive simple linear outline with 3–5000 vertices can now be retained exactly for D03 flashes on material layers, including irregular, concave, and off-center shapes. The production path rejects zero-length, self-touching, self-intersecting, open, non-finite, and zero-area contours; preserves primitive rotation before LM/LR/LS plus supported whole-image IR; and carries exact CopperRegion geometry through step-repeat, provenance, and ordered LPD/LPC composition. General Code-4 D01 sweeps and Edge.Cuts flashes remain fail-closed.
 
 - Added exact production reduction for single positive Gerber aperture-macro Outline primitives (Code 4) when the explicitly closed contour is exactly a centered rectangle or centered regular polygon. Rectangle edge orientation and primitive rotation reduce to exact `R` geometry; 3–12 vertex regular outlines reduce to exact `P` geometry. Open, irregular, off-exposure, malformed, and non-reducible outlines remain fail-closed with preflight coverage.
