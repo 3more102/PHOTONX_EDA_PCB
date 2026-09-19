@@ -69,6 +69,26 @@ M30
     assert [y for _, y in _coords(result)] == pytest.approx([2.0, 2.0, 2.0, 2.0])
 
 
+def test_repeat_hole_without_xy_repeats_same_location(tmp_path):
+    path = _write(
+        tmp_path,
+        """M48
+METRIC
+T01C0.800
+%
+T01
+X1.000Y2.000
+R2
+M30
+""",
+    )
+
+    result = ExcellonParser(strict=True).parse(path)
+
+    assert _coords(result) == [(1.0, 2.0), (1.0, 2.0), (1.0, 2.0)]
+    assert len({drill.id for drill in result.drills}) == 3
+
+
 def test_repeat_hole_requires_preceding_drill_anchor(tmp_path):
     path = _write(
         tmp_path,
