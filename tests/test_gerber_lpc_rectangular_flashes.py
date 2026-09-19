@@ -194,3 +194,29 @@ def test_lpc_circular_flash_remains_fail_closed(tmp_path: Path):
         "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_RECTANGULAR_FLASH" in blocker
         for blocker in report.strict_blockers
     )
+
+def test_lpc_rectangular_flash_follows_whole_image_rotation(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "rect_flash_ir90.gtl",
+        "%IR90*%\n"
+        "%ADD10R,4X2*%\n"
+        "%ADD11R,2X1*%\n"
+        "%LPD*%\n"
+        "D10*\n"
+        "X050000Y050000D03*\n"
+        "%LPC*%\n"
+        "D11*\n"
+        "X050000Y050000D03*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    region = result.regions[0]
+    shape = region_shape(region)
+    assert shape.area == pytest.approx(6.0)
+    assert shape.bounds == pytest.approx((-6.0, 3.0, -4.0, 7.0))
+    assert len(region.holes) == 1
+
