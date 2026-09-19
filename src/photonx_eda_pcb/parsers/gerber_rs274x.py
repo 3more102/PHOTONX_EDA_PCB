@@ -1261,7 +1261,7 @@ class GerberRS274XParser:
             self.interpolation = "linear"
             return True
 
-        if line in {"G02*", "G2*", "G03*", "G3*"} or _ARC_COORD.match(line):
+        if line in {"G02*", "G2*", "G03*", "G3*"}:
             self._region_fail(
                 path,
                 line_no,
@@ -1271,6 +1271,30 @@ class GerberRS274XParser:
                 out,
             )
             return True
+
+        arc_match = _ARC_COORD.match(line)
+        if arc_match is not None:
+            gcode, _x_raw, _y_raw, i_raw, j_raw, op = arc_match.groups()
+            operation = op or self.current_operation
+            arc_candidate = (
+                gcode is not None
+                or i_raw is not None
+                or j_raw is not None
+                or (
+                    self.interpolation in {"cw_arc", "ccw_arc"}
+                    and operation == "1"
+                )
+            )
+            if arc_candidate:
+                self._region_fail(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_REGION_ARC",
+                    "the production region subset does not yet support circular contour segments",
+                    out,
+                )
+                return True
 
         if line in {"D01*", "D1*"}:
             self.current_operation = "1"
