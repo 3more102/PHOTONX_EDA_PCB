@@ -8,7 +8,7 @@ from photonx_eda_pcb.exporters.omission_manifest import (
 )
 from photonx_eda_pcb.exporters.omission_validation import validate_omission_manifest
 from photonx_eda_pcb.mechanical_features import SlotFeature
-from photonx_eda_pcb.models import BoardModel, CopperRegion, Point, Track
+from photonx_eda_pcb.models import BoardModel, CopperRegion, PadCandidate, Point, Track
 
 
 def _square(region_id: str, x0: float, *, holes=()) -> CopperRegion:
@@ -35,6 +35,10 @@ def test_report_and_manifest_cover_exported_and_omitted_geometry(tmp_path):
         Point(6.5, 0.5),
     )
     board = BoardModel(
+        pads=[
+            PadCandidate("P_OK", Point(40, 0), 1, 1, "R", "F.Cu"),
+            PadCandidate("P_SKIP", Point(42, 0), 1, 1, "R", "In31.Cu"),
+        ],
         regions=[
             _square("R_OK", 0),
             _square("R_SKIP", 4, holes=(hole,)),
@@ -55,6 +59,8 @@ def test_report_and_manifest_cover_exported_and_omitted_geometry(tmp_path):
     _, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
     data = omission_manifest(report)
 
+    assert data["exported_pads"] == ["P_OK"]
+    assert data["skipped_pads"] == ["P_SKIP"]
     assert data["exported_slots"] == ["S_OK"]
     assert data["skipped_slots"] == ["S_SKIP"]
     assert data["exported_regions"] == ["R_OK"]
