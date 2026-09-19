@@ -49,6 +49,7 @@ _AD_STANDARD = re.compile(
     r"(?:X[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))*)\*%$"
 )
 _AD_MACRO = re.compile(r"^%ADD(\d+)([A-Za-z_.$][A-Za-z0-9_.$-]*)(?:,([^*]*))?\*%$")
+_AB_START = re.compile(r"^%ABD(\d+)\*%$")
 _SELECT = re.compile(r"^(?:G54)?D(\d+)\*$")
 _OP_SELECT = re.compile(r"^D0?([123])\*$")
 _COORD = re.compile(
@@ -223,6 +224,11 @@ class GerberRS274XParser:
         self.aperture_rotation_source: SourceRef | None = None
         self.aperture_scale_source: SourceRef | None = None
         self.image_body_started = False
+        self.aperture_block_code: int | None = None
+        self.aperture_block_selected: int | None = None
+        self.aperture_block_flash: Aperture | None = None
+        self.aperture_block_start_source: SourceRef | None = None
+        self.aperture_block_failed = False
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -2095,6 +2101,269 @@ class GerberRS274XParser:
             out,
         )
         self.unsupported_apertures.add(code)
+
+
+    def _reset_aperture_block(self) -> None:
+        self.aperture_block_code = None
+        self.aperture_block_selected = None
+        self.aperture_block_flash = None
+        self.aperture_block_start_source = None
+        self.aperture_block_failed = False
+
+    def _aperture_block_fail(
+        self,
+        path: Path,
+        line_no: int,
+        raw: str,
+        message: str,
+        out: GerberLayerResult,
+    ) -> None:
+        self._fail_or_warn(
+            path,
+            line_no,
+            raw,
+            "UNSUPPORTED_GERBER_APERTURE_BLOCK",
+            message,
+            out,
+        )
+        self.aperture_block_failed = True
+        if not self.strict:
+            self._disable_image_geometry(out)
+
+    def _begin_aperture_block(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        match = _AB_START.match(line)
+        if match is None:
+            self._aperture_block_fail(
+                path,
+                line_no,
+                line,
+                "malformed Gerber aperture-block start command",
+                out,
+            )
+            return
+        if not self._require_units(path, line_no, line, out):
+            return
+
+        code = int(match.group(1))
+        if code < 10:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_APERTURE_BLOCK_CODE",
+                "Gerber aperture-block D-code must be 10 or greater",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+        if code in self.apertures or code in self.unsupported_apertures:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "DUPLICATE_GERBER_APERTURE_CODE",
+                f"Gerber aperture D{code} is already defined",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+        if (
+            self.aperture_mirror != "N"
+            or not isclose(
+                self.aperture_rotation_deg, 0.0, rel_tol=0.0, abs_tol=1e-12
+            )
+            or not isclose(
+                self.aperture_scale, 1.0, rel_tol=0.0, abs_tol=1e-12
+            )
+            or self.layer_polarity != "dark"
+            or self.step_repeat is not None
+        ):
+            self._aperture_block_fail(
+                path,
+                line_no,
+                line,
+                (
+                    "the supported aperture-block reduction requires identity "
+                    "LM/LR/LS state, dark layer polarity, and no active step-repeat"
+                ),
+                out,
+            )
+            return
+
+        self.aperture_block_code = code
+        self.aperture_block_selected = None
+        self.aperture_block_flash = None
+        self.aperture_block_start_source = SourceRef(str(path), line_no, line)
+        self.aperture_block_failed = False
+
+    def _handle_aperture_block_statement(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        if self.aperture_block_code is None:
+            raise RuntimeError("aperture block statement without active block")
+
+        if line == "%AB*%":
+            code = self.aperture_block_code
+            source_aperture = self.aperture_block_flash
+            if not self.aperture_block_failed and source_aperture is None:
+                self._aperture_block_fail(
+                    path,
+                    line_no,
+                    line,
+                    (
+                        "the supported aperture-block subset requires exactly one "
+                        "origin-centered D03 flash"
+                    ),
+                    out,
+                )
+            if not self.aperture_block_failed and source_aperture is not None:
+                self.apertures[code] = Aperture(
+                    code=code,
+                    shape=source_aperture.shape,
+                    x=source_aperture.x,
+                    y=source_aperture.y,
+                    hole_diameter=source_aperture.hole_diameter,
+                    base_rotation_deg=source_aperture.base_rotation_deg,
+                    polygon_vertices=source_aperture.polygon_vertices,
+                    polygon_rotation_deg=source_aperture.polygon_rotation_deg,
+                    outline_vertices=source_aperture.outline_vertices,
+                    outline_rotation_deg=source_aperture.outline_rotation_deg,
+                )
+                out.diagnostics.append(
+                    ParseDiagnostic(
+                        "info",
+                        "GERBER_APERTURE_BLOCK_REDUCED",
+                        (
+                            f"aperture block D{code} reduced exactly to its single "
+                            f"origin-centered D03 member D{source_aperture.code}"
+                        ),
+                        str(path),
+                        line_no,
+                    )
+                )
+            self._reset_aperture_block()
+            return
+
+        if self.aperture_block_failed:
+            return
+
+        if line.startswith("%AB"):
+            self._aperture_block_fail(
+                path,
+                line_no,
+                line,
+                "nested or malformed Gerber aperture blocks are not supported",
+                out,
+            )
+            return
+
+        select_match = _SELECT.match(line)
+        if select_match:
+            selected = int(select_match.group(1))
+            if selected < 10 or selected not in self.apertures:
+                self._aperture_block_fail(
+                    path,
+                    line_no,
+                    line,
+                    (
+                        "aperture-block member selection must reference an already "
+                        "defined supported aperture"
+                    ),
+                    out,
+                )
+                return
+            self.aperture_block_selected = selected
+            return
+
+        coord_match = _COORD.match(line)
+        if coord_match:
+            x_raw, y_raw, operation = coord_match.groups()
+            if (
+                operation != "3"
+                or x_raw is None
+                or y_raw is None
+                or self.aperture_block_selected is None
+            ):
+                self._aperture_block_fail(
+                    path,
+                    line_no,
+                    line,
+                    (
+                        "the supported aperture-block subset accepts only one "
+                        "explicit X/Y D03 flash after a D-code selection"
+                    ),
+                    out,
+                )
+                return
+            if self.aperture_block_flash is not None:
+                self._aperture_block_fail(
+                    path,
+                    line_no,
+                    line,
+                    "composite aperture blocks with multiple flashes remain fail-closed",
+                    out,
+                )
+                return
+            try:
+                x_mm = self._decode(x_raw, "x")
+                y_mm = self._decode(y_raw, "y")
+            except (TypeError, ValueError, OverflowError) as exc:
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_BLOCK_COORDINATE",
+                    f"invalid aperture-block flash coordinate ({exc})",
+                    out,
+                )
+                self.aperture_block_failed = True
+                if not self.strict:
+                    self._disable_image_geometry(out)
+                return
+            if (
+                not isfinite(x_mm)
+                or not isfinite(y_mm)
+                or not isclose(x_mm, 0.0, rel_tol=0.0, abs_tol=1e-12)
+                or not isclose(y_mm, 0.0, rel_tol=0.0, abs_tol=1e-12)
+            ):
+                self._aperture_block_fail(
+                    path,
+                    line_no,
+                    line,
+                    (
+                        "off-origin aperture-block members cannot be reduced to the "
+                        "current centered aperture model"
+                    ),
+                    out,
+                )
+                return
+            self.aperture_block_flash = self.apertures[
+                self.aperture_block_selected
+            ]
+            return
+
+        self._aperture_block_fail(
+            path,
+            line_no,
+            line,
+            (
+                "only D-code selection plus one origin-centered D03 flash is "
+                "supported inside a Gerber aperture block"
+            ),
+            out,
+        )
 
     def _step_repeat_provenance(
         self,
@@ -4092,6 +4361,28 @@ class GerberRS274XParser:
         for line_no, line in iter_gerber_statements(text):
             if not line or line.startswith("G04"):
                 continue
+
+            if self.aperture_block_code is not None:
+                self._handle_aperture_block_statement(line, p, line_no, out)
+                continue
+
+            if _AB_START.match(line):
+                self._begin_aperture_block(line, p, line_no, out)
+                continue
+
+            if line == "%AB*%":
+                self._parse_error_or_warn(
+                    p,
+                    line_no,
+                    line,
+                    "GERBER_APERTURE_BLOCK_END_WITHOUT_START",
+                    "Gerber aperture-block end encountered without an active block",
+                    out,
+                )
+                if not self.strict:
+                    self._disable_image_geometry(out)
+                continue
+
             if line in {"M02*", "M00*"}:
                 break
 
@@ -4515,11 +4806,8 @@ class GerberRS274XParser:
                     p,
                     line_no,
                     line,
-                    "UNSUPPORTED_GERBER_CONSTRUCT",
-                    (
-                        "Gerber aperture blocks are not implemented safely; "
-                        "interpreting their body as ordinary draws/flashes would corrupt geometry"
-                    ),
+                    "UNSUPPORTED_GERBER_APERTURE_BLOCK",
+                    "malformed Gerber aperture-block command",
                     out,
                 )
                 if not self.strict:
@@ -5594,6 +5882,28 @@ class GerberRS274XParser:
                 "unrecognized Gerber statement",
                 out,
             )
+
+        if self.aperture_block_code is not None:
+            if self.strict:
+                raise ParseError(
+                    f"{p}: unterminated aperture block D{self.aperture_block_code} "
+                    "at end of file"
+                )
+            out.diagnostics.append(
+                ParseDiagnostic(
+                    "warning",
+                    "GERBER_APERTURE_BLOCK_UNTERMINATED",
+                    "unterminated Gerber aperture block at end of file",
+                    str(p),
+                    (
+                        self.aperture_block_start_source.line
+                        if self.aperture_block_start_source is not None
+                        else None
+                    ),
+                )
+            )
+            self._disable_image_geometry(out)
+            self._reset_aperture_block()
 
         if self.region_state.active:
             if self.strict:
