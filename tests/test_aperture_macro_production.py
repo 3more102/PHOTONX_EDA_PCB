@@ -646,7 +646,7 @@ def test_centered_polygon_macro_flash_is_reduced_exactly(tmp_path: Path):
     assert any(
         evidence.kind == "gerber_polygon_flash"
         and "vertices=6" in evidence.detail
-        and "template_rotation_deg=30" in evidence.detail
+        and "template_rotation_deg_ccw=30" in evidence.detail
         for evidence in result.regions[0].provenance.evidence
     )
 
@@ -670,8 +670,8 @@ def test_polygon_macro_modifiers_and_inch_units_are_preserved(tmp_path: Path):
     assert aperture.shape == "P"
     assert aperture.polygon_vertices == 5
     assert aperture.polygon_rotation_deg == pytest.approx(330.0)
-    assert aperture.size_x == pytest.approx(1.016)
-    assert aperture.size_y == pytest.approx(1.016)
+    assert aperture.x == pytest.approx(1.016)
+    assert aperture.y == pytest.approx(1.016)
     assert len(result.regions) == 1
 
 
