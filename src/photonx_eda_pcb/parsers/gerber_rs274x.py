@@ -62,6 +62,13 @@ _MIRROR_IMAGE = re.compile(
     r"^%MI(?:A([01]))?(?:B([01]))?\*%$",
     re.IGNORECASE,
 )
+_LEGACY_OFFSET = re.compile(
+    r"^%OF"
+    r"(?:A([+-]?(?:[0-9]+(?:\.[0-9]{1,5})?|\.[0-9]{1,5})))?"
+    r"(?:B([+-]?(?:[0-9]+(?:\.[0-9]{1,5})?|\.[0-9]{1,5})))?"
+    r"\*%$",
+    re.IGNORECASE,
+)
 _LEGACY_SCALE_FACTOR = re.compile(
     r"^%SF"
     r"(?:A([0-9]+(?:\.[0-9]*)?|\.[0-9]+))?"
@@ -150,6 +157,9 @@ class GerberRS274XParser:
         self.mirror_a = False
         self.mirror_b = False
         self.mirror_image_source: SourceRef | None = None
+        self.offset_a_mm = 0.0
+        self.offset_b_mm = 0.0
+        self.offset_source: SourceRef | None = None
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -449,6 +459,75 @@ class GerberRS274XParser:
         self.mirror_b = match.group(2) == "1"
         self.mirror_image_source = SourceRef(str(path), line_no, line)
 
+    def _handle_legacy_offset(
+        self,
+        line: str,
+        path: Path,
+        line_no: int,
+        out: GerberLayerResult,
+    ) -> None:
+        match = _LEGACY_OFFSET.match(line)
+        if match is None:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_OFFSET",
+                "invalid legacy Gerber OF offset command",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        if not self._require_units(path, line_no, line, out):
+            return
+
+        if self.offset_source is not None:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "DUPLICATE_GERBER_OFFSET",
+                "legacy Gerber OF may only be declared once",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        if out.tracks or out.pads or out.outline:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "LATE_GERBER_OFFSET",
+                "legacy Gerber OF must precede emitted image geometry",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        a_value = 0.0 if match.group(1) is None else float(match.group(1))
+        b_value = 0.0 if match.group(2) is None else float(match.group(2))
+        if abs(a_value) > 99999.99999 or abs(b_value) > 99999.99999:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_OFFSET",
+                "legacy Gerber OF offsets must be within +/-99999.99999 units",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        self.offset_a_mm = to_mm(a_value, self.units)
+        self.offset_b_mm = to_mm(b_value, self.units)
+        self.offset_source = SourceRef(str(path), line_no, line)
+
     def _handle_image_rotation(
         self,
         line: str,
@@ -572,12 +651,18 @@ class GerberRS274XParser:
         # Step-repeat distances are not coordinate data and are therefore added
         # after MI, before the whole-image IR rotation.
         repeated = Point(mirrored.x + dx_mm, mirrored.y + dy_mm)
-        return self._rotate_image_point(repeated)
+        offset = Point(
+            repeated.x + self.offset_a_mm,
+            repeated.y + self.offset_b_mm,
+        )
+        return self._rotate_image_point(offset)
 
     def _image_transform_id_parts(self) -> list[object]:
         parts: list[object] = []
         if self.mirror_a or self.mirror_b:
             parts.extend(["mi", int(self.mirror_a), int(self.mirror_b)])
+        if self.offset_a_mm or self.offset_b_mm:
+            parts.extend(["of", self.offset_a_mm, self.offset_b_mm])
         if self.image_rotation_deg:
             parts.extend(["ir", self.image_rotation_deg])
         return parts
@@ -1058,6 +1143,19 @@ class GerberRS274XParser:
                     f"mirror_a={int(self.mirror_a)}; mirror_b={int(self.mirror_b)}",
                     1.0,
                     self.mirror_image_source,
+                )
+            )
+        if self.offset_source is not None and (self.offset_a_mm or self.offset_b_mm):
+            prov.add_source(self.offset_source)
+            prov.add_evidence(
+                Evidence(
+                    "gerber_image_offset",
+                    (
+                        f"offset_mm=({self.offset_a_mm:.12g},"
+                        f"{self.offset_b_mm:.12g})"
+                    ),
+                    1.0,
+                    self.offset_source,
                 )
             )
         if self.image_rotation_source is not None and self.image_rotation_deg:
@@ -1602,6 +1700,12 @@ class GerberRS274XParser:
                 self._handle_mirror_image(line, p, line_no, out)
                 continue
 
+            # Deprecated OF translates the full image in the active MO units.
+            # It is applied after MI/SF and before IR, regardless of command order.
+            if line.startswith("%OF"):
+                self._handle_legacy_offset(line, p, line_no, out)
+                continue
+
             # Deprecated whole-image rotation is exactly representable for the
             # four orthogonal angles allowed by the Gerber specification.
             if line.startswith("%IR"):
@@ -1618,9 +1722,9 @@ class GerberRS274XParser:
             # Older generators may emit explicit default transform statements.
             # Only the identity forms are accepted; non-identity transforms
             # remain unsupported rather than being silently ignored.
-            if line in {"%ASAXBY*%", "%IPPOS*%", "%OFA0B0*%"}:
+            if line in {"%ASAXBY*%", "%IPPOS*%"}:
                 continue
-            if line.startswith(("%AS", "%IP", "%OF")):
+            if line.startswith(("%AS", "%IP")):
                 self._fail_or_warn(
                     p,
                     line_no,
