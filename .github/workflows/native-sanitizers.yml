@@ -10,11 +10,20 @@ on:
       - "native/**"
       - ".github/workflows/native-sanitizers.yml"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   native-sanitizers:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Configure native contract tests with ASan and UBSan
         run: >
           cmake -S native -B build/native-sanitize
