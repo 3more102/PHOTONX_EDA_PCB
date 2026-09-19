@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened KiCad net-reference export: a non-empty unknown `net_id` is no longer silently rewritten as net 0. Recovered pads and plated-slot pad geometry remain exportable without a net claim when identity is unresolved, while board track segments with unresolved net references are omitted and reported because their KiCad representation requires a net ordinal. Explicitly unassigned objects (`net_id is None`) retain net-0 behavior.
+
 - Extended KiCad PCB export for multilayer reconstructions: the highest observed canonical `InN.Cu` layer now declares the structurally required contiguous `In1.Cu` through `InN.Cu` prefix in the board layer table with KiCad-20240108-compatible ordinals. Inner-layer tracks and conservative inner-layer `CopperRegion` zones no longer reference undeclared canonical copper layers; dielectric/material/thickness stack-up data is not invented, and unsupported/noncanonical region layers remain explicit omissions.
 
 - Fixed KiCad recovered-pad surface-layer pairing: back-side SMD pads now use `B.Paste`/`B.Mask` and back silkscreen references, front-side pads keep the matching front layers, and non-surface copper pads no longer invent front/back paste or mask layers.
