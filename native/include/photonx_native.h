@@ -41,6 +41,7 @@ typedef struct photonx_query_match {
 } photonx_query_match;
 
 typedef struct photonx_point_index photonx_point_index;
+typedef struct photonx_aabb_index photonx_aabb_index;
 
 enum photonx_native_status {
     PHOTONX_NATIVE_OK = 0,
@@ -57,6 +58,25 @@ PHOTONX_NATIVE_API int photonx_candidate_pairs(
     uint32_t box_count,
     double tolerance,
     double cell_size,
+    photonx_pair* out_pairs,
+    uint32_t out_capacity,
+    uint32_t* out_count
+);
+
+PHOTONX_NATIVE_API int photonx_aabb_index_create(
+    const photonx_aabb* boxes,
+    uint32_t box_count,
+    double cell_size,
+    photonx_aabb_index** out_index
+);
+
+PHOTONX_NATIVE_API void photonx_aabb_index_destroy(
+    photonx_aabb_index* index
+);
+
+PHOTONX_NATIVE_API int photonx_aabb_index_candidate_pairs(
+    const photonx_aabb_index* index,
+    double tolerance,
     photonx_pair* out_pairs,
     uint32_t out_capacity,
     uint32_t* out_count
