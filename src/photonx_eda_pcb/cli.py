@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .capabilities import CAPABILITIES
 from .config import ReconstructionConfig
+from .doctor import doctor_report
 from .exporters import export_json, export_kicad, validate_with_kicad_cli
 from .io import write_reconstruction_bundle
 from .pipeline import reconstruct
@@ -20,6 +21,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("capabilities")
+
+    doctor = sub.add_parser(
+        "doctor",
+        help="report runtime readiness and optional integration availability",
+    )
+    doctor.add_argument(
+        "--require-kicad",
+        action="store_true",
+        help="treat missing kicad-cli as a required-check failure",
+    )
+    doctor.add_argument(
+        "--require-native",
+        action="store_true",
+        help="treat an unavailable native spatial backend as a required-check failure",
+    )
+    doctor.add_argument(
+        "--output",
+        type=Path,
+        help="also write the JSON report to this path",
+    )
 
     pf = sub.add_parser(
         "preflight",
@@ -65,6 +86,16 @@ def main(argv=None) -> int:
     if args.command == "capabilities":
         print(json.dumps([c.__dict__ for c in CAPABILITIES], indent=2))
         return 0
+
+    if args.command == "doctor":
+        report = doctor_report(
+            require_kicad=args.require_kicad,
+            require_native=args.require_native,
+        )
+        if args.output:
+            _write_json(args.output, report)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0 if report["summary"]["required_ok"] else 2
 
     if args.command == "preflight":
         report = inspect_input(args.input).to_dict()
