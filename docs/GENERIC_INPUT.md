@@ -96,6 +96,7 @@ The generic input path also handles several common real-world variations:
 - simple parameterized Gerber aperture macros that resolve to one positive,
   origin-centered circle are accepted as exact circular apertures; circle rotation
   is geometry-invariant when its center is the macro origin;
+- Gerber aperture macros may use ordered local variable definitions; calling AD parameters seed `$1..$n`, undefined variables evaluate as zero, and redefinition is rejected as invalid;
 - single positive Gerber Code-20 vector-line macros (plus deprecated Code-2)
   are accepted when the segment is non-zero and midpoint-centered on the macro origin;
   arbitrary segment orientation and finite primitive rotation are preserved exactly;

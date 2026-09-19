@@ -96,6 +96,76 @@ def test_centered_circle_macro_accepts_rotation_as_geometry_invariant(tmp_path: 
     assert pad.size_y == pytest.approx(0.8)
 
 
+def test_circle_macro_extra_modifier_fails_closed(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMROUND*1,1,0.800,0,0,0,123*%\n"
+        "%ADD10ROUND*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="requires four or five modifiers",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "INVALID_GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
+
+
+@pytest.mark.parametrize(
+    ("exposure", "diameter", "center_x", "center_y", "rotation"),
+    [
+        ("1e309", "0.800", "0", "0", "0"),
+        ("1", "1e309", "0", "0", "0"),
+        ("1", "1e309-1e309", "0", "0", "0"),
+        ("1", "0.800", "1e309", "0", "0"),
+        ("1", "0.800", "0", "1e309-1e309", "0"),
+        ("1", "0.800", "0", "0", "1e309"),
+    ],
+)
+def test_circle_macro_nonfinite_values_fail_closed(
+    tmp_path: Path,
+    exposure: str,
+    diameter: str,
+    center_x: str,
+    center_y: str,
+    rotation: str,
+):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        f"%AMROUND*1,{exposure},{diameter},{center_x},{center_y},{rotation}*%\n"
+        "%ADD10ROUND*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="aperture macro",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "UNSUPPORTED_GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
+
+
 def test_centered_horizontal_vector_line_macro_flash_is_supported(tmp_path: Path):
     path = _write(
         tmp_path,
