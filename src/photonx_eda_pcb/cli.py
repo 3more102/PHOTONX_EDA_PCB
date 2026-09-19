@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .board_diff import compact_diff_report, diff_board_paths
 from .capabilities import CAPABILITIES
 from .config import ReconstructionConfig
 from .exporters import export_json, export_kicad, validate_with_kicad_cli
@@ -30,6 +31,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     g = sub.add_parser("gui")
     g.add_argument("input", type=Path)
+
+    d = sub.add_parser(
+        "diff",
+        help="compare two PHOTONX board JSON files or reconstruction bundles",
+    )
+    d.add_argument("before", type=Path)
+    d.add_argument("after", type=Path)
+    d.add_argument("--output", type=Path)
+    d.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="omit per-object before/after payloads from printed and saved output",
+    )
 
     r = sub.add_parser("reconstruct")
     r.add_argument(
@@ -75,8 +89,28 @@ def main(argv=None) -> int:
 
     if args.command == "gui":
         from .gui import launch
+
         launch(args.input)
         return 0
+
+    if args.command == "diff":
+        try:
+            report = diff_board_paths(args.before, args.after)
+        except (OSError, ValueError) as exc:
+            error = {
+                "schema": "photonx.board-diff.error.v1",
+                "error": str(exc),
+            }
+            if args.output:
+                _write_json(args.output, error)
+            print(json.dumps(error, indent=2, sort_keys=True))
+            return 2
+
+        rendered = compact_diff_report(report) if args.summary_only else report
+        if args.output:
+            _write_json(args.output, rendered)
+        print(json.dumps(rendered, indent=2, sort_keys=True))
+        return 0 if report["summary"]["total"] == 0 else 1
 
     report = inspect_input(args.input).to_dict()
     args.output.mkdir(parents=True, exist_ok=True)
