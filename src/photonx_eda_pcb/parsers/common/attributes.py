@@ -159,7 +159,7 @@ def validate_x2_attribute_command(text: str) -> tuple[str, str, list[str]]:
                 )
             raise ValueError(f"unknown reserved standard attribute {name}")
 
-    if command == "TO" and name == ".C" and "," not in payload:
-        raise ValueError("TO.C requires the comma that begins its value field")
+    if command == "TO" and name in {".C", ".N"} and "," not in payload:
+        raise ValueError(f"TO{name} requires the comma that begins its value field")
 
     return command, name, values
