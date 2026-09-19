@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -13,6 +14,8 @@ namespace {
 constexpr uint32_t kAbiVersion = 2;
 constexpr long double kMaxCellsPerBox = 1000000.0L;
 constexpr long double kMaxTotalInsertedCells = 20000000.0L;
+constexpr long double kMaxTotalQueryCells = 20000000.0L;
+constexpr std::size_t kMaxOutputRecords = 1000000U;
 
 struct Cell {
     int64_t x;
@@ -139,6 +142,7 @@ int compute_pairs(
         std::unordered_map<Cell, std::vector<uint32_t>, CellHash>;
     Grid grid;
     long double total_inserted_cells = 0.0L;
+    long double total_query_cells = 0.0L;
 
     for (uint32_t i = 0; i < box_count; ++i) {
         if (!finite_box(boxes[i])) {
@@ -192,6 +196,11 @@ int compute_pairs(
             return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
         }
 
+        total_query_cells += cell_count;
+        if (total_query_cells > kMaxTotalQueryCells) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
         ++generation;
         if (generation == 0U) {
             std::fill(visited.begin(), visited.end(), 0U);
@@ -210,6 +219,9 @@ int compute_pairs(
                         if (intersects(boxes[candidate], query)) {
                             const uint32_t first = std::min(i, candidate);
                             const uint32_t second = std::max(i, candidate);
+                            if (pairs.size() >= kMaxOutputRecords) {
+                                return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+                            }
                             pairs.push_back(photonx_pair{first, second});
                         }
                     }
@@ -265,6 +277,7 @@ int compute_point_radius_candidates(
     Grid grid;
     std::vector<double> center_x(box_count, 0.0);
     std::vector<double> center_y(box_count, 0.0);
+    long double total_query_cells = 0.0L;
 
     for (uint32_t i = 0; i < box_count; ++i) {
         if (!finite_box(boxes[i])) {
@@ -321,6 +334,11 @@ int compute_point_radius_candidates(
             return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
         }
 
+        total_query_cells += cell_count;
+        if (total_query_cells > kMaxTotalQueryCells) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
         for (int64_t cell_x = min_x;; ++cell_x) {
             for (int64_t cell_y = min_y;; ++cell_y) {
                 const auto it = grid.find(Cell{cell_x, cell_y});
@@ -330,6 +348,9 @@ int compute_point_radius_candidates(
                             center_x[point] <= query_box.max_x &&
                             center_y[point] >= query_box.min_y &&
                             center_y[point] <= query_box.max_y) {
+                            if (matches.size() >= kMaxOutputRecords) {
+                                return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+                            }
                             matches.push_back(photonx_query_match{q, point});
                         }
                     }
