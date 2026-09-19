@@ -951,3 +951,103 @@ def test_permissive_unsupported_macro_skips_geometry_and_continues(tmp_path: Pat
         d.code == "GERBER_APERTURE_GEOMETRY_SKIPPED"
         for d in result.diagnostics
     )
+
+
+def test_code4_centered_rectangle_macro_flash_is_exact(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,4,-1,-0.5,1,-0.5,1,0.5,-1,0.5,-1,-0.5,30*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    shape = region_shape(result.regions[0])
+    assert shape.area == pytest.approx(2.0)
+    min_x, min_y, max_x, max_y = shape.bounds
+    assert max_x - min_x == pytest.approx(2.232050807568877)
+    assert max_y - min_y == pytest.approx(1.8660254037844386)
+
+    report = preflight(path)
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_code4_regular_polygon_macro_reduces_exactly_to_standard_p(tmp_path: Path):
+    y = "0.8660254037844386"
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        f"%AMHEX*4,1,6,1,0,0.5,{y},-0.5,{y},-1,0,-0.5,-{y},0.5,-{y},1,0,17*%\n"
+        "%ADD10HEX*%\n"
+        "D10*\n"
+        "X010000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_regular_polygon_flash(
+        1.0,
+        2.0,
+        2.0,
+        6,
+        base_rotation_deg=17.0,
+    ).geometry
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    assert region_shape(result.regions[0]).symmetric_difference(
+        expected
+    ).area == pytest.approx(0.0, abs=1e-12)
+
+
+def test_code4_irregular_outline_macro_remains_fail_closed(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMIRREG*4,1,3,0,0,2,0,0,1,0,0,0*%\n"
+        "%ADD10IRREG*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(UnsupportedFeatureError):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "UNSUPPORTED_GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
+
+
+def test_code4_outline_requires_explicit_closure(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOPEN*4,1,3,0,0,1,0,0,1,0.1,0,0*%\n"
+        "%ADD10OPEN*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=False).parse(path)
+    assert result.pads == []
+    assert result.regions == []
+    assert any(
+        diagnostic.code == "INVALID_GERBER_APERTURE_MACRO"
+        for diagnostic in result.diagnostics
+    )
