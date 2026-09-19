@@ -14,6 +14,9 @@ The Python API keeps the existing call form and adds an optional backend selecto
 - `backend="python"`: force the reference implementation.
 - `backend="native"`: require the native implementation and report unavailability/unsupported input explicitly.
 
+
+Footprint clustering and component-pair inference use the batch radius-query path by default. Their public APIs expose a keyword-only `spatial_backend="auto"` selector so parity tests and diagnostics can explicitly force the Python reference or native backend without changing normal callers.
+
 The native library is optional. A missing compiler or missing shared library must not make the normal Python package unusable.
 If no native library is discovered, `auto` falls back to Python. If a native library is discovered/configured but fails to load, exposes the wrong ABI, or is missing required symbols, that installation error is surfaced instead of being silently hidden by fallback.
 
