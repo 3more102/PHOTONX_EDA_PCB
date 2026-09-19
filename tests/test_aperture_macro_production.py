@@ -641,6 +641,151 @@ def test_polygon_macro_composes_with_aperture_and_image_transforms(tmp_path: Pat
     }.issubset(evidence_kinds)
 
 
+def test_outline_rectangle_macro_flash_reduces_exactly_to_rectangle(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,4,-1,-0.5,1,-0.5,1,0.5,-1,0.5,-1,-0.5,0*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X010000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.pads) == 1
+    pad = result.pads[0]
+    assert pad.shape == "R"
+    assert pad.center.x == pytest.approx(1.0)
+    assert pad.center.y == pytest.approx(2.0)
+    assert pad.size_x == pytest.approx(2.0)
+    assert pad.size_y == pytest.approx(1.0)
+
+
+def test_outline_rectangle_macro_arbitrary_rotation_is_exact(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,4,-1,-0.5,1,-0.5,1,0.5,-1,0.5,-1,-0.5,30*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    shape = region_shape(result.regions[0])
+    assert shape.area == pytest.approx(2.0)
+    min_x, min_y, max_x, max_y = shape.bounds
+    assert max_x - min_x == pytest.approx(2.232050807568877)
+    assert max_y - min_y == pytest.approx(1.8660254037844386)
+
+
+def test_outline_rectangle_macro_draw_uses_exact_rectangular_sweep(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,4,-1,-0.5,1,-0.5,1,0.5,-1,0.5,-1,-0.5,0*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D02*\n"
+        "X010000Y000000D01*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    assert region_shape(result.regions[0]).area == pytest.approx(3.0)
+    assert any(
+        evidence.kind == "gerber_track_polygonization"
+        and "aperture_shape=R" in evidence.detail
+        and "method=convex_sweep_exact" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+
+def test_outline_rectangle_macro_respects_active_inch_units(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOIN*%\n"
+        "%AMOUTLINE*4,1,4,-0.02,-0.005,0.02,-0.005,0.02,0.005,-0.02,0.005,-0.02,-0.005,0*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    pad = result.pads[0]
+    assert pad.size_x == pytest.approx(1.016)
+    assert pad.size_y == pytest.approx(0.254)
+
+
+@pytest.mark.parametrize(
+    "macro_body",
+    [
+        "4,1,3,-1,-1,1,-1,0,1,-1,-1,0",
+        "4,1,4,-1,-0.5,1,-0.5,1,0.6,-1,0.5,-1,-0.5,0",
+        "4,0,4,-1,-0.5,1,-0.5,1,0.5,-1,0.5,-1,-0.5,0",
+        "4,1,4,-1,-0.5,1,-0.5,1,0.5,-1,0.5,-1,0.4,0",
+    ],
+)
+def test_outline_macro_non_rectangular_or_non_additive_cases_fail_closed(
+    tmp_path: Path,
+    macro_body: str,
+):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        f"%AMOUTLINE*{macro_body}*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(UnsupportedFeatureError):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "UNSUPPORTED_GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
+
+
+def test_outline_rectangle_macro_preflight_is_strict_ready(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,4,-1,-0.5,1,-0.5,1,0.5,-1,0.5,-1,-0.5,17*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    report = preflight(path)
+
+    assert report.discovered_files == 1
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
 def test_lower_left_rectangle_macro_flash_is_supported(tmp_path: Path):
     path = _write(
         tmp_path,
