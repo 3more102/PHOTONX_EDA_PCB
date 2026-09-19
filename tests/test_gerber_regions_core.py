@@ -309,6 +309,33 @@ def test_region_connects_to_overlapping_pad_as_physical_copper():
     assert set(board.nets[0].members) == {"R1", "P1"}
 
 
+def test_region_shape_and_serialization_preserve_explicit_holes():
+    region = CopperRegion(
+        "RH",
+        (
+            Point(0, 0),
+            Point(4, 0),
+            Point(4, 4),
+            Point(0, 4),
+            Point(0, 0),
+        ),
+        "F.Cu",
+        holes=((
+            Point(1, 1),
+            Point(1, 3),
+            Point(3, 3),
+            Point(3, 1),
+            Point(1, 1),
+        ),),
+    )
+    board = BoardModel(regions=[region])
+
+    assert region_shape(region).area == pytest.approx(12.0)
+    payload = board.to_dict()["regions"][0]
+    assert len(payload["holes"]) == 1
+    assert payload["holes"][0][0] == {"x": 1, "y": 1}
+
+
 def test_region_is_indexed_and_serialized_by_board_model():
     region = CopperRegion(
         "R1",
@@ -541,7 +568,7 @@ def test_multicontour_can_mix_linear_and_g75_arc_contours(tmp_path: Path):
     assert "gerber_region_arc_tessellation" in kinds[1]
 
 
-def test_valid_cut_in_hole_pattern_is_explicitly_fail_closed(tmp_path: Path):
+def test_simple_linear_cut_in_reconstructs_one_hole(tmp_path: Path):
     path = _write(
         tmp_path,
         "cut_in_hole.gtl",
@@ -564,10 +591,110 @@ def test_valid_cut_in_hole_pattern_is_explicitly_fail_closed(tmp_path: Path):
         ),
     )
 
-    with pytest.raises(
-        UnsupportedFeatureError,
-        match="cut-in holes are not modeled yet",
-    ):
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 1
+    region = result.regions[0]
+    assert len(region.holes) == 1
+    assert region_shape(region).area == pytest.approx(84.0)
+    assert region_shape(region).is_valid
+    evidence = {event.kind for event in region.provenance.evidence}
+    assert "gerber_region_cut_in" in evidence
+    assert "gerber_region" in evidence
+
+
+def test_ucamco_style_g75_circular_cut_in_reconstructs_hole(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "circular_cut_in.gtl",
+        _region_file(
+            "G75*\n"
+            "G36*\n"
+            "X020000Y100000D02*\n"
+            "G01*\n"
+            "X120000Y100000D01*\n"
+            "Y020000D01*\n"
+            "X020000D01*\n"
+            "Y060000D01*\n"
+            "X050000D01*\n"
+            "G03*\n"
+            "X050000Y060000I030000J000000D01*\n"
+            "G01*\n"
+            "X020000D01*\n"
+            "Y100000D01*\n"
+            "G37*"
+        ),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    region = result.regions[0]
+    assert len(region.holes) == 1
+    assert region_shape(region).area == pytest.approx(
+        80.0 - 3.14159265359 * 9.0,
+        rel=0.01,
+    )
+    kinds = {event.kind for event in region.provenance.evidence}
+    assert "gerber_region_arc_tessellation" in kinds
+    assert "gerber_region_cut_in" in kinds
+
+
+def test_cut_in_hole_is_not_physical_copper_for_connectivity(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "connectivity_cut_in.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X100000Y000000D01*\n"
+            "X100000Y100000D01*\n"
+            "X000000Y100000D01*\n"
+            "X000000Y050000D01*\n"
+            "X030000Y050000D01*\n"
+            "X030000Y070000D01*\n"
+            "X070000Y070000D01*\n"
+            "X070000Y030000D01*\n"
+            "X030000Y030000D01*\n"
+            "X030000Y050000D01*\n"
+            "X000000Y050000D01*\n"
+            "X000000Y000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    region = GerberRS274XParser("F.Cu", strict=True).parse(path).regions[0]
+    copper_pad = PadCandidate("PCU", Point(1, 1), 0.5, 0.5, "C", "F.Cu")
+    hole_pad = PadCandidate("PHOLE", Point(5, 5), 0.5, 0.5, "C", "F.Cu")
+    board = BoardModel(pads=[copper_pad, hole_pad], regions=[region])
+
+    graph = build_physical_graph(board)
+
+    assert graph.has_edge(region.id, "PCU")
+    assert not graph.has_edge(region.id, "PHOLE")
+
+
+def test_diagonal_fully_coincident_bridge_is_invalid_cut_in(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "diagonal_cut_in.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X100000Y000000D01*\n"
+            "X100000Y100000D01*\n"
+            "X000000Y100000D01*\n"
+            "X000000Y000000D01*\n"
+            "X030000Y030000D01*\n"
+            "X030000Y050000D01*\n"
+            "X050000Y050000D01*\n"
+            "X050000Y030000D01*\n"
+            "X030000Y030000D01*\n"
+            "X000000Y000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    with pytest.raises(ParseError, match="horizontal or vertical"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
