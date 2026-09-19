@@ -191,8 +191,9 @@ def _load_library() -> ctypes.CDLL:
 
 def _clear_point_index_cache() -> None:
     with _POINT_INDEX_CACHE_LOCK:
-        for handle in list(_POINT_INDEX_CACHE.values()):
-            handle.close()
+        # Dropping the cache reference is safer than force-closing: an active
+        # query may still hold the handle. Its strong local reference keeps the
+        # native index alive until that query completes.
         _POINT_INDEX_CACHE.clear()
 
 
@@ -344,8 +345,6 @@ def _native_point_index_for(library, index, ids, cell_size):
             handle = _build_native_point_index(
                 library, index, ids, cell_size, revision=revision
             )
-            if cached is not None:
-                cached.close()
             _POINT_INDEX_CACHE[index] = handle
             return handle, False
     except TypeError:
