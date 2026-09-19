@@ -4,6 +4,7 @@ import pytest
 
 from photonx_eda_pcb.errors import UnsupportedFeatureError
 from photonx_eda_pcb.geometry_kernel import region_shape
+from photonx_eda_pcb.gerber_image import polygonize_track
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 from photonx_eda_pcb.preflight import preflight
 
@@ -145,7 +146,7 @@ def test_lpc_region_only_file_is_preflight_ready(tmp_path: Path):
     assert not report.strict_blockers
 
 
-def test_lpc_with_track_remains_fail_closed(tmp_path: Path):
+def test_lpc_clear_linear_track_before_material_is_supported_noop(tmp_path: Path):
     path = _write(
         tmp_path,
         "lpc_track.gtl",
@@ -156,17 +157,43 @@ def test_lpc_with_track_remains_fail_closed(tmp_path: Path):
         "X010000Y000000D01*\n",
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="tracks or outline geometry"):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
 
-    permissive = GerberRS274XParser("F.Cu", strict=False).parse(path)
-    assert permissive.tracks == []
-    assert permissive.pads == []
-    assert permissive.regions == []
+    assert result.tracks == []
+    assert result.pads == []
+    assert result.regions == []
+    report = preflight(path)
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_lpc_clear_linear_track_subtracts_capsule_from_dark_region(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "lpc_clear_track.gtl",
+        "%ADD10C,2.000*%\n"
+        "%LPD*%\n"
+        + _rectangle("000000", "000000", "100000", "100000")
+        + "D10*\n"
+        "%LPC*%\n"
+        "X020000Y050000D02*\n"
+        "X080000Y050000D01*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    clear_shape = polygonize_track(2.0, 5.0, 8.0, 5.0, 2.0).geometry
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    assert len(result.regions[0].holes) == 1
+    assert region_shape(result.regions[0]).area == pytest.approx(
+        100.0 - clear_shape.area
+    )
     assert any(
-        diagnostic.code
-        == "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY"
-        for diagnostic in permissive.diagnostics
+        evidence.kind == "gerber_track_polygonization"
+        and "method=capsule_inscribed_chords" in evidence.detail
+        and "max_chord_error_mm=0.005" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
     )
 
 
@@ -189,7 +216,7 @@ def test_lpc_clear_circular_flash_before_material_is_supported_noop(tmp_path: Pa
     assert not report.strict_blockers
 
 
-def test_lpc_mixed_dark_track_and_clear_region_fails_closed(tmp_path: Path):
+def test_lpc_mixed_dark_track_and_clear_region_preserves_track_material(tmp_path: Path):
     path = _write(
         tmp_path,
         "lpc_mixed.gtl",
@@ -202,7 +229,42 @@ def test_lpc_mixed_dark_track_and_clear_region_fails_closed(tmp_path: Path):
         + _rectangle("030000", "030000", "070000", "070000"),
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="tracks or outline geometry"):
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    expected = polygonize_track(0.0, 0.0, 1.0, 0.0, 0.2).geometry
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    assert region_shape(result.regions[0]).area == pytest.approx(expected.area)
+    assert any(
+        evidence.kind == "gerber_track_polygonization"
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+    report = preflight(path)
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_lpc_tessellated_arc_track_remains_fail_closed(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "lpc_arc_track.gtl",
+        "%ADD10R,10X10*%\n"
+        "%ADD11C,0.200*%\n"
+        "%LPD*%\n"
+        "D10*\n"
+        "X050000Y050000D03*\n"
+        "D11*\n"
+        "%LPC*%\n"
+        "G75*\n"
+        "X060000Y050000D02*\n"
+        "G03X050000Y060000I-010000J000000D01*\n",
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="tessellated arc tracks or outline geometry",
+    ):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     report = preflight(path)
