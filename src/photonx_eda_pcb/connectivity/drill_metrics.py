@@ -1,4 +1,4 @@
-from photonx_eda_pcb.spatial_connectivity.points import build_point_index,radius_query
+from photonx_eda_pcb.spatial_connectivity.points import build_point_index,radius_queries
 
 def drill_association_candidate_metrics(board,tolerance_mm=.15,cell_size_mm=None):
     total=len(board.pads)*len(board.drills)
