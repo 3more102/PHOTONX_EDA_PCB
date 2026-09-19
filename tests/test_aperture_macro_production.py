@@ -4,6 +4,10 @@ import pytest
 
 from photonx_eda_pcb.errors import UnsupportedFeatureError
 from photonx_eda_pcb.geometry_kernel import region_shape
+from photonx_eda_pcb.gerber_image import (
+    polygonize_regular_polygon_flash,
+    polygonize_regular_polygon_track,
+)
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 from photonx_eda_pcb.preflight import preflight
 
@@ -611,3 +615,160 @@ def test_permissive_unsupported_macro_skips_geometry_and_continues(tmp_path: Pat
         d.code == "GERBER_APERTURE_GEOMETRY_SKIPPED"
         for d in result.diagnostics
     )
+
+def test_polygon_macro_flash_reduces_to_exact_standard_p_geometry(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMPOLY*5,1,6,0,0,2.0,30*%\n"
+        "%ADD10POLY*%\n"
+        "D10*\n"
+        "X010000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_regular_polygon_flash(
+        1.0,
+        2.0,
+        2.0,
+        6,
+        base_rotation_deg=30.0,
+    ).geometry
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    assert region_shape(result.regions[0]).symmetric_difference(
+        expected
+    ).area == pytest.approx(0.0, abs=1e-12)
+    assert any(
+        evidence.kind == "gerber_polygon_flash"
+        and "vertices=6" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+
+def test_polygon_macro_parameters_units_and_d01_reuse_standard_p_path(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOIN*%\n"
+        "%AMPOLY*5,1,6,0,0,$1,$2*%\n"
+        "%ADD10POLY,0.040X15*%\n"
+        "D10*\n"
+        "X000000Y000000D02*\n"
+        "X010000Y000000D01*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_regular_polygon_track(
+        0.0,
+        0.0,
+        25.4,
+        0.0,
+        1.016,
+        6,
+        base_rotation_deg=15.0,
+    ).geometry
+
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    assert region_shape(result.regions[0]).symmetric_difference(
+        expected
+    ).area == pytest.approx(0.0, abs=1e-10)
+    assert any(
+        evidence.kind == "gerber_polygon_track"
+        and "method=convex_sweep_exact" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+
+def test_polygon_macro_inherits_lm_lr_ls_and_image_rotation(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMPOLY*5,1,5,0,0,2.0,17*%\n"
+        "%ADD10POLY*%\n"
+        "%LMX*%\n"
+        "%LR30*%\n"
+        "%LS2*%\n"
+        "%IR90*%\n"
+        "D10*\n"
+        "X010000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_regular_polygon_flash(
+        -2.0,
+        1.0,
+        4.0,
+        5,
+        base_rotation_deg=17.0,
+        mirror="X",
+        object_rotation_deg=120.0,
+    ).geometry
+
+    assert region_shape(result.regions[0]).symmetric_difference(
+        expected
+    ).area == pytest.approx(0.0, abs=1e-12)
+
+
+@pytest.mark.parametrize(
+    "macro_body",
+    [
+        "5,0,6,0,0,2.0,0",
+        "5,1,2,0,0,2.0,0",
+        "5,1,13,0,0,2.0,0",
+        "5,1,5.5,0,0,2.0,0",
+        "5,1,6,0.1,0,2.0,0",
+        "5,1,6,0,0,0,0",
+    ],
+)
+def test_polygon_macro_non_reducible_cases_fail_closed(
+    tmp_path: Path,
+    macro_body: str,
+):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        f"%AMPOLY*{macro_body}*%\n"
+        "%ADD10POLY*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(UnsupportedFeatureError):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "UNSUPPORTED_GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
+
+
+def test_polygon_macro_preflight_is_strict_ready(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMPOLY*5,1,8,0,0,1.2,-22.5*%\n"
+        "%ADD10POLY*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    report = preflight(path)
+
+    assert report.discovered_files == 1
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
