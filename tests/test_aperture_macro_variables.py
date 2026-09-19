@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from photonx_eda_pcb.aperture_macros import evaluate_macro, parse_macro_body
+from photonx_eda_pcb.aperture_macros.validation import validate_macro
 from photonx_eda_pcb.aperture_macros.variables import substitute
 from photonx_eda_pcb.errors import UnsupportedFeatureError
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
@@ -204,3 +205,33 @@ def test_circle_macro_unit_conversion_overflow_fails_closed(tmp_path: Path):
 
     with pytest.raises(UnsupportedFeatureError, match="overflows after active-unit conversion"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
+def test_validate_macro_accepts_variable_definition_statements():
+    statements = parse_macro_body("$2=1*1,1,$2,0,0")
+
+    assert validate_macro(statements) == []
+
+
+def test_macro_assignment_integer_overflow_fails_closed(tmp_path: Path):
+    huge_integer = "9" * 400
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        f"%AMOVERFLOW*$2={huge_integer}*1,1,$2,0,0*%\n"
+        "%ADD10OVERFLOW*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(UnsupportedFeatureError, match="could not be evaluated"):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "INVALID_GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
