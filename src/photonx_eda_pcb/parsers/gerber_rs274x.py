@@ -132,7 +132,7 @@ class GerberRS274XParser:
 
     Supported: FS, MO, ADD(C/R/O), Dnn selection, G01/D01/D02/D03,
     bounded G74 single-quadrant and G75 multi-quadrant G02/G03 circular
-    interpolation with circular apertures, single-contour dark linear/G75
+    interpolation with circular apertures, dark multi-contour linear/G75
     G36/G37 regions, G04, M02, and standard linear step-and-repeat
     (%SR...*% / %SR*%).
 
@@ -158,6 +158,11 @@ class GerberRS274XParser:
         self.region_state = RegionState()
         self.region_sources: list[SourceRef] = []
         self.region_arc_evidence: list[Evidence] = []
+        self.region_contours: list[tuple[Point, ...]] = []
+        self.region_contour_sources: list[list[SourceRef]] = []
+        self.region_contour_arc_evidence: list[list[Evidence]] = []
+        self.region_current_sources: list[SourceRef] = []
+        self.region_current_arc_evidence: list[Evidence] = []
         self.region_start_line: int | None = None
         self.file_polarity: str | None = None
         self.layer_polarity = "dark"
@@ -1563,6 +1568,11 @@ class GerberRS274XParser:
         self.region_state.abort()
         self.region_sources.clear()
         self.region_arc_evidence.clear()
+        self.region_contours.clear()
+        self.region_contour_sources.clear()
+        self.region_contour_arc_evidence.clear()
+        self.region_current_sources.clear()
+        self.region_current_arc_evidence.clear()
         self.region_start_line = None
 
     def _region_fail(
@@ -1629,7 +1639,164 @@ class GerberRS274XParser:
         self.region_state.begin()
         self.region_sources = [SourceRef(str(path), line_no, line)]
         self.region_arc_evidence = []
+        self.region_contours = []
+        self.region_contour_sources = []
+        self.region_contour_arc_evidence = []
+        self.region_current_sources = []
+        self.region_current_arc_evidence = []
         self.region_start_line = line_no
+
+    def _finish_current_region_contour(
+        self,
+        path: Path,
+        line_no: int,
+        raw: str,
+        out: GerberLayerResult,
+        *,
+        reason: str,
+    ) -> bool:
+        raw_vertices = tuple(self.region_state.vertices)
+        if not raw_vertices:
+            self._region_parse_fail(
+                path,
+                line_no,
+                raw,
+                "GERBER_REGION_EMPTY_CONTOUR",
+                f"{reason} cannot finalize an empty region contour",
+                out,
+            )
+            return False
+
+        points = [Point(float(x), float(y)) for x, y in raw_vertices]
+        first = points[0]
+        last = points[-1]
+        closure_tol_mm = 1e-9
+        if not (
+            isclose(first.x, last.x, rel_tol=0.0, abs_tol=closure_tol_mm)
+            and isclose(first.y, last.y, rel_tol=0.0, abs_tol=closure_tol_mm)
+        ):
+            message = (
+                "G37 does not implicitly close a region contour; "
+                "final point must coincide with its first point"
+                if reason == "G37"
+                else (
+                    f"{reason} cannot finalize an open region contour; "
+                    "final point must coincide with its first point"
+                )
+            )
+            self._region_parse_fail(
+                path,
+                line_no,
+                raw,
+                "GERBER_REGION_NOT_CLOSED",
+                message,
+                out,
+            )
+            return False
+        if last != first:
+            points[-1] = first
+
+        if any(a == b for a, b in zip(points, points[1:])):
+            self._region_parse_fail(
+                path,
+                line_no,
+                raw,
+                "GERBER_REGION_ZERO_LENGTH_SEGMENT",
+                "zero-length contour segments are not valid",
+                out,
+            )
+            return False
+
+        unique = {(point.x, point.y) for point in points[:-1]}
+        if len(unique) < 3:
+            self._region_parse_fail(
+                path,
+                line_no,
+                raw,
+                "GERBER_REGION_VERTEX_COUNT_INVALID",
+                "region contour needs at least three unique vertices",
+                out,
+            )
+            return False
+
+        undirected_edges: dict[
+            tuple[tuple[float, float], tuple[float, float]],
+            list[tuple[Point, Point]],
+        ] = {}
+        for start, end in zip(points, points[1:]):
+            a = (start.x, start.y)
+            b = (end.x, end.y)
+            key = (a, b) if a <= b else (b, a)
+            undirected_edges.setdefault(key, []).append((start, end))
+        coincident_edges = [
+            uses for uses in undirected_edges.values() if len(uses) > 1
+        ]
+        if coincident_edges:
+            looks_like_cut_in = all(
+                len(uses) == 2
+                and uses[0][0] == uses[1][1]
+                and uses[0][1] == uses[1][0]
+                and (
+                    isclose(
+                        uses[0][0].x,
+                        uses[0][1].x,
+                        rel_tol=0.0,
+                        abs_tol=1e-12,
+                    )
+                    or isclose(
+                        uses[0][0].y,
+                        uses[0][1].y,
+                        rel_tol=0.0,
+                        abs_tol=1e-12,
+                    )
+                )
+                for uses in coincident_edges
+            )
+            if looks_like_cut_in:
+                self._region_fail(
+                    path,
+                    line_no,
+                    raw,
+                    "GERBER_REGION_CUTIN_UNSUPPORTED",
+                    (
+                        "Gerber cut-in hole topology was detected from fully "
+                        "coincident opposite horizontal/vertical segments; "
+                        "cut-in holes are not modeled yet"
+                    ),
+                    out,
+                )
+                return False
+
+        candidate = CopperRegion(
+            "validation",
+            tuple(points),
+            self.layer,
+            provenance=Provenance(),
+        )
+        shape = region_shape(candidate)
+        if shape.is_empty or float(shape.area) <= 0 or not shape.is_valid:
+            self._region_parse_fail(
+                path,
+                line_no,
+                raw,
+                "GERBER_REGION_CONTOUR_INVALID",
+                (
+                    "region contour is empty, zero-area, self-touching, "
+                    "self-intersecting, or uses unsupported cut-in topology"
+                ),
+                out,
+            )
+            return False
+
+        self.region_contours.append(tuple(points))
+        self.region_contour_sources.append(list(self.region_current_sources))
+        self.region_contour_arc_evidence.append(
+            list(self.region_current_arc_evidence)
+        )
+        self.region_state.vertices.clear()
+        self.region_current_sources.clear()
+        self.region_current_arc_evidence.clear()
+        return True
 
     def _region_coordinate(
         self,
@@ -1650,17 +1817,17 @@ class GerberRS274XParser:
 
         if operation == "2":
             if self.region_state.vertices:
-                self._region_fail(
+                if not self._finish_current_region_contour(
                     path,
                     line_no,
                     line,
-                    "GERBER_REGION_MULTICONTOUR_UNSUPPORTED",
-                    "multiple contours or holes inside one region are not supported",
                     out,
-                )
-                self.current = nxt
-                return
+                    reason="D02",
+                ):
+                    self.current = nxt
+                    return
             self.region_state.add(nxt.x, nxt.y)
+            self.region_current_sources.append(src)
             self.region_sources.append(src)
             self.current = nxt
             return
@@ -1689,6 +1856,7 @@ class GerberRS274XParser:
                 self.current = nxt
                 return
             self.region_state.add(nxt.x, nxt.y)
+            self.region_current_sources.append(src)
             self.region_sources.append(src)
             self.current = nxt
             return
@@ -1853,9 +2021,9 @@ class GerberRS274XParser:
             self.region_state.add(vertex.x, vertex.y)
 
         src = SourceRef(str(path), line_no, line)
+        self.region_current_sources.append(src)
         self.region_sources.append(src)
-        self.region_arc_evidence.append(
-            Evidence(
+        arc_evidence = Evidence(
                 "gerber_region_arc_tessellation",
                 (
                     f"quadrant_mode=multi; "
@@ -1868,7 +2036,8 @@ class GerberRS274XParser:
                 1.0,
                 src,
             )
-        )
+        self.region_current_arc_evidence.append(arc_evidence)
+        self.region_arc_evidence.append(arc_evidence)
         self.current = nxt
 
     def _end_region(
@@ -1889,169 +2058,156 @@ class GerberRS274XParser:
             )
             return
 
-        raw_vertices = self.region_state.end()
-        sources = [*self.region_sources, SourceRef(str(path), line_no, line)]
-        arc_evidence = list(self.region_arc_evidence)
+        if not self.image_geometry_enabled:
+            self._abort_region()
+            return
+
+        if not self._finish_current_region_contour(
+            path,
+            line_no,
+            line,
+            out,
+            reason="G37",
+        ):
+            return
+
+        self.region_state.end()
+        contours = list(self.region_contours)
+        contour_sources = [list(items) for items in self.region_contour_sources]
+        contour_arc_evidence = [
+            list(items) for items in self.region_contour_arc_evidence
+        ]
+        statement_start_sources = self.region_sources[:1]
         start_line = self.region_start_line
+        end_src = SourceRef(str(path), line_no, line)
+
         self.region_sources = []
         self.region_arc_evidence = []
+        self.region_contours = []
+        self.region_contour_sources = []
+        self.region_contour_arc_evidence = []
+        self.region_current_sources = []
+        self.region_current_arc_evidence = []
         self.region_start_line = None
 
-        if not self.image_geometry_enabled:
-            return
-
-        points = [Point(float(x), float(y)) for x, y in raw_vertices]
-        if len(points) < 2:
-            self._parse_error_or_warn(
-                path,
-                line_no,
-                line,
-                "GERBER_REGION_VERTEX_COUNT_INVALID",
-                "region needs a non-empty closed contour",
-                out,
-            )
-            return
-
-        first = points[0]
-        last = points[-1]
-        closure_tol_mm = 1e-9
-        if not (
-            isclose(first.x, last.x, rel_tol=0.0, abs_tol=closure_tol_mm)
-            and isclose(first.y, last.y, rel_tol=0.0, abs_tol=closure_tol_mm)
-        ):
-            self._parse_error_or_warn(
-                path,
-                line_no,
-                line,
-                "GERBER_REGION_NOT_CLOSED",
-                "G37 does not implicitly close a region contour; final point must coincide with its first point",
-                out,
-            )
-            return
-        if last != first:
-            points[-1] = first
-
-        if any(a == b for a, b in zip(points, points[1:])):
-            self._parse_error_or_warn(
-                path,
-                line_no,
-                line,
-                "GERBER_REGION_ZERO_LENGTH_SEGMENT",
-                "zero-length contour segments are not valid in the supported region subset",
-                out,
-            )
-            return
-
-        unique = {(point.x, point.y) for point in points[:-1]}
-        if len(unique) < 3:
-            self._parse_error_or_warn(
-                path,
-                line_no,
-                line,
-                "GERBER_REGION_VERTEX_COUNT_INVALID",
-                "region needs at least three unique contour vertices",
-                out,
-            )
-            return
-
-        source_region = CopperRegion(
-            "validation",
-            tuple(points),
-            self.layer,
-            provenance=Provenance(list(sources), []),
-        )
-        source_shape = region_shape(source_region)
-        if (
-            source_shape.is_empty
-            or float(source_shape.area) <= 0
-            or not source_shape.is_valid
-        ):
-            self._parse_error_or_warn(
-                path,
-                line_no,
-                line,
-                "GERBER_REGION_GEOMETRY_INVALID",
-                "region polygon is empty, zero-area, self-touching, or self-intersecting",
-                out,
-            )
-            return
-
-        coords = tuple((point.x, point.y) for point in points)
-        end_src = sources[-1]
-        region_kind = (
-            "linear_g75_single_contour_dark"
-            if arc_evidence
-            else "linear_single_contour_dark"
-        )
-        for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
-            transformed = tuple(
-                self._transform_output_point(point, dx_mm, dy_mm)
-                for point in points
-            )
-            transformed_region = CopperRegion(
+        contour_count = len(contours)
+        for contour_index, points in enumerate(contours):
+            source_region = CopperRegion(
                 "validation",
-                transformed,
+                points,
                 self.layer,
             )
-            transformed_shape = region_shape(transformed_region)
+            source_shape = region_shape(source_region)
             if (
-                transformed_shape.is_empty
-                or float(transformed_shape.area) <= 0
-                or not transformed_shape.is_valid
+                source_shape.is_empty
+                or float(source_shape.area) <= 0
+                or not source_shape.is_valid
             ):
                 self._parse_error_or_warn(
                     path,
                     line_no,
                     line,
-                    "GERBER_REGION_TRANSFORM_INVALID",
-                    "image transforms produced invalid region geometry",
+                    "GERBER_REGION_GEOMETRY_INVALID",
+                    (
+                        f"contour {contour_index + 1}/{contour_count} is empty, "
+                        "zero-area, self-touching, or self-intersecting"
+                    ),
                     out,
                 )
                 return
 
-            id_parts: list[object] = [
-                path.name,
-                start_line,
-                line_no,
-                self.layer,
-                coords,
-            ]
-            id_parts.extend(self._image_transform_id_parts())
-            if self.step_repeat is not None:
-                id_parts.extend(["sr", x_index, y_index])
-            obj_id = stable_id("reg", *id_parts)
-            prov = self._step_repeat_provenance(
+            coords = tuple((point.x, point.y) for point in points)
+            unique = {(point.x, point.y) for point in points[:-1]}
+            sources = [
+                *statement_start_sources,
+                *contour_sources[contour_index],
                 end_src,
-                x_index or 0,
-                y_index or 0,
-                dx_mm,
-                dy_mm,
+            ]
+            arc_evidence = contour_arc_evidence[contour_index]
+            region_kind = (
+                "linear_g75_multi_contour_dark"
+                if arc_evidence
+                else "linear_multi_contour_dark"
             )
-            for source in sources:
-                prov.add_source(source)
-            for evidence in arc_evidence:
-                prov.add_evidence(evidence)
-            prov.add_evidence(
-                Evidence(
-                    "gerber_region",
-                    (
-                        f"{region_kind}; vertices={len(unique)}; "
-                        f"arc_commands={len(arc_evidence)}; "
-                        f"source_area_mm2={float(source_shape.area):.12g}; "
-                        f"output_area_mm2={float(transformed_shape.area):.12g}"
-                    ),
-                    1.0,
-                    end_src,
+
+            for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
+                transformed = tuple(
+                    self._transform_output_point(point, dx_mm, dy_mm)
+                    for point in points
                 )
-            )
-            out.regions.append(
-                CopperRegion(
-                    obj_id,
+                transformed_region = CopperRegion(
+                    "validation",
                     transformed,
                     self.layer,
-                    provenance=prov,
                 )
-            )
+                transformed_shape = region_shape(transformed_region)
+                if (
+                    transformed_shape.is_empty
+                    or float(transformed_shape.area) <= 0
+                    or not transformed_shape.is_valid
+                ):
+                    self._parse_error_or_warn(
+                        path,
+                        line_no,
+                        line,
+                        "GERBER_REGION_TRANSFORM_INVALID",
+                        (
+                            "image transforms produced invalid geometry for "
+                            f"contour {contour_index + 1}/{contour_count}"
+                        ),
+                        out,
+                    )
+                    return
+
+                id_parts: list[object] = [
+                    path.name,
+                    start_line,
+                    line_no,
+                    self.layer,
+                    "contour",
+                    contour_index,
+                    contour_count,
+                    coords,
+                ]
+                id_parts.extend(self._image_transform_id_parts())
+                if self.step_repeat is not None:
+                    id_parts.extend(["sr", x_index, y_index])
+                obj_id = stable_id("reg", *id_parts)
+                prov = self._step_repeat_provenance(
+                    end_src,
+                    x_index or 0,
+                    y_index or 0,
+                    dx_mm,
+                    dy_mm,
+                )
+                for source in sources:
+                    prov.add_source(source)
+                for evidence in arc_evidence:
+                    prov.add_evidence(evidence)
+                prov.add_evidence(
+                    Evidence(
+                        "gerber_region",
+                        (
+                            f"{region_kind}; "
+                            f"contour={contour_index + 1}/{contour_count}; "
+                            f"statement_fill=union; "
+                            f"vertices={len(unique)}; "
+                            f"arc_commands={len(arc_evidence)}; "
+                            f"source_area_mm2={float(source_shape.area):.12g}; "
+                            f"output_area_mm2={float(transformed_shape.area):.12g}"
+                        ),
+                        1.0,
+                        end_src,
+                    )
+                )
+                out.regions.append(
+                    CopperRegion(
+                        obj_id,
+                        transformed,
+                        self.layer,
+                        provenance=prov,
+                    )
+                )
 
     def _arc_radius_tolerance_mm(self) -> float:
         x_resolution = to_mm(10 ** (-self.xfmt.decimal), self.units)
@@ -2484,6 +2640,20 @@ class GerberRS274XParser:
                             "GERBER_REGION_FLASH_UNSUPPORTED",
                             "D03 is not allowed inside a Gerber region statement",
                             out,
+                        )
+                        continue
+                    if operation == "2":
+                        if not self._require_units(p, line_no, line, out):
+                            self._abort_region()
+                            continue
+                        self._region_coordinate(
+                            p,
+                            line_no,
+                            line,
+                            out,
+                            None,
+                            None,
+                            "2",
                         )
                         continue
                     self.current_operation = operation

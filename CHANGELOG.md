@@ -2,10 +2,12 @@
 
 ## Unreleased
 
+- Added dark G36/G37 multi-contour region support: each D02 starts a contour, a new D02 finalizes the previous contour only when explicitly closed, coordinate-free D02 starts at the current point, and each valid contour is emitted as deterministic copper geometry with statement-level union semantics. Overlapping and touching contours remain valid; cut-in holes remain fail-closed.
+
 - Added G75 multi-quadrant G02/G03 circular boundaries inside dark single-contour G36/G37 regions with deterministic 0.005 mm output chord-error-bounded tessellation, incremental endpoint support, anisotropic SF-compatible boundary transforms, and explicit arc provenance; G74 region arcs remain fail-closed.
 - Corrected region closure semantics to match the Gerber specification: G37 no longer implicitly closes an open contour, and zero-length contour segments are rejected.
 
-- Added bounded dark single-contour Gerber G36/G37 region reconstruction as copper polygons, initially for linear boundaries and now extended to G75 circular boundaries; G74 arc boundaries, multi-contour/hole, clear-polarity, and Edge.Cuts regions remain fail-closed.
+- Added bounded dark Gerber G36/G37 region reconstruction as copper polygons, initially for single linear contours and later extended to G75 circular boundaries and multiple contours; G74 arc boundaries, cut-in holes, clear-polarity, and Edge.Cuts regions remain fail-closed.
 - Hardened legacy Gerber header placement: AS/IN/MI/SF/OF/IR commands are now considered late after the first coordinate statement, including non-emitting D02 moves, rather than only after physical geometry has already been emitted.
 - Preflight now classifies LATE_GERBER_* and DUPLICATE_GERBER_* diagnostics as strict blockers so parser-invalid header state cannot be reported as ready for strict reconstruction.
 - Expanded production Gerber aperture-transform support from identity-only to an exact modal LM/LR/LS subset: mirror-symmetric C/R/O apertures accept all LM states, circles accept arbitrary finite LR, rectangular/obround flashes accept 90-degree-step LR, and positive LS scales flash dimensions plus circular draw/arc widths. Non-orthogonal R/O flashes remain fail-closed.
