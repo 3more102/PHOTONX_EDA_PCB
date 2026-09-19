@@ -971,7 +971,7 @@ def test_standalone_d03_is_rejected_inside_region(tmp_path: Path):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
-def test_g74_region_arc_remains_fail_closed(tmp_path: Path):
+def test_g74_region_arc_over_90_degrees_remains_fail_closed(tmp_path: Path):
     path = _write(
         tmp_path,
         "region_g74_arc.gtl",
@@ -985,8 +985,8 @@ def test_g74_region_arc_remains_fail_closed(tmp_path: Path):
     )
 
     with pytest.raises(
-        UnsupportedFeatureError,
-        match="require G75 multi-quadrant mode",
+        ParseError,
+        match="no G74 center candidate",
     ):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
