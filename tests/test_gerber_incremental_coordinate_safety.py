@@ -36,10 +36,10 @@ def test_incremental_coordinate_mode_accumulates_xy_deltas(
     result = GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     assert len(result.tracks) == 2
-    assert result.tracks[0].start == pytest.approx((1.0, 2.0))
-    assert result.tracks[0].end == pytest.approx((2.0, 2.0))
-    assert result.tracks[1].start == pytest.approx((2.0, 2.0))
-    assert result.tracks[1].end == pytest.approx((2.0, 1.0))
+    assert (result.tracks[0].start.x, result.tracks[0].start.y) == pytest.approx((1.0, 2.0))
+    assert (result.tracks[0].end.x, result.tracks[0].end.y) == pytest.approx((2.0, 2.0))
+    assert (result.tracks[1].start.x, result.tracks[1].start.y) == pytest.approx((2.0, 2.0))
+    assert (result.tracks[1].end.x, result.tracks[1].end.y) == pytest.approx((2.0, 1.0))
     assert len(result.pads) == 1
     assert (result.pads[0].center.x, result.pads[0].center.y) == pytest.approx(
         (1.5, 1.5)
@@ -89,8 +89,8 @@ def test_incremental_arc_accumulates_endpoint_and_keeps_ij_as_center_offsets(
     result = GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     assert result.tracks
-    assert result.tracks[0].start == pytest.approx((1.0, 0.0))
-    assert result.tracks[-1].end == pytest.approx((0.0, 1.0))
+    assert (result.tracks[0].start.x, result.tracks[0].start.y) == pytest.approx((1.0, 0.0))
+    assert (result.tracks[-1].end.x, result.tracks[-1].end.y) == pytest.approx((0.0, 1.0))
     assert any(
         evidence.kind == "gerber_arc_tessellation"
         for track in result.tracks
@@ -109,8 +109,8 @@ def test_explicit_absolute_mode_remains_supported(tmp_path: Path):
     result = GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     assert len(result.tracks) == 1
-    assert result.tracks[0].start == pytest.approx((0.0, 0.0))
-    assert result.tracks[0].end == pytest.approx((1.0, 0.0))
+    assert (result.tracks[0].start.x, result.tracks[0].start.y) == pytest.approx((0.0, 0.0))
+    assert (result.tracks[0].end.x, result.tracks[0].end.y) == pytest.approx((1.0, 0.0))
 
 
 @pytest.mark.parametrize("command", ["G91*", "G091*"])
