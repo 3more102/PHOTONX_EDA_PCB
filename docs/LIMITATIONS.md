@@ -13,6 +13,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - exact rectangular reduction for centered axis-aligned Code-20 vector-line macros (plus deprecated Code-2 alias) with 90-degree-step rotation;
 - single positive Code-21 center-line aperture macros reduced exactly to centered rectangular apertures with 90-degree-step rotation;
 - deprecated Code-22 lower-left rectangle macros reduced exactly when their lower-left coordinates place the rectangle center at the macro origin and rotation is in 90-degree steps;
+- single positive Code-5 polygon macros reduced exactly to standard P apertures when they use an integer 3–12 vertex count, are centered at the macro origin, have positive circumscribed diameter, and finite rotation;
 - explicit X2 `.FilePolarity,Positive` metadata is recognized without changing positive-image geometry;
 - Gerber `%LPD*%` dark layer polarity is accepted as the supported positive-object state;
 - modal Gerber aperture transforms are supported for the representable subset: LM on centered symmetric C/R/O apertures, arbitrary LR on circles and R/O linear D01 sweeps/flashes, and positive LS scaling on supported object geometry; orthogonal R/O flashes remain PadCandidate objects while non-orthogonal flashes are materialized as CopperRegion polygons;
