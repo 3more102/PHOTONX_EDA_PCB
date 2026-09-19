@@ -82,7 +82,6 @@ def _is_strict_blocker(code: str) -> bool:
             "EXCELLON_ROUTE_UNTERMINATED",
             "EXCELLON_ROUTE_ARC_INVALID",
             "EXCELLON_UNITS_UNDECLARED",
-            "EXCELLON_TRAILING_DATA_AFTER_M30",
         }
     )
 
