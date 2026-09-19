@@ -5,6 +5,7 @@ def builtin_cases():
         ConformanceCase("gerber-incremental-linear","gerber","%FSLIX24Y24*%\n%MOMM*%\n%ADD10C,0.200*%\nD10*\nX010000Y000000D02*\nX010000Y000000D01*\nM02*\n",ConformanceExpectation({"tracks":1,"pads":0,"outline":0})),
         ConformanceCase("gerber-flash","gerber","%FSLAX24Y24*%\n%MOMM*%\n%ADD10C,1.000*%\nD10*\nX010000Y020000D03*\nM02*\n",ConformanceExpectation({"tracks":0,"pads":1,"outline":0})),
         ConformanceCase("gerber-center-line-macro-flash","gerber","%FSLAX24Y24*%\n%MOMM*%\n%AMBOX*21,1,$1,$2,0,0,0*%\n%ADD10BOX,1.0X2.0*%\nD10*\nX010000Y020000D03*\nM02*\n",ConformanceExpectation({"tracks":0,"pads":1,"outline":0})),
+        ConformanceCase("gerber-lower-left-line-macro-flash","gerber","%FSLAX24Y24*%\n%MOMM*%\n%AMLLBOX*22,1,$1,$2,-$1/2,-$2/2,0*%\n%ADD10LLBOX,2.0X1.0*%\nD10*\nX010000Y020000D03*\nM02*\n",ConformanceExpectation({"tracks":0,"pads":1,"outline":0})),
         ConformanceCase("gerber-g75-ccw-arc","gerber","%FSLAX24Y24*%\n%MOMM*%\n%ADD10C,0.200*%\nD10*\nG75*\nX010000Y000000D02*\nG03X000000Y010000I-010000J000000D01*\nM02*\n",ConformanceExpectation({"tracks":8,"pads":0,"outline":0})),
         ConformanceCase("gerber-g74-ccw-quarter-arc","gerber","%FSLAX24Y24*%\n%MOMM*%\n%ADD10C,0.200*%\nD10*\nG74*\nX110000Y060000D02*\nG03X070000Y100000I040000J000000D01*\nM02*\n",ConformanceExpectation({"tracks":16,"pads":0,"outline":0})),
         ConformanceCase("gerber-region-strict","gerber","%FSLAX24Y24*%\n%MOMM*%\nG36*\nM02*\n",ConformanceExpectation(exception_type="UnsupportedFeatureError")),
