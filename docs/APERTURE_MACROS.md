@@ -17,4 +17,4 @@ For these centered rectangular reductions, intrinsic macro rotation is applied b
 
 Macro modifiers may be parameterized and are evaluated before these constraints are checked. Active Gerber units are applied when the primitive is reduced.
 
-Multiple primitives, subtraction/exposure-off geometry, non-centered rectangles/vector lines/polygons, zero-size primitives, unsupported polygon forms, outlines, thermals, moirés, and aperture blocks remain outside this production reduction path unless a later implementation can preserve their geometry exactly.
+Multiple primitives, subtraction/exposure-off geometry, non-centered rectangles/vector lines/polygons, zero-size primitives, unsupported polygon forms, non-rectangular or non-four-vertex Code-4 outlines, thermals, moirés, and aperture blocks remain outside this production reduction path unless a later implementation can preserve their geometry exactly.
