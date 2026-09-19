@@ -1,7 +1,30 @@
+from math import isfinite
 import re
-_RE=re.compile(r"%SR(?:X(?P<x>\d+))?(?:Y(?P<y>\d+))?(?:I(?P<i>[0-9.]+))?(?:J(?P<j>[0-9.]+))?\*%")
-def parse_step_repeat(text:str)->dict[str,float|int]:
-    m=_RE.fullmatch(text.strip())
-    if not m: raise ValueError('invalid step-repeat')
-    if not any(m.groupdict().values()): return {"x":1,"y":1,"i":0.0,"j":0.0}
-    return {"x":int(m['x'] or 1),"y":int(m['y'] or 1),"i":float(m['i'] or 0),"j":float(m['j'] or 0)}
+
+
+_UNSIGNED_DECIMAL_PATTERN = r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
+_RE = re.compile(
+    rf"%SR"
+    rf"(?:X(?P<x>[0-9]+))?"
+    rf"(?:Y(?P<y>[0-9]+))?"
+    rf"(?:I(?P<i>{_UNSIGNED_DECIMAL_PATTERN}))?"
+    rf"(?:J(?P<j>{_UNSIGNED_DECIMAL_PATTERN}))?"
+    rf"\*%"
+)
+
+
+def parse_step_repeat(text: str) -> dict[str, float | int]:
+    match = _RE.fullmatch(text.strip())
+    if not match:
+        raise ValueError("invalid step-repeat")
+    if not any(match.groupdict().values()):
+        return {"x": 1, "y": 1, "i": 0.0, "j": 0.0}
+
+    x_count = int(match["x"] or 1)
+    y_count = int(match["y"] or 1)
+    x_step = float(match["i"] or 0)
+    y_step = float(match["j"] or 0)
+    if not isfinite(x_step) or not isfinite(y_step):
+        raise ValueError("step-repeat increments must be finite")
+
+    return {"x": x_count, "y": y_count, "i": x_step, "j": y_step}

@@ -51,17 +51,23 @@ _AD_STANDARD = re.compile(
 _AD_MACRO = re.compile(r"^%ADD(\d+)([A-Za-z_.$][A-Za-z0-9_.$-]*)(?:,([^*]*))?\*%$")
 _SELECT = re.compile(r"^(?:G54)?D(\d+)\*$")
 _OP_SELECT = re.compile(r"^D0?([123])\*$")
+_GERBER_UNSIGNED_DECIMAL_PATTERN = r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
+_GERBER_SIGNED_DECIMAL_PATTERN = rf"[+-]?{_GERBER_UNSIGNED_DECIMAL_PATTERN}"
 _COORD = re.compile(
-    r"^(?:G0?1)?(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?(?:D0?([123]))?\*$"
+    rf"^(?:G0?1)?"
+    rf"(?:X({_GERBER_SIGNED_DECIMAL_PATTERN}))?"
+    rf"(?:Y({_GERBER_SIGNED_DECIMAL_PATTERN}))?"
+    r"(?:D0?([123]))?\*$"
 )
 _ARC_COORD = re.compile(
     r"^(?:(G0?[23]))?"
-    r"(?:X([+-]?[0-9.]+))?"
-    r"(?:Y([+-]?[0-9.]+))?"
-    r"(?:I([+-]?[0-9.]+))?"
-    r"(?:J([+-]?[0-9.]+))?"
+    rf"(?:X({_GERBER_SIGNED_DECIMAL_PATTERN}))?"
+    rf"(?:Y({_GERBER_SIGNED_DECIMAL_PATTERN}))?"
+    rf"(?:I({_GERBER_SIGNED_DECIMAL_PATTERN}))?"
+    rf"(?:J({_GERBER_SIGNED_DECIMAL_PATTERN}))?"
     r"(?:D0?([12]))?\*$"
 )
+_COORDINATE_LIKE = re.compile(r"^(?:G0?[123](?=[XYIJD*])|[XYIJ])")
 _FILE_POLARITY = re.compile(
     r"^%TF\.FilePolarity,(Positive|Negative)\*%$",
     re.IGNORECASE,
@@ -1098,8 +1104,38 @@ class GerberRS274XParser:
         if raw is None:
             return None
         fmt = self.xfmt if axis == "x" else self.yfmt
-        value = float(raw) if "." in raw else fmt.decode(raw)
-        return to_mm(value, self.units)
+        value = fmt.decode(raw)
+        converted = to_mm(value, self.units)
+        if not isfinite(converted):
+            raise ValueError(
+                "Gerber coordinate must be finite after active-unit conversion"
+            )
+        return converted
+
+    def _decode_checked(
+        self,
+        raw,
+        axis,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+    ) -> tuple[float | None, bool]:
+        try:
+            value = self._decode(raw, axis)
+        except (ValueError, OverflowError) as exc:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_COORDINATE",
+                f"invalid Gerber coordinate value ({exc})",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return None, False
+        return value, True
 
     def _coordinate_point(self, x_raw, y_raw) -> Point:
         x = self._decode(x_raw, "x")
@@ -1113,6 +1149,44 @@ class GerberRS274XParser:
             self.current.x if x is None else x,
             self.current.y if y is None else y,
         )
+
+    def _coordinate_point_checked(
+        self,
+        x_raw,
+        y_raw,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+    ) -> Point | None:
+        try:
+            point = self._coordinate_point(x_raw, y_raw)
+        except (ValueError, OverflowError) as exc:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_COORDINATE",
+                f"invalid Gerber coordinate value ({exc})",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return None
+
+        if not isfinite(point.x) or not isfinite(point.y):
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_COORDINATE",
+                "Gerber coordinate arithmetic must remain finite",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return None
+        return point
 
     def _instantiate_standard_aperture(
         self,
@@ -1133,6 +1207,18 @@ class GerberRS274XParser:
                 line,
                 "INVALID_GERBER_STANDARD_APERTURE",
                 "standard aperture modifiers must be numeric",
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
+        if not all(isfinite(value) for value in values):
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_STANDARD_APERTURE",
+                "standard aperture modifiers must be finite",
                 out,
             )
             self.unsupported_apertures.add(code)
@@ -1232,6 +1318,19 @@ class GerberRS274XParser:
                 if hole_diameter is None
                 else to_mm(hole_diameter, self.units)
             )
+            if not isfinite(outer_mm) or (
+                hole_mm is not None and not isfinite(hole_mm)
+            ):
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_STANDARD_APERTURE",
+                    "standard aperture dimensions overflow after active-unit conversion",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
             self.apertures[code] = Aperture(
                 code,
                 "P",
@@ -1321,6 +1420,21 @@ class GerberRS274XParser:
             if hole_diameter is None
             else to_mm(hole_diameter, self.units)
         )
+        if (
+            not isfinite(ax)
+            or not isfinite(ay)
+            or (hole_mm is not None and not isfinite(hole_mm))
+        ):
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_STANDARD_APERTURE",
+                "standard aperture dimensions overflow after active-unit conversion",
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
         self.apertures[code] = Aperture(code, shape, ax, ay, hole_mm)
 
     def _register_aperture_macro(
@@ -2205,6 +2319,20 @@ class GerberRS274XParser:
                 self._disable_image_geometry(out)
             return
 
+        if not isfinite(x_step_mm) or not isfinite(y_step_mm):
+            self.step_repeat = None
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_STEP_REPEAT",
+                "step-and-repeat increments overflow after active-unit conversion",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
         if x_count < 1 or y_count < 1:
             self.step_repeat = None
             self._fail_or_warn(
@@ -2231,6 +2359,22 @@ class GerberRS274XParser:
                     f"step-and-repeat expands to {instance_count} instances; "
                     f"limit is {_MAX_STEP_REPEAT_INSTANCES}"
                 ),
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        max_x_offset_mm = (x_count - 1) * x_step_mm
+        max_y_offset_mm = (y_count - 1) * y_step_mm
+        if not isfinite(max_x_offset_mm) or not isfinite(max_y_offset_mm):
+            self.step_repeat = None
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_STEP_REPEAT",
+                "step-and-repeat offset arithmetic must remain finite",
                 out,
             )
             if not self.strict:
@@ -2907,7 +3051,12 @@ class GerberRS274XParser:
         operation = op or self.current_operation
         if op is not None:
             self.current_operation = op
-        nxt = self._coordinate_point(x_raw, y_raw)
+        nxt = self._coordinate_point_checked(
+            x_raw, y_raw, path, line_no, line, out
+        )
+        if nxt is None:
+            self._abort_region()
+            return
         self.image_body_started = True
         src = SourceRef(str(path), line_no, line)
 
@@ -2995,7 +3144,12 @@ class GerberRS274XParser:
         operation = op or self.current_operation
         if op is not None:
             self.current_operation = op
-        nxt = self._coordinate_point(x_raw, y_raw)
+        nxt = self._coordinate_point_checked(
+            x_raw, y_raw, path, line_no, line, out
+        )
+        if nxt is None:
+            self._abort_region()
+            return
         self.image_body_started = True
 
         if operation == "2":
@@ -3369,9 +3523,34 @@ class GerberRS274XParser:
                     out,
                 )
                 return None
-            i_mm = 0.0 if i_raw is None else self._decode(i_raw, "x")
-            j_mm = 0.0 if j_raw is None else self._decode(j_raw, "y")
-            return Point(self.current.x + i_mm, self.current.y + j_mm)
+            i_mm = 0.0
+            if i_raw is not None:
+                i_mm, valid = self._decode_checked(
+                    i_raw, "x", path, line_no, line, out
+                )
+                if not valid:
+                    return None
+            j_mm = 0.0
+            if j_raw is not None:
+                j_mm, valid = self._decode_checked(
+                    j_raw, "y", path, line_no, line, out
+                )
+                if not valid:
+                    return None
+            center = Point(self.current.x + i_mm, self.current.y + j_mm)
+            if not isfinite(center.x) or not isfinite(center.y):
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_COORDINATE",
+                    "Gerber arc-center arithmetic must remain finite",
+                    out,
+                )
+                if not self.strict:
+                    self._disable_image_geometry(out)
+                return None
+            return center
 
         if self.quadrant_mode != "single":
             self._fail_or_warn(
@@ -3395,8 +3574,14 @@ class GerberRS274XParser:
             )
             return None
 
-        i_mm = self._decode(i_raw, "x")
-        j_mm = self._decode(j_raw, "y")
+        i_mm, i_valid = self._decode_checked(
+            i_raw, "x", path, line_no, line, out
+        )
+        j_mm, j_valid = self._decode_checked(
+            j_raw, "y", path, line_no, line, out
+        )
+        if not i_valid or not j_valid:
+            return None
         if i_mm < 0 or j_mm < 0:
             self._parse_error_or_warn(
                 path,
@@ -3573,8 +3758,15 @@ class GerberRS274XParser:
                     out,
                 )
             else:
-                i_mm = self._decode(i_raw, "x")
-                j_mm = self._decode(j_raw, "y")
+                i_mm, i_valid = self._decode_checked(
+                    i_raw, "x", path, line_no, line, out
+                )
+                j_mm, j_valid = self._decode_checked(
+                    j_raw, "y", path, line_no, line, out
+                )
+                if not i_valid or not j_valid:
+                    self.current = nxt
+                    return
                 if i_mm < 0 or j_mm < 0:
                     self._parse_error_or_warn(
                         path,
@@ -4200,6 +4392,19 @@ class GerberRS274XParser:
                     )
                     continue
 
+                if _COORDINATE_LIKE.match(line):
+                    self._region_parse_fail(
+                        p,
+                        line_no,
+                        line,
+                        "INVALID_GERBER_COORDINATE",
+                        "malformed Gerber coordinate/interpolation statement",
+                        out,
+                    )
+                    if not self.strict:
+                        self._disable_image_geometry(out)
+                    continue
+
                 self._region_fail(
                     p,
                     line_no,
@@ -4455,7 +4660,11 @@ class GerberRS274XParser:
                     elif gcode in {"G03", "G3"}:
                         self.interpolation = "ccw_arc"
 
-                    nxt = self._coordinate_point(x_raw, y_raw)
+                    nxt = self._coordinate_point_checked(
+                        x_raw, y_raw, p, line_no, line, out
+                    )
+                    if nxt is None:
+                        continue
                     self.image_body_started = True
 
                     if not self.image_geometry_enabled:
@@ -4534,7 +4743,11 @@ class GerberRS274XParser:
                 operation = op or self.current_operation
                 if op is not None:
                     self.current_operation = op
-                nxt = self._coordinate_point(x_raw, y_raw)
+                nxt = self._coordinate_point_checked(
+                    x_raw, y_raw, p, line_no, line, out
+                )
+                if nxt is None:
+                    continue
                 self.image_body_started = True
 
                 if not self.image_geometry_enabled:
@@ -5584,6 +5797,19 @@ class GerberRS274XParser:
                             )
 
                 self.current = nxt
+                continue
+
+            if _COORDINATE_LIKE.match(line):
+                self._parse_error_or_warn(
+                    p,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_COORDINATE",
+                    "malformed Gerber coordinate/interpolation statement",
+                    out,
+                )
+                if not self.strict:
+                    self._disable_image_geometry(out)
                 continue
 
             self._fail_or_warn(
