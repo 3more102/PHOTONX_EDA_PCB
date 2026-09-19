@@ -61,8 +61,14 @@ def test_omission_validation_rejects_duplicate_omission_ids():
         "skipped_regions":["region-1","region-1"],
         "omitted_routes":["route-1","route-1"],
         "issues":[
-            {"object_id":"region-1"},
-            {"object_id":"route-1"},
+            {
+                "object_id":"region-1",
+                "code":"KICAD_COPPER_REGION_UNSUPPORTED",
+            },
+            {
+                "object_id":"route-1",
+                "code":"KICAD_ARBITRARY_ROUTE_UNSUPPORTED",
+            },
         ],
     }
     assert validate_omission_manifest(data)==[
