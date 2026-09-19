@@ -1603,6 +1603,247 @@ class GerberRS274XParser:
             )
             return
 
+        if primitive["kind"] == "outline":
+            if len(values) < 2:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"outline aperture macro {name!r} has too few modifiers",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            exposure, vertices_value = values[:2]
+            if (
+                not isfinite(float(vertices_value))
+                or not float(vertices_value).is_integer()
+                or not 3 <= int(vertices_value) <= 5000
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    (
+                        f"outline aperture macro {name!r} requires an integer "
+                        "vertex count in 3..5000"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            vertex_count = int(vertices_value)
+            expected_values = 2 * vertex_count + 5
+            if len(values) != expected_values:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    (
+                        f"outline aperture macro {name!r} declares {vertex_count} "
+                        f"vertices but has {len(values)} modifiers; expected "
+                        f"{expected_values}"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            if not all(isfinite(float(value)) for value in values):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"outline aperture macro {name!r} contains non-finite values",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            rotation = float(values[-1])
+            coordinates = [float(value) for value in values[2:-1]]
+            points = [
+                (coordinates[index], coordinates[index + 1])
+                for index in range(0, len(coordinates), 2)
+            ]
+            epsilon = 1e-12
+            closure_scale = max(
+                1.0,
+                *(abs(coordinate) for point in points for coordinate in point),
+            )
+            closure_tolerance = 1e-9 * closure_scale
+            if (
+                exposure != 1
+                or hypot(
+                    points[-1][0] - points[0][0],
+                    points[-1][1] - points[0][1],
+                )
+                > closure_tolerance
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    (
+                        f"outline aperture macro {name!r} requires additive "
+                        "exposure and an explicitly closed contour"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            vertices = points[:-1]
+
+            if vertex_count == 4:
+                edges = [
+                    (
+                        vertices[(index + 1) % 4][0] - vertices[index][0],
+                        vertices[(index + 1) % 4][1] - vertices[index][1],
+                    )
+                    for index in range(4)
+                ]
+                lengths = [hypot(dx, dy) for dx, dy in edges]
+                centered = (
+                    isclose(
+                        vertices[0][0],
+                        -vertices[2][0],
+                        rel_tol=1e-9,
+                        abs_tol=epsilon,
+                    )
+                    and isclose(
+                        vertices[0][1],
+                        -vertices[2][1],
+                        rel_tol=1e-9,
+                        abs_tol=epsilon,
+                    )
+                    and isclose(
+                        vertices[1][0],
+                        -vertices[3][0],
+                        rel_tol=1e-9,
+                        abs_tol=epsilon,
+                    )
+                    and isclose(
+                        vertices[1][1],
+                        -vertices[3][1],
+                        rel_tol=1e-9,
+                        abs_tol=epsilon,
+                    )
+                )
+                opposite_edges = (
+                    isclose(edges[0][0], -edges[2][0], rel_tol=1e-9, abs_tol=epsilon)
+                    and isclose(
+                        edges[0][1], -edges[2][1], rel_tol=1e-9, abs_tol=epsilon
+                    )
+                    and isclose(
+                        edges[1][0], -edges[3][0], rel_tol=1e-9, abs_tol=epsilon
+                    )
+                    and isclose(
+                        edges[1][1], -edges[3][1], rel_tol=1e-9, abs_tol=epsilon
+                    )
+                )
+                adjacent_dot = edges[0][0] * edges[1][0] + edges[0][1] * edges[1][1]
+                orthogonal = (
+                    lengths[0] > epsilon
+                    and lengths[1] > epsilon
+                    and abs(adjacent_dot)
+                    <= 1e-9 * lengths[0] * lengths[1] + epsilon
+                )
+                if centered and opposite_edges and orthogonal:
+                    base_rotation = (
+                        degrees(atan2(edges[0][1], edges[0][0])) + rotation
+                    ) % 360.0
+                    self.apertures[code] = Aperture(
+                        code,
+                        "R",
+                        to_mm(lengths[0], self.units),
+                        to_mm(lengths[1], self.units),
+                        base_rotation_deg=base_rotation,
+                    )
+                    return
+
+            if 3 <= vertex_count <= 12:
+                radii = [hypot(x, y) for x, y in vertices]
+                radius = radii[0]
+                regular = radius > epsilon and all(
+                    isclose(
+                        candidate,
+                        radius,
+                        rel_tol=1e-9,
+                        abs_tol=epsilon,
+                    )
+                    for candidate in radii[1:]
+                )
+                if regular:
+                    expected_dot = cos(2.0 * pi / vertex_count)
+                    expected_cross = abs(sin(2.0 * pi / vertex_count))
+                    orientation = 0
+                    for index in range(vertex_count):
+                        x0, y0 = vertices[index]
+                        x1, y1 = vertices[(index + 1) % vertex_count]
+                        denominator = radii[index] * radii[(index + 1) % vertex_count]
+                        normalized_dot = (x0 * x1 + y0 * y1) / denominator
+                        normalized_cross = (x0 * y1 - y0 * x1) / denominator
+                        if (
+                            not isclose(
+                                normalized_dot,
+                                expected_dot,
+                                rel_tol=1e-9,
+                                abs_tol=1e-9,
+                            )
+                            or not isclose(
+                                abs(normalized_cross),
+                                expected_cross,
+                                rel_tol=1e-9,
+                                abs_tol=1e-9,
+                            )
+                            or abs(normalized_cross) <= epsilon
+                        ):
+                            regular = False
+                            break
+                        current_orientation = 1 if normalized_cross > 0 else -1
+                        if orientation == 0:
+                            orientation = current_orientation
+                        elif current_orientation != orientation:
+                            regular = False
+                            break
+
+                if regular:
+                    polygon_rotation = (
+                        degrees(atan2(vertices[0][1], vertices[0][0])) + rotation
+                    ) % 360.0
+                    diameter_mm = to_mm(2.0 * radius, self.units)
+                    self.apertures[code] = Aperture(
+                        code,
+                        "P",
+                        diameter_mm,
+                        diameter_mm,
+                        polygon_vertices=vertex_count,
+                        polygon_rotation_deg=polygon_rotation,
+                    )
+                    return
+
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                (
+                    f"outline aperture macro {name!r} is outside the exact "
+                    "centered rectangle/regular-polygon reduction subset"
+                ),
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            return
+
         if primitive["kind"] == "polygon":
             if len(values) != 6:
                 self._fail_or_warn(

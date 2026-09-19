@@ -7,6 +7,7 @@ from photonx_eda_pcb.geometry_kernel import region_shape
 from photonx_eda_pcb.gerber_image import (
     polygonize_regular_polygon_flash,
     polygonize_regular_polygon_track,
+    polygonize_rotated_flash,
 )
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 from photonx_eda_pcb.preflight import preflight
@@ -421,6 +422,127 @@ def test_center_line_rectangle_macro_non_exact_cases_fail_closed(
 
     with pytest.raises(UnsupportedFeatureError):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
+def test_outline_rectangle_macro_reduces_exactly_with_rotation(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,4,-1,-0.5,1,-0.5,1,0.5,-1,0.5,-1,-0.5,30*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X010000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_rotated_flash(
+        1.0,
+        2.0,
+        2.0,
+        1.0,
+        "R",
+        rotation_deg=30.0,
+    ).geometry
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    assert region_shape(result.regions[0]).symmetric_difference(
+        expected
+    ).area == pytest.approx(0.0, abs=1e-12)
+
+    report = preflight(path)
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_outline_regular_polygon_macro_reduces_exactly_to_standard_p(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,3,1,0,-0.5,0.8660254037844386,-0.5,-0.8660254037844386,1,0,17*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X010000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_regular_polygon_flash(
+        1.0,
+        2.0,
+        2.0,
+        3,
+        base_rotation_deg=17.0,
+    ).geometry
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    assert region_shape(result.regions[0]).symmetric_difference(
+        expected
+    ).area == pytest.approx(0.0, abs=1e-12)
+
+
+def test_parameterized_outline_rectangle_macro_supports_linear_draw(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,4,-$1,-$2,$1,-$2,$1,$2,-$1,$2,-$1,-$2,$3*%\n"
+        "%ADD10OUTLINE,1.0X0.25X15*%\n"
+        "D10*\n"
+        "X000000Y000000D02*\n"
+        "X010000Y000000D01*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    assert region_shape(result.regions[0]).area > 0.0
+    assert any(
+        evidence.kind == "gerber_track_polygonization"
+        and "aperture_shape=R" in evidence.detail
+        and "method=convex_sweep_exact" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+
+@pytest.mark.parametrize(
+    "macro_body",
+    [
+        "4,0,4,-1,-0.5,1,-0.5,1,0.5,-1,0.5,-1,-0.5,0",
+        "4,1,4,-1,-0.5,1,-0.5,1,0.5,-1,0.5,-0.9,-0.5,0",
+        "4,1,4,-1,-0.5,1,-0.5,0.8,0.5,-1,0.5,-1,-0.5,0",
+    ],
+)
+def test_outline_macro_outside_exact_subset_fails_closed(
+    tmp_path: Path,
+    macro_body: str,
+):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        f"%AMOUTLINE*{macro_body}*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(UnsupportedFeatureError):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
 
 
 def test_polygon_macro_flash_reduces_exactly_to_standard_p(tmp_path: Path):
