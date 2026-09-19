@@ -14,4 +14,4 @@ The high-level Gerber parser reduces an aperture macro to a standard aperture on
 
 Macro modifiers may be parameterized and are evaluated before these constraints are checked. Active Gerber units are applied when the primitive is reduced.
 
-Multiple primitives, subtraction/exposure-off geometry, non-centered rectangles/vector lines, diagonal vector lines, non-orthogonal rectangle rotations, zero-size primitives, outlines, polygons, thermals, moirés, and aperture blocks remain outside this production reduction path unless a later implementation can preserve their geometry exactly.
+Multiple primitives, subtraction/exposure-off geometry, non-centered rectangles/vector lines/polygons, diagonal vector lines, non-orthogonal rectangle rotations, zero-size primitives, outlines, thermals, moirés, and aperture blocks remain outside this production reduction path unless a later implementation can preserve their geometry exactly.
