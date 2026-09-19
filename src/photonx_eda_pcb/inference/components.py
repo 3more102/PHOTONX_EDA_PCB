@@ -2,7 +2,7 @@ from __future__ import annotations
 from math import hypot
 from ..ids import stable_id
 from ..models import BoardModel,ComponentHypothesis
-from ..spatial_connectivity.points import build_point_index,radius_query
+from ..spatial_connectivity.points import build_point_index,radius_queries
 
 def _make_pair(a,b,distance):
     both_drilled=a.drill is not None and b.drill is not None;same_layer=a.layer==b.layer
@@ -31,7 +31,7 @@ def infer_component_hypotheses(board:BoardModel,max_pair_distance_mm:float=4.0,*
     idx=build_point_index(((p.id,p) for p in pads),lambda p:(p.center.x,p.center.y),float(cell_size_mm or max(1.0,max_pair_distance_mm)))
     while remaining:
         a_id=min(remaining);remaining.remove(a_id);a=by[a_id]
-        nearest=next(((d,bid) for d,bid in radius_query(idx,a.center.x,a.center.y,max_pair_distance_mm) if bid in remaining),None)
+        nearest=next(((d,bid) for d,bid in neighbors_by_id[a_id] if bid in remaining),None)
         if nearest is None:
             result.append(ComponentHypothesis(stable_id("cmp",a_id),[a_id],"unresolved_pad",.15,["no nearby pad partner"]));continue
         distance,b_id=nearest;remaining.remove(b_id);result.append(_make_pair(a,by[b_id],distance))
