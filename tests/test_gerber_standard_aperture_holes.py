@@ -338,37 +338,101 @@ def test_clear_holed_flash_only_clears_annulus_not_center(tmp_path: Path):
     assert total_area == pytest.approx(100.0 - clear_shape.area)
 
 
-def test_zero_circle_diameter_fails_closed_in_strict_mode(tmp_path: Path):
+def test_zero_circle_flash_is_legal_no_image_object(tmp_path: Path):
     path = _write(tmp_path, "%ADD10C,0.000*%")
 
-    with pytest.raises(ParseError, match="diameter must be positive"):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
-
-
-def test_zero_circle_diameter_skips_permissive_geometry(tmp_path: Path):
-    path = _write(tmp_path, "%ADD10C,0.000*%")
-
-    result = GerberRS274XParser("F.Cu", strict=False).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     assert result.pads == []
+    assert result.tracks == []
+    assert result.regions == []
+    assert result.outline == []
     assert any(
-        diagnostic.code == "INVALID_GERBER_STANDARD_APERTURE_SIZE"
-        for diagnostic in result.diagnostics
-    )
-    assert any(
-        diagnostic.code == "GERBER_APERTURE_GEOMETRY_SKIPPED"
+        diagnostic.code == "GERBER_ZERO_SIZE_OBJECT_NO_IMAGE"
+        and "operation=D03" in diagnostic.message
         for diagnostic in result.diagnostics
     )
 
 
-def test_preflight_blocks_zero_circle_diameter(tmp_path: Path):
+def test_zero_circle_linear_draw_updates_current_without_emitting_geometry(
+    tmp_path: Path,
+):
+    path = tmp_path / "zero_draw.gtl"
+    path.write_text(
+        HEADER
+        + "%ADD10C,0.000*%\n"
+        + "%ADD11C,0.200*%\n"
+        + "D10*\n"
+        + "X000000Y000000D02*\n"
+        + "X010000Y000000D01*\n"
+        + "D11*\n"
+        + "X020000Y000000D01*\n"
+        + "M02*\n",
+        encoding="utf-8",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.tracks) == 1
+    track = result.tracks[0]
+    assert (track.start.x, track.start.y) == pytest.approx((1.0, 0.0))
+    assert (track.end.x, track.end.y) == pytest.approx((2.0, 0.0))
+    assert any(
+        diagnostic.code == "GERBER_ZERO_SIZE_OBJECT_NO_IMAGE"
+        and "operation=D01" in diagnostic.message
+        for diagnostic in result.diagnostics
+    )
+
+
+def test_zero_circle_arc_validates_path_but_emits_no_geometry(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%ADD10C,0.000*%",
+        "G75*\n"
+        "X010000Y000000D02*\n"
+        "G03X000000Y010000I-010000J000000D01*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks == []
+    assert result.regions == []
+    assert any(
+        diagnostic.code == "GERBER_ZERO_SIZE_OBJECT_NO_IMAGE"
+        for diagnostic in result.diagnostics
+    )
+
+
+def test_zero_circle_on_edge_cuts_emits_no_outline(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%ADD10C,0.000*%",
+        "X000000Y000000D02*\n"
+        "X010000Y000000D01*\n",
+    )
+
+    result = GerberRS274XParser("Edge.Cuts", strict=True).parse(path)
+
+    assert result.outline == []
+    assert result.tracks == []
+    assert any(
+        diagnostic.code == "GERBER_ZERO_SIZE_OBJECT_NO_IMAGE"
+        for diagnostic in result.diagnostics
+    )
+
+
+def test_preflight_accepts_zero_circle_diameter(tmp_path: Path):
     path = _write(tmp_path, "%ADD10C,0.000*%")
 
     report = preflight(path)
 
     assert report.discovered_files == 1
-    assert not report.ready_for_strict_reconstruction
-    assert any(
-        "INVALID_GERBER_STANDARD_APERTURE_SIZE" in blocker
-        for blocker in report.strict_blockers
-    )
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_zero_circle_cannot_have_positive_hole(tmp_path: Path):
+    path = _write(tmp_path, "%ADD10C,0.000X0.100*%")
+
+    with pytest.raises(ParseError, match="must strictly fit"):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
