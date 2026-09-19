@@ -40,11 +40,22 @@ def _claim_archive_target(
 ) -> Path:
     target = _safe_target(destination, member_name)
 
+    implicit_parents: list[Path] = []
+    for parent in target.parents:
+        if parent == destination:
+            break
+        if parent in seen_files:
+            raise ValueError(
+                f"archive path type conflict at extraction target: {member_name}"
+            )
+        implicit_parents.append(parent)
+
     if is_dir:
         if target in seen_files:
             raise ValueError(
                 f"archive path type conflict at extraction target: {member_name}"
             )
+        seen_dirs.update(implicit_parents)
         seen_dirs.add(target)
         return target
 
@@ -57,32 +68,39 @@ def _claim_archive_target(
             f"archive path type conflict at extraction target: {member_name}"
         )
 
-    for parent in target.parents:
-        if parent == destination:
-            break
-        if parent in seen_files:
-            raise ValueError(
-                f"archive path type conflict at extraction target: {member_name}"
-            )
-        seen_dirs.add(parent)
-
+    seen_dirs.update(implicit_parents)
     seen_files.add(target)
     return target
 
 
-def _copy_member_bounded(source, output, remaining_bytes: int) -> int:
+def _copy_member_bounded(
+    source,
+    output,
+    remaining_bytes: int,
+    *,
+    expected_bytes: int | None = None,
+) -> int:
     copied = 0
     while True:
         chunk = source.read(_COPY_CHUNK_BYTES)
         if not chunk:
             break
-        copied += len(chunk)
-        if copied > remaining_bytes:
+
+        next_total = copied + len(chunk)
+        if next_total > remaining_bytes:
             raise ValueError(
                 "archive expands beyond the PHOTONX safety limit "
                 f"of {_MAX_ARCHIVE_UNCOMPRESSED_BYTES} bytes"
             )
+        if expected_bytes is not None and next_total > expected_bytes:
+            raise ValueError("archive member size mismatch during extraction")
+
         output.write(chunk)
+        copied = next_total
+
+    if expected_bytes is not None and copied != expected_bytes:
+        raise ValueError("archive member size mismatch during extraction")
+
     return copied
 
 
@@ -161,10 +179,7 @@ def _safe_extract_zip(archive: Path, destination: Path) -> None:
                     source,
                     output,
                     _MAX_ARCHIVE_UNCOMPRESSED_BYTES - extracted_total,
-                )
-            if copied != int(info.file_size):
-                raise ValueError(
-                    f"archive member size mismatch during extraction: {info.filename}"
+                    expected_bytes=int(info.file_size),
                 )
             extracted_total += copied
 
@@ -235,10 +250,7 @@ def _safe_extract_tar(archive: Path, destination: Path) -> None:
                     source,
                     output,
                     _MAX_ARCHIVE_UNCOMPRESSED_BYTES - extracted_total,
-                )
-            if copied != int(info.size):
-                raise ValueError(
-                    f"archive member size mismatch during extraction: {info.name}"
+                    expected_bytes=int(info.size),
                 )
             extracted_total += copied
 
