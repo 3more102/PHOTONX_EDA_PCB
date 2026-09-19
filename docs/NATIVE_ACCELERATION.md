@@ -41,11 +41,11 @@ The batch path is used by drill association, footprint clustering and metrics, a
 
 ## Benchmark evidence
 
-`benchmark_comparisons.benchmark_candidate_pair_backends()` measures the Python reference and native C++ candidate-pair paths on the same `SpatialHashIndex`.
+`benchmark_comparisons.benchmark_candidate_pair_backends()` measures Python vs native AABB candidate-pair generation, while `benchmark_radius_query_backends()` measures the batched point-radius path.
 
-The helper refuses to emit timing evidence until the native result exactly matches the Python reference result for the supplied workload. The companion `candidate_backend_summary()` reports measured medians and the native/Python ratio without defining a universal crossover threshold.
+Both helpers refuse to emit timing evidence until the native result exactly matches the Python reference result for the supplied workload. `backend_timing_summary()` reports measured medians and the native/Python ratio without defining a universal crossover threshold.
 
-This evidence is intended to support a later benchmark-gated `auto` backend policy. Thresholds must be based on identified hardware, Python version, fixture size, cell size, density, and tolerance rather than inferred from implementation language.
+This evidence is intended to support a later benchmark-gated `auto` backend policy. Thresholds must be based on identified hardware, Python version, fixture size, spatial density, cell size, tolerance, radius distribution, and query batch size rather than inferred from implementation language.
 
 ## Safety contract
 
