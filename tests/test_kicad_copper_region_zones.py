@@ -98,6 +98,8 @@ def test_region_with_hole_exports_zone_contours_without_cached_fill(tmp_path: Pa
     assert "(xy 0.500000 0.250000)" in text
     assert "(xy 1.500000 0.750000)" in text
     assert "(filled_polygon " not in text
+    assert "    (fill)\n" in text
+    assert "    (fill yes " not in text
     assert any(
         issue.code == "KICAD_COPPER_REGION_FILL_CACHE_OMITTED"
         and issue.object_id == "R1"
