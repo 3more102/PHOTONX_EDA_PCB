@@ -358,8 +358,8 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Gerber simple aperture macros | **Partial** | Single positive centered circle macros, including parameterized diameters, are reduced exactly to circular apertures |
 | Gerber regions / complex macros | **Not implemented** | Regions and aperture blocks fail closed and suppress permissive file geometry; complex aperture macros remain unsupported |
 | Excellon point drill hits | **Implemented** | Drill hits with explicit metric/inch units and positive tool diameters; undeclared-unit and zero-diameter tools fail closed |
-| Excellon coordinate mode | **Partial** | Absolute coordinates are supported; legacy `G91` / `ICI,ON` incremental mode fails closed and suppresses permissive file geometry |
-| Excellon G85 straight slots | **Implemented** | Straight canned slots reconstructed from explicit endpoints; malformed slot syntax fails closed and suppresses permissive file geometry |
+| Excellon coordinate mode | **Partial** | Absolute `G90` / `ICI,OFF` and incremental `G91` / `ICI,ON` coordinates are supported for drill hits and routed endpoints; incremental G85 remains fail-closed |
+| Excellon G85 straight slots | **Partial** | Straight canned slots with absolute endpoints are reconstructed; incremental G85 and malformed slot syntax fail closed with permissive geometry suppression |
 | Excellon linear routing | **Implemented** | G00/M15/G01/M16 routes supported; malformed commands and invalid route-state transitions fail closed |
 | Excellon routed arcs | **Partial** | Bounded I/J and standard XNC X/Y/A radius arcs (<=180°) are supported; invalid/unsupported arcs fail closed and suppress permissive file geometry |
 | Strict / permissive parser modes | **Implemented** | Strict fails on unsupported syntax; permissive records diagnostics |
@@ -636,7 +636,7 @@ Without independent evidence, manufacturing geometry generally cannot prove:
 - Gerber step-and-repeat is fail-closed when the SR statement is malformed, has non-positive repeat counts, or exceeds the configured expansion limit; permissive parsing suppresses the file rather than flattening a panel to one instance.
 - G75 multi-quadrant circular arcs are supported only for I/J center offsets with circular draw apertures and are represented by explicitly evidenced tessellation.
 - Single positive centered-circle Gerber aperture macros are supported. Legacy G74 single-quadrant arcs are supported only for unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90°. Gerber regions and aperture blocks remain outside the declared production high-level parser and suppress file geometry in permissive mode; complex aperture macros remain unsupported.
-- Legacy Excellon `G91` / `ICI,ON` incremental coordinates are not modeled: strict parsing rejects them, permissive parsing suppresses file geometry, and preflight blocks strict reconstruction.
+- Legacy Excellon `G91` / `ICI,ON` incremental coordinates are supported for drill hits and routed endpoints by accumulating deltas from the previous coordinate; I/J remain arc-center offsets. Incremental G85 canned slots remain fail-closed until their two-position semantics are modeled explicitly.
 - Excellon tool diameters require explicit units before their definition; permissive parsing suppresses the file after an undeclared-unit violation rather than guessing millimeters.
 - Excellon tool diameters must also be positive; zero-diameter tools are rejected in strict mode and suppress permissive file geometry instead of creating zero-width physical features.
 - Excellon G02/G03 routed arcs are supported for the bounded I/J center-offset subset and standard XNC X/Y/A radius form with <=180° sweep; invalid geometry or unsupported arc dialects fail closed, and permissive parsing suppresses file geometry rather than outputting a route with the failed arc omitted.
