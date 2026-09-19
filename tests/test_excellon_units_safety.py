@@ -125,3 +125,89 @@ def test_preflight_blocks_tool_definition_before_units(tmp_path: Path):
         "EXCELLON_UNITS_UNDECLARED" in blocker
         for blocker in report.strict_blockers
     )
+
+def test_conflicting_unit_switch_fails_closed_in_strict_mode(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "M48\n"
+        "METRIC\n"
+        "T01C0.600\n"
+        "%\n"
+        "T01\n"
+        "X1.000Y1.000\n"
+        "M72\n"
+        "X2.000Y2.000\n"
+        "M30\n",
+    )
+
+    with pytest.raises(ParseError, match="unit mode changed after it was already declared"):
+        ExcellonParser(strict=True).parse(path)
+
+
+def test_conflicting_unit_switch_suppresses_permissive_geometry(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "M48\n"
+        "METRIC\n"
+        "T01C0.600\n"
+        "%\n"
+        "T01\n"
+        "X1.000Y1.000\n"
+        "INCH\n"
+        "X2.000Y2.000\n"
+        "M30\n",
+    )
+
+    result = ExcellonParser(strict=False).parse(path)
+
+    assert result.drills == []
+    assert result.slots == []
+    assert result.routes == []
+    assert any(
+        diagnostic.code == "CONFLICTING_EXCELLON_UNITS"
+        for diagnostic in result.diagnostics
+    )
+
+
+def test_same_unit_redeclaration_remains_supported(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "M48\n"
+        "METRIC\n"
+        "M71\n"
+        "T01C0.600\n"
+        "%\n"
+        "T01\n"
+        "X1.000Y1.000\n"
+        "M30\n",
+    )
+
+    result = ExcellonParser(strict=True).parse(path)
+
+    assert len(result.drills) == 1
+    assert result.drills[0].diameter == pytest.approx(0.6)
+    assert result.drills[0].center.x == pytest.approx(1.0)
+
+
+def test_preflight_blocks_conflicting_unit_switch(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "M48\n"
+        "METRIC\n"
+        "T01C0.600\n"
+        "INCH\n"
+        "%\n"
+        "T01\n"
+        "X1.000Y1.000\n"
+        "M30\n",
+    )
+
+    report = preflight(path)
+
+    assert report.discovered_files == 1
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "CONFLICTING_EXCELLON_UNITS" in blocker
+        for blocker in report.strict_blockers
+    )
+
