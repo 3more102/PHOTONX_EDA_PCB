@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added specification-compliant zero-diameter standard C aperture support. C0 D01/D03/G02/G03 objects are accepted as legal no-image operations, emit no copper/outline geometry, preserve modal/current coordinate progression, and remain preflight-safe. Arc geometry is still validated before a zero-width arc is treated as image-empty.
+
 - Added bounded support for one centered round-hole modifier on standard C/R/O D03 flashes. Holed flashes are materialized as CopperRegion polygons whose interior ring is transparent within that flash operation, preserving Gerber semantics under dark/clear composition rather than converting the hole into a destructive clear operation. LR/LS, whole-image IR, step-repeat, provenance, connectivity and DRC remain supported. Invalid/non-fitting holes plus holed D01/G02/G03 draws remain fail-closed.
 
 - Added arbitrary finite `LR` support for rectangular and obround D03 flashes on material layers. Orthogonal cases remain PadCandidate objects; non-orthogonal flashes are materialized as CopperRegion polygons so exact rectangular geometry and 0.005 mm chord-error-bounded obround geometry can participate in step-repeat, whole-image transforms, connectivity/DRC, provenance, and ordered LPD/LPC composition without suppressing the file.
