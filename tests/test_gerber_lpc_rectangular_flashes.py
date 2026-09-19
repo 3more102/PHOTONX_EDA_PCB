@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from photonx_eda_pcb.geometry_kernel import region_shape
-from photonx_eda_pcb.gerber_image import polygonize_flash
+from photonx_eda_pcb.gerber_image import polygonize_flash, polygonize_rotated_flash
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 from photonx_eda_pcb.preflight import preflight
 
@@ -288,3 +288,48 @@ def test_lpc_rectangular_flash_follows_whole_image_rotation(tmp_path: Path):
     assert shape.bounds == pytest.approx((-6.0, 3.0, -4.0, 7.0))
     assert len(region.holes) == 1
 
+
+
+def test_lpc_nonorthogonal_rectangular_flash_subtracts_exact_rotated_hole(
+    tmp_path: Path,
+):
+    path = _write(
+        tmp_path,
+        "rotated_rect_flash_hole.gtl",
+        "%ADD10R,10X10*%\n"
+        "%ADD11R,4X2*%\n"
+        "%LPD*%\n"
+        "D10*\n"
+        "X050000Y050000D03*\n"
+        "%LPC*%\n"
+        "D11*\n"
+        "%LR45*%\n"
+        "X050000Y050000D03*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected_clear = polygonize_rotated_flash(
+        5.0,
+        5.0,
+        4.0,
+        2.0,
+        "R",
+        rotation_deg=45.0,
+    ).geometry.area
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    assert len(result.regions[0].holes) == 1
+    assert region_shape(result.regions[0]).area == pytest.approx(
+        100.0 - expected_clear
+    )
+    assert any(
+        evidence.kind == "gerber_flash_polygonization"
+        and "method=rotated_polygon_exact" in evidence.detail
+        and "rotation_deg_ccw=45" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+    report = preflight(path)
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
