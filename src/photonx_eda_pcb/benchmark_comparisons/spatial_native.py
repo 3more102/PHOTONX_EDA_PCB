@@ -1,5 +1,14 @@
+from __future__ import annotations
+
+import math
+import platform
+
 from photonx_eda_pcb.performance_profiles import benchmark
-from photonx_eda_pcb.spatial_connectivity import candidate_pairs
+from photonx_eda_pcb.spatial_connectivity import (
+    AABB,
+    SpatialHashIndex,
+    candidate_pairs,
+)
 from photonx_eda_pcb.spatial_connectivity.native_backend import (
     NativeBackendUnavailable,
     native_available,
@@ -17,6 +26,32 @@ def _require_parity(reference, native, workload: str) -> None:
         raise AssertionError(
             f"native {workload} backend diverged from the Python reference"
         )
+
+
+def build_native_benchmark_index(
+    object_count: int,
+    *,
+    cell_size: float = 1.0,
+) -> SpatialHashIndex:
+    """Build a deterministic mixed-overlap workload for backend comparisons."""
+    count = int(object_count)
+    cell = float(cell_size)
+    if count <= 0:
+        raise ValueError("object_count must be positive")
+    if not math.isfinite(cell) or cell <= 0.0:
+        raise ValueError("cell_size must be positive and finite")
+
+    side = max(1, math.ceil(math.sqrt(count)))
+    index = SpatialHashIndex(cell)
+    for i in range(count):
+        row, col = divmod(i, side)
+        x = col * 0.75
+        y = row * 0.75
+        index.insert(
+            f"obj-{i:08d}",
+            AABB(x, y, x + 0.50, y + 0.50),
+        )
+    return index
 
 
 def benchmark_candidate_pair_backends(
@@ -85,4 +120,87 @@ def backend_timing_summary(python_result, native_result):
         "native_seconds": native_result.median_seconds,
         "native_to_python_ratio": ratio,
         "native_faster": None if ratio is None else ratio < 1.0,
+    }
+
+
+def native_spatial_benchmark_report(
+    object_count: int = 1000,
+    *,
+    iterations: int = 3,
+    warmup: int = 1,
+    tolerance: float = 0.30,
+    radius: float = 1.0,
+    cell_size: float = 1.0,
+) -> dict:
+    """Run parity-gated spatial benchmarks and return machine-readable evidence."""
+    count = int(object_count)
+    iterations = int(iterations)
+    warmup = int(warmup)
+    tolerance = float(tolerance)
+    radius = float(radius)
+    cell_size = float(cell_size)
+
+    if count <= 0:
+        raise ValueError("object_count must be positive")
+    if iterations <= 0:
+        raise ValueError("iterations must be positive")
+    if warmup < 0:
+        raise ValueError("warmup must be non-negative")
+    if not math.isfinite(tolerance) or tolerance < 0.0:
+        raise ValueError("tolerance must be finite and non-negative")
+    if not math.isfinite(radius) or radius < 0.0:
+        raise ValueError("radius must be finite and non-negative")
+    if not math.isfinite(cell_size) or cell_size <= 0.0:
+        raise ValueError("cell_size must be positive and finite")
+
+    _require_native()
+    index = build_native_benchmark_index(count, cell_size=cell_size)
+    queries = tuple(
+        (
+            (index.box(obj_id).min_x + index.box(obj_id).max_x) / 2.0,
+            (index.box(obj_id).min_y + index.box(obj_id).max_y) / 2.0,
+            radius,
+        )
+        for obj_id in index.ids()
+    )
+
+    pair_python, pair_native = benchmark_candidate_pair_backends(
+        index,
+        tolerance,
+        iterations=iterations,
+        warmup=warmup,
+    )
+    radius_python, radius_native = benchmark_radius_query_backends(
+        index,
+        queries,
+        iterations=iterations,
+        warmup=warmup,
+    )
+
+    pair_output = candidate_pairs(index, tolerance, backend="python")
+    radius_output = radius_queries(index, queries, backend="python")
+
+    return {
+        "native_available": True,
+        "objects": count,
+        "queries": len(queries),
+        "parameters": {
+            "iterations": iterations,
+            "warmup": warmup,
+            "tolerance": tolerance,
+            "radius": radius,
+            "cell_size": cell_size,
+        },
+        "environment": {
+            "python": platform.python_version(),
+            "platform": platform.platform(),
+        },
+        "candidate_pairs": {
+            **backend_timing_summary(pair_python, pair_native),
+            "result_pairs": len(pair_output),
+        },
+        "radius_queries": {
+            **backend_timing_summary(radius_python, radius_native),
+            "result_matches": sum(len(items) for items in radius_output),
+        },
     }
