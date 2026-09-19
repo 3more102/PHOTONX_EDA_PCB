@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added bounded standard P regular-polygon aperture support for D03 flashes. P apertures validate outer diameter, integer vertex count 3–12, optional template rotation, and optional centered round hole; LM mirroring is applied before LR, with LS, whole-image IR, step-repeat and ordered LPD/LPC composition preserved. Polygon outer boundaries are exact CopperRegion geometry, while optional round holes retain the 0.005 mm chord-error policy. P-aperture D01 remains explicitly fail-closed.
+
 - Added specification-compliant zero-diameter standard C aperture support. C0 D01/D03/G02/G03 objects are accepted as legal no-image operations, emit no copper/outline geometry, preserve modal/current coordinate progression, and remain preflight-safe. Arc geometry is still validated before a zero-width arc is treated as image-empty.
 
 - Added bounded support for one centered round-hole modifier on standard C/R/O D03 flashes. Holed flashes are materialized as CopperRegion polygons whose interior ring is transparent within that flash operation, preserving Gerber semantics under dark/clear composition rather than converting the hole into a destructive clear operation. LR/LS, whole-image IR, step-repeat, provenance, connectivity and DRC remain supported. Invalid/non-fitting holes plus holed D01/G02/G03 draws remain fail-closed.
