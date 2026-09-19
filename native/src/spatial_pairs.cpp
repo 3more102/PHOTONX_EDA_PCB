@@ -185,12 +185,14 @@ int compute_pairs(
                 const auto it = grid.find(Cell{x, y});
                 if (it != grid.end()) {
                     for (const uint32_t candidate : it->second) {
-                        if (candidate <= i || visited[candidate] == generation) {
+                        if (candidate == i || visited[candidate] == generation) {
                             continue;
                         }
                         visited[candidate] = generation;
                         if (intersects(boxes[candidate], query)) {
-                            pairs.push_back(photonx_pair{i, candidate});
+                            const uint32_t first = std::min(i, candidate);
+                            const uint32_t second = std::max(i, candidate);
+                            pairs.push_back(photonx_pair{first, second});
                         }
                     }
                 }
@@ -211,6 +213,16 @@ int compute_pairs(
             return a.first < b.first ||
                    (a.first == b.first && a.second < b.second);
         }
+    );
+    pairs.erase(
+        std::unique(
+            pairs.begin(),
+            pairs.end(),
+            [](const photonx_pair& a, const photonx_pair& b) {
+                return a.first == b.first && a.second == b.second;
+            }
+        ),
+        pairs.end()
     );
 
     return PHOTONX_NATIVE_OK;
