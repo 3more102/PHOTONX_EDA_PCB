@@ -378,9 +378,9 @@ class GerberRS274XParser:
                     (
                         "clear layer polarity is enabled for ordered polygon "
                         "composition of supported G36/G37 regions, solid C/R/O D03 "
-                        "flashes, and linear circular-aperture D01 tracks; curved flash "
-                        "and track-cap boundaries use bounded inscribed-chord "
-                        "polygonization while arc tracks and outlines remain fail-closed"
+                        "flashes, and circular-aperture D01 tracks including bounded "
+                        "G02/G03 tessellation; curved boundaries use evidenced chord-"
+                        "error bounds while outlines remain fail-closed"
                     ),
                     str(path),
                     line_no,
@@ -3039,15 +3039,18 @@ class GerberRS274XParser:
                 if self.layer == "Edge.Cuts":
                     out.outline.append(OutlineSegment(obj_id, start, end, prov))
                 else:
-                    out.tracks.append(
-                        Track(
-                            obj_id,
-                            start,
-                            end,
-                            width,
-                            self.layer,
-                            provenance=prov,
-                        )
+                    track = Track(
+                        obj_id,
+                        start,
+                        end,
+                        width,
+                        self.layer,
+                        provenance=prov,
+                    )
+                    out.tracks.append(track)
+                    self.material_image_operations.append(
+                        self.layer_polarity,
+                        track,
                     )
 
         self.current = nxt
@@ -3120,15 +3123,25 @@ class GerberRS274XParser:
                 max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
                 max_arc_segments=_MAX_ARC_SEGMENTS,
             )
+            arc_segment = any(
+                evidence.kind == "gerber_arc_tessellation"
+                for evidence in geometry.provenance.evidence
+            )
+            detail = (
+                "aperture_shape=C; method=capsule_inscribed_chords; "
+                f"length_mm={polygonization.length_mm:.12g}; "
+                f"width_mm={geometry.width:.12g}; "
+                f"curved_segments={polygonization.curved_segments}; "
+                f"max_chord_error_mm={polygonization.max_chord_error_mm:.12g}"
+            )
+            if arc_segment:
+                detail += (
+                    f"; centerline_chord_error_mm={_ARC_MAX_CHORD_ERROR_MM:.12g}; "
+                    f"combined_boundary_error_mm<={2 * _ARC_MAX_CHORD_ERROR_MM:.12g}"
+                )
             return Evidence(
                 "gerber_track_polygonization",
-                (
-                    "aperture_shape=C; method=capsule_inscribed_chords; "
-                    f"length_mm={polygonization.length_mm:.12g}; "
-                    f"width_mm={geometry.width:.12g}; "
-                    f"curved_segments={polygonization.curved_segments}; "
-                    f"max_chord_error_mm={polygonization.max_chord_error_mm:.12g}"
-                ),
+                detail,
                 1.0,
                 source,
             )
@@ -3183,10 +3196,12 @@ class GerberRS274XParser:
         """Materialize the bounded polygonal LPC image subset.
 
         Supported G36/G37 regions and rectangular D03 flashes are exact.
-        Circular/obround D03 flashes and linear circular-aperture D01 tracks use
-        deterministic inscribed-chord polygonization with the same 0.005 mm
-        maximum chord-error policy used for Gerber arcs. Tessellated arc tracks
-        and outline segments remain fail-closed.
+        Circular/obround D03 flashes and circular-aperture D01 tracks use
+        deterministic inscribed-chord polygonization. Linear tracks have a
+        0.005 mm cap-boundary target. Tessellated G02/G03 arc tracks combine the
+        existing 0.005 mm centerline chord target with the 0.005 mm capsule-cap
+        target for a conservative <=0.010 mm boundary-deviation budget. Outline
+        segments remain fail-closed.
         """
         if not self.clear_polarity_seen:
             return
@@ -3211,9 +3226,9 @@ class GerberRS274XParser:
                 "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY",
                 (
                     "clear Gerber layer polarity supports G36/G37 regions, solid "
-                    "C/R/O D03 flashes, and linear circular-aperture D01 tracks; "
-                    "tessellated arc tracks or outline geometry remain outside the "
-                    "bounded polygon-composition subset"
+                    "C/R/O D03 flashes, and circular-aperture D01 tracks including "
+                    "bounded G02/G03 tessellation; unsupported track forms or outline "
+                    "geometry remain outside the bounded polygon-composition subset"
                 ),
                 out,
             )
