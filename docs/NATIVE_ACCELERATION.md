@@ -17,6 +17,8 @@ The Python API keeps the existing call form and adds an optional backend selecto
 The native library is optional. A missing compiler or missing shared library must not make the normal Python package unusable.
 If no native library is discovered, `auto` falls back to Python. If a native library is discovered/configured but fails to load, exposes the wrong ABI, or is missing required symbols, that installation error is surfaced instead of being silently hidden by fallback.
 
+The Python bridge supplies a bounded initial output buffer so sparse, typical calls can complete in one native kernel invocation. If the result does not fit, the ABI reports the exact required count and the bridge performs the existing exact second pass. Native radius-match output is also checked for strict canonical ordering and duplicates before it is accepted.
+
 ## Build
 
 Linux/macOS:
