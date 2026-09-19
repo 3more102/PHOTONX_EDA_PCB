@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Added bounded simple Gerber cut-in hole reconstruction: one fully-coincident opposite horizontal/vertical linear bridge pair per contour is decomposed into an outer shell plus explicit hole geometry. Linear and G75 circular inner boundaries are supported; hole geometry propagates through image transforms, step-repeat, connectivity, DRC, validation, serialization, and roundtrip canonicalization with explicit gerber_region_cut_in provenance. Multiple cut-ins and disjoint fully-coincident cut-in topology remain fail-closed.
+- Extended Gerber cut-in reconstruction from one hole to multiple holes per contour. Every fully-coincident opposite linear bridge pair is removed to recover closed boundary cycles; all cut-ins must share one axis direction, hole rings must be strictly contained, non-touching, non-nested, and opposite-wound relative to the shell, and each bridge may contact contour boundaries only at its endpoints. Disjoint top-level cut-in topology remains fail-closed.
+
+- Added bounded Gerber cut-in hole reconstruction: fully-coincident opposite horizontal/vertical linear bridge pairs are decomposed into an outer shell plus explicit hole geometry. Linear and G75 circular inner boundaries are supported; hole geometry propagates through image transforms, step-repeat, connectivity, DRC, validation, serialization, and roundtrip canonicalization with explicit gerber_region_cut_in provenance.
 
 - Added dark G36/G37 multi-contour region support: each D02 starts a contour, a new D02 finalizes the previous contour only when explicitly closed, coordinate-free D02 starts at the current point, and each valid contour is emitted as deterministic copper geometry with statement-level union semantics. Overlapping and touching contours remain valid.
 
