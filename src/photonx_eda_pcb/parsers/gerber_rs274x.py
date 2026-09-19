@@ -133,7 +133,8 @@ class GerberRS274XParser:
     Supported: FS, MO, ADD(C/R/O), Dnn selection, G01/D01/D02/D03,
     bounded G74 single-quadrant and G75 multi-quadrant G02/G03 circular
     interpolation with circular apertures, dark multi-contour linear/G75
-    G36/G37 regions, G04, M02, and standard linear step-and-repeat
+    G36/G37 regions with bounded simple cut-in holes, G04, M02, and standard
+    linear step-and-repeat
     (%SR...*% / %SR*%).
 
     Unsupported constructs are never silently discarded in strict mode.
@@ -159,10 +160,13 @@ class GerberRS274XParser:
         self.region_sources: list[SourceRef] = []
         self.region_arc_evidence: list[Evidence] = []
         self.region_contours: list[tuple[Point, ...]] = []
+        self.region_contour_holes: list[tuple[tuple[Point, ...], ...]] = []
         self.region_contour_sources: list[list[SourceRef]] = []
         self.region_contour_arc_evidence: list[list[Evidence]] = []
+        self.region_contour_cutin_evidence: list[list[Evidence]] = []
         self.region_current_sources: list[SourceRef] = []
         self.region_current_arc_evidence: list[Evidence] = []
+        self.region_current_edge_kinds: list[str] = []
         self.region_start_line: int | None = None
         self.file_polarity: str | None = None
         self.layer_polarity = "dark"
@@ -1569,10 +1573,13 @@ class GerberRS274XParser:
         self.region_sources.clear()
         self.region_arc_evidence.clear()
         self.region_contours.clear()
+        self.region_contour_holes.clear()
         self.region_contour_sources.clear()
         self.region_contour_arc_evidence.clear()
+        self.region_contour_cutin_evidence.clear()
         self.region_current_sources.clear()
         self.region_current_arc_evidence.clear()
+        self.region_current_edge_kinds.clear()
         self.region_start_line = None
 
     def _region_fail(
@@ -1640,10 +1647,13 @@ class GerberRS274XParser:
         self.region_sources = [SourceRef(str(path), line_no, line)]
         self.region_arc_evidence = []
         self.region_contours = []
+        self.region_contour_holes = []
         self.region_contour_sources = []
         self.region_contour_arc_evidence = []
+        self.region_contour_cutin_evidence = []
         self.region_current_sources = []
         self.region_current_arc_evidence = []
+        self.region_current_edge_kinds = []
         self.region_start_line = line_no
 
     def _finish_current_region_contour(
@@ -1707,6 +1717,17 @@ class GerberRS274XParser:
             )
             return False
 
+        if len(self.region_current_edge_kinds) != len(points) - 1:
+            self._region_parse_fail(
+                path,
+                line_no,
+                raw,
+                "GERBER_REGION_EDGE_STATE_INVALID",
+                "internal region edge classification does not match contour segments",
+                out,
+            )
+            return False
+
         unique = {(point.x, point.y) for point in points[:-1]}
         if len(unique) < 3:
             self._region_parse_fail(
@@ -1721,81 +1742,230 @@ class GerberRS274XParser:
 
         undirected_edges: dict[
             tuple[tuple[float, float], tuple[float, float]],
-            list[tuple[Point, Point]],
+            list[tuple[int, Point, Point]],
         ] = {}
-        for start, end in zip(points, points[1:]):
-            a = (start.x, start.y)
-            b = (end.x, end.y)
+        for edge_index, (edge_start, edge_end) in enumerate(
+            zip(points, points[1:])
+        ):
+            a = (edge_start.x, edge_start.y)
+            b = (edge_end.x, edge_end.y)
             key = (a, b) if a <= b else (b, a)
-            undirected_edges.setdefault(key, []).append((start, end))
+            undirected_edges.setdefault(key, []).append(
+                (edge_index, edge_start, edge_end)
+            )
         coincident_edges = [
             uses for uses in undirected_edges.values() if len(uses) > 1
         ]
+
+        shell = tuple(points)
+        holes: tuple[tuple[Point, ...], ...] = ()
+        cutin_evidence: list[Evidence] = []
+
         if coincident_edges:
-            looks_like_cut_in = all(
-                len(uses) == 2
-                and uses[0][0] == uses[1][1]
-                and uses[0][1] == uses[1][0]
-                and (
-                    isclose(
-                        uses[0][0].x,
-                        uses[0][1].x,
-                        rel_tol=0.0,
-                        abs_tol=1e-12,
-                    )
-                    or isclose(
-                        uses[0][0].y,
-                        uses[0][1].y,
-                        rel_tol=0.0,
-                        abs_tol=1e-12,
-                    )
-                )
-                for uses in coincident_edges
-            )
-            if looks_like_cut_in:
+            if len(coincident_edges) != 1:
                 self._region_fail(
                     path,
                     line_no,
                     raw,
-                    "GERBER_REGION_CUTIN_UNSUPPORTED",
+                    "GERBER_REGION_CUTIN_COMPLEX_UNSUPPORTED",
                     (
-                        "Gerber cut-in hole topology was detected from fully "
-                        "coincident opposite horizontal/vertical segments; "
-                        "cut-in holes are not modeled yet"
+                        "only one fully-coincident cut-in bridge pair per "
+                        "contour is currently supported"
                     ),
                     out,
                 )
                 return False
 
-        candidate = CopperRegion(
-            "validation",
-            tuple(points),
-            self.layer,
-            provenance=Provenance(),
-        )
-        shape = region_shape(candidate)
-        if shape.is_empty or float(shape.area) <= 0 or not shape.is_valid:
-            self._region_parse_fail(
-                path,
-                line_no,
-                raw,
-                "GERBER_REGION_CONTOUR_INVALID",
-                (
-                    "region contour is empty, zero-area, self-touching, "
-                    "self-intersecting, or uses unsupported cut-in topology"
-                ),
-                out,
-            )
-            return False
+            uses = coincident_edges[0]
+            if len(uses) != 2:
+                self._region_parse_fail(
+                    path,
+                    line_no,
+                    raw,
+                    "GERBER_REGION_CUTIN_INVALID",
+                    "cut-in bridge must occur exactly twice",
+                    out,
+                )
+                return False
 
-        self.region_contours.append(tuple(points))
+            first_use, second_use = sorted(uses, key=lambda item: item[0])
+            i, a0, a1 = first_use
+            j, b0, b1 = second_use
+            reversed_pair = a0 == b1 and a1 == b0
+            axis_aligned = (
+                isclose(a0.x, a1.x, rel_tol=0.0, abs_tol=1e-12)
+                or isclose(a0.y, a1.y, rel_tol=0.0, abs_tol=1e-12)
+            )
+            bridge_is_linear = (
+                self.region_current_edge_kinds[i] == "linear"
+                and self.region_current_edge_kinds[j] == "linear"
+            )
+            if not reversed_pair or not axis_aligned or not bridge_is_linear:
+                self._region_parse_fail(
+                    path,
+                    line_no,
+                    raw,
+                    "GERBER_REGION_CUTIN_INVALID",
+                    (
+                        "cut-in requires two opposite fully-coincident linear "
+                        "segments that are horizontal or vertical"
+                    ),
+                    out,
+                )
+                return False
+
+            loop_a = tuple(points[i + 1 : j + 1])
+            loop_b = tuple(points[j + 1 :] + points[1 : i + 1])
+            loops = (loop_a, loop_b)
+            loop_shapes = []
+            for loop_index, ring in enumerate(loops):
+                if len(ring) < 4 or ring[0] != ring[-1]:
+                    self._region_parse_fail(
+                        path,
+                        line_no,
+                        raw,
+                        "GERBER_REGION_CUTIN_INVALID",
+                        (
+                            "removing the cut-in bridge did not produce two "
+                            "closed boundary loops"
+                        ),
+                        out,
+                    )
+                    return False
+                ring_unique = {(p.x, p.y) for p in ring[:-1]}
+                if len(ring_unique) < 3:
+                    self._region_parse_fail(
+                        path,
+                        line_no,
+                        raw,
+                        "GERBER_REGION_CUTIN_INVALID",
+                        f"cut-in boundary loop {loop_index + 1} is degenerate",
+                        out,
+                    )
+                    return False
+                ring_region = CopperRegion(
+                    "validation",
+                    ring,
+                    self.layer,
+                )
+                ring_shape = region_shape(ring_region)
+                if (
+                    ring_shape.is_empty
+                    or float(ring_shape.area) <= 0
+                    or not ring_shape.is_valid
+                ):
+                    self._region_parse_fail(
+                        path,
+                        line_no,
+                        raw,
+                        "GERBER_REGION_CUTIN_INVALID",
+                        (
+                            f"cut-in boundary loop {loop_index + 1} is "
+                            "self-intersecting or otherwise invalid"
+                        ),
+                        out,
+                    )
+                    return False
+                loop_shapes.append(ring_shape)
+
+            if loop_shapes[0].contains(loop_shapes[1]):
+                shell, hole = loop_a, loop_b
+                hole_area = float(loop_shapes[1].area)
+            elif loop_shapes[1].contains(loop_shapes[0]):
+                shell, hole = loop_b, loop_a
+                hole_area = float(loop_shapes[0].area)
+            else:
+                self._region_fail(
+                    path,
+                    line_no,
+                    raw,
+                    "GERBER_REGION_CUTIN_DISJOINT_UNSUPPORTED",
+                    (
+                        "fully-coincident bridge produces disjoint filled "
+                        "areas rather than one bounded hole; this valid Gerber "
+                        "case is not modeled yet"
+                    ),
+                    out,
+                )
+                return False
+
+            holes = (hole,)
+            candidate = CopperRegion(
+                "validation",
+                shell,
+                self.layer,
+                holes=holes,
+            )
+            shape = region_shape(candidate)
+            if shape.is_empty or float(shape.area) <= 0 or not shape.is_valid:
+                self._region_parse_fail(
+                    path,
+                    line_no,
+                    raw,
+                    "GERBER_REGION_CUTIN_INVALID",
+                    "cut-in shell/hole reconstruction produced invalid geometry",
+                    out,
+                )
+                return False
+
+            bridge_orientation = (
+                "vertical"
+                if isclose(a0.x, a1.x, rel_tol=0.0, abs_tol=1e-12)
+                else "horizontal"
+            )
+            evidence_source = (
+                self.region_current_sources[-1]
+                if self.region_current_sources
+                else SourceRef(str(path), line_no, raw)
+            )
+            cutin_evidence.append(
+                Evidence(
+                    "gerber_region_cut_in",
+                    (
+                        "simple_single_hole; "
+                        f"bridge_orientation={bridge_orientation}; "
+                        f"bridge_start_mm=({a0.x:.12g},{a0.y:.12g}); "
+                        f"bridge_end_mm=({a1.x:.12g},{a1.y:.12g}); "
+                        f"hole_area_mm2={hole_area:.12g}; "
+                        f"filled_area_mm2={float(shape.area):.12g}"
+                    ),
+                    1.0,
+                    evidence_source,
+                )
+            )
+        else:
+            candidate = CopperRegion(
+                "validation",
+                shell,
+                self.layer,
+                provenance=Provenance(),
+            )
+            shape = region_shape(candidate)
+            if shape.is_empty or float(shape.area) <= 0 or not shape.is_valid:
+                self._region_parse_fail(
+                    path,
+                    line_no,
+                    raw,
+                    "GERBER_REGION_CONTOUR_INVALID",
+                    (
+                        "region contour is empty, zero-area, self-touching, "
+                        "or self-intersecting"
+                    ),
+                    out,
+                )
+                return False
+
+        self.region_contours.append(shell)
+        self.region_contour_holes.append(holes)
         self.region_contour_sources.append(list(self.region_current_sources))
         self.region_contour_arc_evidence.append(
             list(self.region_current_arc_evidence)
         )
+        self.region_contour_cutin_evidence.append(cutin_evidence)
         self.region_state.vertices.clear()
         self.region_current_sources.clear()
         self.region_current_arc_evidence.clear()
+        self.region_current_edge_kinds.clear()
         return True
 
     def _region_coordinate(
@@ -1856,6 +2026,7 @@ class GerberRS274XParser:
                 self.current = nxt
                 return
             self.region_state.add(nxt.x, nxt.y)
+            self.region_current_edge_kinds.append("linear")
             self.region_current_sources.append(src)
             self.region_sources.append(src)
             self.current = nxt
@@ -2019,6 +2190,7 @@ class GerberRS274XParser:
             return
         for vertex in arc_vertices[1:]:
             self.region_state.add(vertex.x, vertex.y)
+            self.region_current_edge_kinds.append("arc")
 
         src = SourceRef(str(path), line_no, line)
         self.region_current_sources.append(src)
@@ -2073,9 +2245,13 @@ class GerberRS274XParser:
 
         self.region_state.end()
         contours = list(self.region_contours)
+        contour_holes = list(self.region_contour_holes)
         contour_sources = [list(items) for items in self.region_contour_sources]
         contour_arc_evidence = [
             list(items) for items in self.region_contour_arc_evidence
+        ]
+        contour_cutin_evidence = [
+            list(items) for items in self.region_contour_cutin_evidence
         ]
         statement_start_sources = self.region_sources[:1]
         start_line = self.region_start_line
@@ -2084,18 +2260,23 @@ class GerberRS274XParser:
         self.region_sources = []
         self.region_arc_evidence = []
         self.region_contours = []
+        self.region_contour_holes = []
         self.region_contour_sources = []
         self.region_contour_arc_evidence = []
+        self.region_contour_cutin_evidence = []
         self.region_current_sources = []
         self.region_current_arc_evidence = []
+        self.region_current_edge_kinds = []
         self.region_start_line = None
 
         contour_count = len(contours)
         for contour_index, points in enumerate(contours):
+            holes = contour_holes[contour_index]
             source_region = CopperRegion(
                 "validation",
                 points,
                 self.layer,
+                holes=holes,
             )
             source_shape = region_shape(source_region)
             if (
@@ -2117,6 +2298,10 @@ class GerberRS274XParser:
                 return
 
             coords = tuple((point.x, point.y) for point in points)
+            hole_coords = tuple(
+                tuple((point.x, point.y) for point in ring)
+                for ring in holes
+            )
             unique = {(point.x, point.y) for point in points[:-1]}
             sources = [
                 *statement_start_sources,
@@ -2124,21 +2309,37 @@ class GerberRS274XParser:
                 end_src,
             ]
             arc_evidence = contour_arc_evidence[contour_index]
-            region_kind = (
-                "linear_g75_multi_contour_dark"
-                if arc_evidence
-                else "linear_multi_contour_dark"
-            )
+            cutin_evidence = contour_cutin_evidence[contour_index]
+            if cutin_evidence:
+                region_kind = (
+                    "linear_g75_simple_cutin_dark"
+                    if arc_evidence
+                    else "linear_simple_cutin_dark"
+                )
+            else:
+                region_kind = (
+                    "linear_g75_multi_contour_dark"
+                    if arc_evidence
+                    else "linear_multi_contour_dark"
+                )
 
             for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
                 transformed = tuple(
                     self._transform_output_point(point, dx_mm, dy_mm)
                     for point in points
                 )
+                transformed_holes = tuple(
+                    tuple(
+                        self._transform_output_point(point, dx_mm, dy_mm)
+                        for point in ring
+                    )
+                    for ring in holes
+                )
                 transformed_region = CopperRegion(
                     "validation",
                     transformed,
                     self.layer,
+                    holes=transformed_holes,
                 )
                 transformed_shape = region_shape(transformed_region)
                 if (
@@ -2168,6 +2369,7 @@ class GerberRS274XParser:
                     contour_index,
                     contour_count,
                     coords,
+                    hole_coords,
                 ]
                 id_parts.extend(self._image_transform_id_parts())
                 if self.step_repeat is not None:
@@ -2184,6 +2386,8 @@ class GerberRS274XParser:
                     prov.add_source(source)
                 for evidence in arc_evidence:
                     prov.add_evidence(evidence)
+                for evidence in cutin_evidence:
+                    prov.add_evidence(evidence)
                 prov.add_evidence(
                     Evidence(
                         "gerber_region",
@@ -2192,6 +2396,8 @@ class GerberRS274XParser:
                             f"contour={contour_index + 1}/{contour_count}; "
                             f"statement_fill=union; "
                             f"vertices={len(unique)}; "
+                            f"holes={len(holes)}; "
+                            f"cut_ins={len(cutin_evidence)}; "
                             f"arc_commands={len(arc_evidence)}; "
                             f"source_area_mm2={float(source_shape.area):.12g}; "
                             f"output_area_mm2={float(transformed_shape.area):.12g}"
@@ -2206,6 +2412,7 @@ class GerberRS274XParser:
                         transformed,
                         self.layer,
                         provenance=prov,
+                        holes=transformed_holes,
                     )
                 )
 
