@@ -209,3 +209,51 @@ def test_cpp_radius_batch_matches_python_center_rounding_at_cell_boundary():
     assert expected == [[(0.0, "edge")]]
     assert radius_queries(index, ((center, 0.0, 0.0),), backend="native") == expected
 
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_persistent_native_index_is_reused_and_invalidated(monkeypatch):
+    native_backend._clear_native_index_cache()
+    index = SpatialHashIndex(0.5)
+    index.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+    index.insert("b", AABB(0.4, 0.0, 0.4, 0.0))
+
+    original = native_backend._create_native_index
+    calls = 0
+
+    def counted_create(current_index, library):
+        nonlocal calls
+        calls += 1
+        return original(current_index, library)
+
+    monkeypatch.setattr(native_backend, "_create_native_index", counted_create)
+    try:
+        assert candidate_pairs(index, 0.0, backend="native") == candidate_pairs(
+            index, 0.0, backend="python"
+        )
+        assert radius_query(index, 0.0, 0.0, 0.5, backend="native") == radius_query(
+            index, 0.0, 0.0, 0.5, backend="python"
+        )
+        assert candidate_pairs(index, 0.1, backend="native") == candidate_pairs(
+            index, 0.1, backend="python"
+        )
+        assert calls == 1
+
+        index.insert("c", AABB(0.8, 0.0, 0.8, 0.0))
+
+        assert radius_query(index, 0.4, 0.0, 0.5, backend="native") == radius_query(
+            index, 0.4, 0.0, 0.5, backend="python"
+        )
+        assert candidate_pairs(index, 0.4, backend="native") == candidate_pairs(
+            index, 0.4, backend="python"
+        )
+        assert calls == 2
+    finally:
+        native_backend._clear_native_index_cache()
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_persistent_native_index_handles_empty_index():
+    index = SpatialHashIndex(1.0)
+    assert candidate_pairs(index, backend="native") == []
+    assert radius_queries(index, ((0.0, 0.0, 1.0),), backend="native") == [[]]
