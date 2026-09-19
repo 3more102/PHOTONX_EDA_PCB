@@ -71,7 +71,6 @@ def _is_strict_blocker(code: str) -> bool:
         or code in {
             "NON_CIRCULAR_DRAW",
             "GERBER_STEP_REPEAT_LIMIT",
-            "GERBER_INCREMENTAL_COORDINATES_UNSUPPORTED",
             "GERBER_UNITS_UNDECLARED",
             "CONFLICTING_GERBER_UNITS",
             "MALFORMED_EXCELLON_ROUTE",
