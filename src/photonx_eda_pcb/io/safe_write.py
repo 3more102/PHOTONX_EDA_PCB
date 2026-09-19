@@ -24,7 +24,10 @@ def _best_effort_fsync_parent_directory(path: Path) -> None:
         except OSError:
             pass
     finally:
-        os.close(directory_fd)
+        try:
+            os.close(directory_fd)
+        except OSError:
+            pass
 
 
 def atomic_write_text(path: str | Path, text: str) -> Path:
