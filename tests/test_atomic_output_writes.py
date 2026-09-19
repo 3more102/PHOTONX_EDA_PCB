@@ -72,6 +72,19 @@ def test_parent_directory_sync_is_best_effort(tmp_path, monkeypatch):
     safe_write._best_effort_fsync_parent_directory(target)
 
 
+
+def test_parent_directory_close_failure_is_best_effort(tmp_path, monkeypatch):
+    target = tmp_path / "artifact.txt"
+
+    monkeypatch.setattr(safe_write.os, "open", lambda path, flags: 321)
+    monkeypatch.setattr(safe_write.os, "fsync", lambda fd: None)
+
+    def fail_close(fd):
+        raise OSError("close failed")
+
+    monkeypatch.setattr(safe_write.os, "close", fail_close)
+    safe_write._best_effort_fsync_parent_directory(target)
+
 def test_json_export_uses_atomic_replace(tmp_path, monkeypatch):
     target = tmp_path / "board.json"
     target.write_text('{"stale": true}', encoding="utf-8")
