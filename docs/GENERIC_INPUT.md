@@ -97,14 +97,16 @@ The generic input path also handles several common real-world variations:
   origin-centered circle are accepted as exact circular apertures; circle rotation
   is geometry-invariant when its center is the macro origin;
 - single positive Gerber Code-20 vector-line macros (plus deprecated Code-2)
-  are accepted when the segment is non-zero, axis-aligned, midpoint-centered on
-  the macro origin, and rotated only in 90-degree steps;
+  are accepted when the segment is non-zero and midpoint-centered on the macro origin;
+  arbitrary segment orientation and finite primitive rotation are preserved exactly;
 - single positive Gerber Code-21 center-line macros are accepted as exact
-  rectangular apertures when centered at the macro origin with 90-degree-step rotation;
-- deprecated Gerber Code-22 lower-left rectangles are accepted only when positive-size,
-  centered on the macro origin by their lower-left coordinates, and rotated in
-  90-degree steps;
-- single positive Gerber Code-5 polygon macros are accepted when they have an integer 3–12 vertex count, are centered at the macro origin, have a positive circumscribed-circle diameter, and use a finite rotation; they reduce exactly to the equivalent standard P aperture and inherit its flash/draw/transform semantics;
+  rectangular apertures when centered at the macro origin, with arbitrary finite rotation;
+- deprecated Gerber Code-22 lower-left rectangles are accepted when positive-size and
+  centered on the macro origin by their lower-left coordinates, with arbitrary finite
+  primitive rotation;
+- single positive Gerber Code-5 polygon macros are accepted when they have an integer
+  3–12 vertex count, are centered at the macro origin, have a positive circumscribed-circle
+  diameter, and use a finite rotation; they reduce exactly to the equivalent standard P aperture;
 - legacy Gerber G74 single-quadrant arcs are accepted only when unsigned I/J
   distances resolve to one unambiguous center with a sweep of at most 90 degrees.
 
