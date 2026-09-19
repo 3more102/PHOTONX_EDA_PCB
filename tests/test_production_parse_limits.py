@@ -157,3 +157,42 @@ def test_excellon_object_budget_bounds_drill_slot_route_outputs(tmp_path: Path):
     parser = ExcellonParser(limits=ParseLimits(max_objects=1))
     with pytest.raises(ParseError, match="maximum object count"):
         parser.parse(path)
+
+
+def test_excellon_limit_path_streams_without_path_read_text(tmp_path: Path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "streamed.drl",
+        "M48\nMETRIC\nT01C0.800\n%\nT01\nX1.000Y2.000\nM30\n",
+    )
+
+    def forbid_read_text(*_args, **_kwargs):
+        raise AssertionError("production Excellon parser must stream input")
+
+    monkeypatch.setattr(Path, "read_text", forbid_read_text)
+    result = ExcellonParser(
+        limits=ParseLimits(max_lines=20, max_line_length=40)
+    ).parse(path)
+
+    assert len(result.drills) == 1
+    assert result.drills[0].center.x == pytest.approx(1.0)
+    assert result.drills[0].center.y == pytest.approx(2.0)
+
+
+def test_gerber_limit_path_reads_through_physical_line_guard(tmp_path: Path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "streamed.gbr",
+        "%FSLAX24Y24*%\n%MOMM*%\n%ADD10C,1.0*%\nD10*\nX000000Y000000D03*\nM02*\n",
+    )
+
+    def forbid_read_text(*_args, **_kwargs):
+        raise AssertionError("production Gerber parser must use the guarded reader")
+
+    monkeypatch.setattr(Path, "read_text", forbid_read_text)
+    result = GerberRS274XParser(
+        "F.Cu",
+        limits=ParseLimits(max_lines=20, max_line_length=40),
+    ).parse(path)
+
+    assert len(result.pads) == 1
