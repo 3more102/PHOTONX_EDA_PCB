@@ -8,6 +8,7 @@ from .capabilities import CAPABILITIES
 from .config import ReconstructionConfig
 from .exporters import export_json, export_kicad, validate_with_kicad_cli
 from .io import write_reconstruction_bundle
+from .io.safe_write import atomic_write_text
 from .pipeline import reconstruct
 from .preflight import preflight as inspect_input
 from .reporting import summary
@@ -52,10 +53,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _write_json(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    atomic_write_text(
+        path,
         json.dumps(payload, indent=2, sort_keys=True),
-        encoding="utf-8",
     )
 
 
@@ -98,9 +98,9 @@ def main(argv=None) -> int:
     if args.kicad:
         kpath = export_kicad(result.board, args.output / "reconstructed.kicad_pcb")
         ok, detail = validate_with_kicad_cli(kpath)
-        (args.output / "kicad_validation.txt").write_text(
+        atomic_write_text(
+            args.output / "kicad_validation.txt",
             f"status={ok}\n{detail}\n",
-            encoding="utf-8",
         )
 
     print(json.dumps(summary(result.board, result.validation), indent=2))

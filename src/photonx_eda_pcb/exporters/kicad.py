@@ -3,6 +3,7 @@ import shutil,subprocess,uuid
 from pathlib import Path
 from math import isfinite
 from ..models import BoardModel
+from ..io.safe_write import atomic_write_text
 from .kicad_report import KicadExportReport,KicadExportIssue
 from .kicad_policy import pad_shape_name,slot_geometry,slot_export_status
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
@@ -85,7 +86,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
     for trk in board.tracks:
         n=net_num.get(trk.net_id,0);lines.append(f'  (segment (start {trk.start.x:.6f} {trk.start.y:.6f}) (end {trk.end.x:.6f} {trk.end.y:.6f}) (width {trk.width:.6f}) (layer {_q(trk.layer)}) (net {n}) (uuid {_u("track:"+trk.id)}))')
     for seg in board.outline:lines.append(f'  (gr_line (start {seg.start.x:.6f} {seg.start.y:.6f}) (end {seg.end.x:.6f} {seg.end.y:.6f}) (stroke (width 0.1) (type default)) (layer "Edge.Cuts") (uuid {_u("edge:"+seg.id)}))')
-    lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
+    lines.append(')');atomic_write_text(p,"\n".join(lines)+"\n");return p,report
 def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]
 def validate_with_kicad_cli(path:str|Path,*,timeout_s:float=30.0)->tuple[bool|None,str]:
     try:timeout=float(timeout_s)
