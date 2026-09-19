@@ -10,7 +10,7 @@
 
 namespace {
 
-constexpr uint32_t kAbiVersion = 2;
+constexpr uint32_t kAbiVersion = 3;
 constexpr long double kMaxCellsPerBox = 1000000.0L;
 constexpr long double kMaxTotalInsertedCells = 20000000.0L;
 
