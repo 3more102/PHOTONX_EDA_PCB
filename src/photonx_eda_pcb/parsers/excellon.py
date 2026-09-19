@@ -25,6 +25,7 @@ from ..excellon_routing.arc_commands import (
 )
 from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
+from .common.limits import ParseLimits
 from .excellon_parts.slots import parse_slot_command
 
 _TOOL_DEF = re.compile(
@@ -54,11 +55,39 @@ class ExcellonParser:
     existing I/J center-offset subset plus standard XNC X/Y/A radius form,
     and are converted to deterministic polyline points with explicit evidence.
     """
-    def __init__(self, strict: bool = True):
+    def __init__(
+        self,
+        strict: bool = True,
+        limits: ParseLimits | None = None,
+    ):
         self.strict = strict; self.units = "mm"; self.zero = "L"; self.units_declared = False; self.incremental = False
+        self.limits = limits or ParseLimits()
         self.fmt = CoordinateFormat(2, 4, "L"); self.tools = {}; self.tool = None; self.current = Point(0.0, 0.0)
         self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
         self.geometry_enabled=True
+
+    def _reserve_output_object(self, out: ExcellonResult) -> None:
+        try:
+            self.limits.check_objects(
+                len(out.drills) + len(out.slots) + len(out.routes) + 1
+            )
+        except ValueError as exc:
+            raise ParseError(f"Excellon {exc}") from exc
+
+    def _iter_limited_lines(self, path: Path):
+        read_size = max(1, self.limits.max_line_length + 2)
+        with path.open(encoding="utf-8-sig", errors="strict") as stream:
+            line_no = 0
+            while True:
+                raw = stream.readline(read_size)
+                if raw == "":
+                    break
+                line_no += 1
+                try:
+                    self.limits.check_line(raw.rstrip("\r\n"), line_no)
+                except ValueError as exc:
+                    raise ParseError(f"{path}:{line_no}: {exc}") from exc
+                yield line_no, raw
 
     def _disable_geometry(self,out:ExcellonResult):
         self.geometry_enabled=False
@@ -281,12 +310,13 @@ class ExcellonParser:
         if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: route before valid tool selection")
         rid=stable_id("route",p.name,pts,self.tool,self.tools[self.tool])
         prov=Provenance(list(self._route_sources),list(self._route_evidence))
+        self._reserve_output_object(out)
         out.routes.append(RoutedPath(rid,pts,self.tools[self.tool],"unknown",f"T{self.tool}",prov))
         self._route_sources=[];self._route_evidence=[]
 
     def parse(self,path:str|Path)->ExcellonResult:
         p=Path(path);out=ExcellonResult()
-        for line_no,raw in enumerate(p.read_text(encoding="utf-8-sig",errors="strict").splitlines(),1):
+        for line_no,raw in self._iter_limited_lines(p):
             line=raw.strip().upper()
             if not line or line in {"M48","%","M30","M95"} or line.startswith(";"):continue
             if line.startswith("METRIC") or line == "M71":
@@ -354,6 +384,7 @@ class ExcellonParser:
                     x1,y1,x2,y2=x1v,y1v,x2v,y2v
                     src=SourceRef(str(p),line_no,line)
                 slot_id=stable_id("slot",p.name,line_no,x1,y1,x2,y2,self.tool)
+                self._reserve_output_object(out)
                 out.slots.append(SlotFeature(slot_id,(x1,y1),(x2,y2),self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],evidence)))
                 self.current=Point(x2,y2);continue
             if line.startswith(("G02","G03")):
@@ -449,6 +480,11 @@ class ExcellonParser:
                     )
                     self._disable_geometry(out)
                     continue
+                if tool not in self.tools:
+                    try:
+                        self.limits.check_tools(len(self.tools) + 1)
+                    except ValueError as exc:
+                        raise ParseError(f"{p}:{line_no}: {exc}") from exc
                 self.tools[tool]=to_mm(diameter_value,self.units);continue
             if line.startswith("T") and "C" in line:
                 message = f"malformed Excellon tool definition: {line}"
@@ -491,6 +527,7 @@ class ExcellonParser:
                     continue
                 pt=Point(x,y)
                 src=SourceRef(str(p),line_no,line);obj_id=stable_id("drill",p.name,line_no,pt.x,pt.y,self.tool)
+                self._reserve_output_object(out)
                 out.drills.append(DrillHit(obj_id,pt,self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],[])));self.current=pt;continue
             if line.startswith(("X", "Y")):
                 message = f"malformed Excellon coordinate statement: {line}"
