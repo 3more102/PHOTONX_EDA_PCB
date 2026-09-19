@@ -196,3 +196,16 @@ def test_cpp_radius_batch_matches_python_when_center_arithmetic_overflows():
     assert expected == []
     assert radius_query(index, 1e308, 0.0, 0.0, backend="native") == expected
 
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_radius_batch_matches_python_center_rounding_at_cell_boundary():
+    left = 5.355248460778839e-14
+    right = 3.7354625578691625e-13
+    center = (left + right) / 2.0
+
+    index = SpatialHashIndex(center)
+    index.insert("edge", AABB(left, 0.0, right, 0.0))
+
+    expected = radius_queries(index, ((center, 0.0, 0.0),), backend="python")
+    assert expected == [[(0.0, "edge")]]
+    assert radius_queries(index, ((center, 0.0, 0.0),), backend="native") == expected
+
