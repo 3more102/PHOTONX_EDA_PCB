@@ -133,7 +133,7 @@ def test_rectangular_linear_draw_respects_orthogonal_lr_rotation(tmp_path: Path)
     )
 
 
-def test_nonorthogonal_rectangular_draw_rotation_remains_fail_closed(
+def test_nonorthogonal_rectangular_draw_rotation_is_supported(
     tmp_path: Path,
 ):
     path = _write(
@@ -144,11 +144,104 @@ def test_nonorthogonal_rectangular_draw_rotation_remains_fail_closed(
         "X010000Y000000D01*\n",
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="non-axis-aligned"):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_aperture_track(
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.6,
+        0.3,
+        "R",
+        rotation_deg=45.0,
+    )
+
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    actual = region_shape(result.regions[0])
+    assert actual.area == pytest.approx(expected.geometry.area)
+    assert actual.symmetric_difference(expected.geometry).area == pytest.approx(
+        0.0,
+        abs=1e-12,
+    )
+    assert any(
+        evidence.kind == "gerber_track_polygonization"
+        and "rotation_deg_ccw=45" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
 
     report = preflight(path)
-    assert not report.ready_for_strict_reconstruction
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_obround_draw_arbitrary_lr_is_supported(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "D12*\n"
+        "%LR30*%\n"
+        "X000000Y000000D02*\n"
+        "X010000Y000000D01*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_aperture_track(
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.6,
+        0.3,
+        "O",
+        rotation_deg=30.0,
+    )
+
+    assert len(result.regions) == 1
+    actual = region_shape(result.regions[0])
+    assert actual.symmetric_difference(expected.geometry).area == pytest.approx(
+        0.0,
+        abs=1e-12,
+    )
+    assert any(
+        evidence.kind == "gerber_track_polygonization"
+        and "aperture_shape=O" in evidence.detail
+        and "rotation_deg_ccw=30" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+
+def test_arbitrary_lr_composes_with_whole_image_rotation(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%IR90*%\n"
+        "D10*\n"
+        "%LR45*%\n"
+        "X000000Y000000D02*\n"
+        "X010000Y000000D01*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_aperture_track(
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.6,
+        0.3,
+        "R",
+        rotation_deg=135.0,
+    )
+
+    actual = region_shape(result.regions[0])
+    assert actual.symmetric_difference(expected.geometry).area == pytest.approx(
+        0.0,
+        abs=1e-12,
+    )
+    assert any(
+        evidence.kind == "gerber_track_polygonization"
+        and "rotation_deg_ccw=135" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
 
 
 def test_lpc_rectangular_draw_subtracts_exact_swept_material(tmp_path: Path):

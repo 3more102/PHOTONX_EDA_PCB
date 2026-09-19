@@ -15,7 +15,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - deprecated Code-22 lower-left rectangle macros reduced exactly when their lower-left coordinates place the rectangle center at the macro origin and rotation is in 90-degree steps;
 - explicit X2 `.FilePolarity,Positive` metadata is recognized without changing positive-image geometry;
 - Gerber `%LPD*%` dark layer polarity is accepted as the supported positive-object state;
-- modal Gerber aperture transforms are supported for the exactly representable subset: LM on centered symmetric C/R/O apertures, arbitrary LR on circles, 90-degree-step LR on R/O flashes, and positive LS scaling on flashes and circular draw/arc widths;
+- modal Gerber aperture transforms are supported for the representable subset: LM on centered symmetric C/R/O apertures, arbitrary LR on circles and R/O linear D01 sweeps, 90-degree-step LR on R/O flashes, and positive LS scaling on supported object geometry;
 - deprecated `MI` mirroring is supported exactly for A/B coordinate data, including flashes, linear draws, tessellated arcs, outlines, and incremental coordinates; apertures and step-repeat distances are intentionally not mirrored;
 - deprecated `SF` coordinate scaling is supported for flashes and linear geometry with independent A/B factors in the specification range; apertures and step-repeat distances remain unscaled, uniform SF supports circular arcs, and anisotropic SF arcs fail closed because they become non-circular;
 - deprecated `OF` translation is supported exactly in the active MO units, including flashes, linear draws, arcs, outlines, and step-repeat instances, and composes after MI/SF and before IR;

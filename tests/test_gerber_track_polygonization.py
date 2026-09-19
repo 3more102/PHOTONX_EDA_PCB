@@ -93,3 +93,80 @@ def test_circular_aperture_track_wrapper_matches_capsule_polygonizer():
     assert generic.length_mm == circular.length_mm
     assert generic.curved_segments == circular.curved_segments
     assert generic.geometry.equals_exact(circular.geometry, tolerance=0.0)
+
+
+def test_rectangular_aperture_track_supports_arbitrary_rotation_exactly():
+    result = polygonize_aperture_track(
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.6,
+        0.3,
+        "R",
+        rotation_deg=45.0,
+    )
+
+    expected_vertical_extent = (0.6 + 0.3) / math.sqrt(2.0)
+    expected_area = 0.6 * 0.3 + expected_vertical_extent
+    assert result.rotation_deg == pytest.approx(45.0)
+    assert not result.approximated
+    assert result.curved_segments == 0
+    assert result.geometry.is_valid
+    assert result.geometry.area == pytest.approx(expected_area)
+
+
+def test_obround_aperture_track_rotation_is_deterministic():
+    first = polygonize_aperture_track(
+        -0.5,
+        1.0,
+        2.5,
+        1.0,
+        0.6,
+        0.3,
+        "O",
+        rotation_deg=33.25,
+    )
+    second = polygonize_aperture_track(
+        -0.5,
+        1.0,
+        2.5,
+        1.0,
+        0.6,
+        0.3,
+        "O",
+        rotation_deg=33.25,
+    )
+
+    assert first.rotation_deg == pytest.approx(33.25)
+    assert first.approximated
+    assert first.geometry.equals_exact(second.geometry, tolerance=0.0)
+
+
+def test_aperture_track_rotation_normalizes_degrees():
+    result = polygonize_aperture_track(
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.6,
+        0.3,
+        "R",
+        rotation_deg=405.0,
+    )
+
+    assert result.rotation_deg == pytest.approx(45.0)
+
+
+def test_aperture_track_rejects_non_finite_rotation():
+    with pytest.raises(ValueError, match="rotation must be finite"):
+        polygonize_aperture_track(
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.6,
+            0.3,
+            "R",
+            rotation_deg=math.inf,
+        )

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import atan2, degrees, hypot, isclose
+from math import atan2, degrees, hypot, isclose, isfinite
 from typing import Generic, Iterable, Literal, TypeVar
 
 from shapely.affinity import rotate
@@ -69,6 +69,7 @@ class ApertureTrackPolygonization:
     shape: str
     size_x: float
     size_y: float
+    rotation_deg: float
     length_mm: float
     curved_segments: int
     max_chord_error_mm: float
@@ -162,13 +163,15 @@ def polygonize_aperture_track(
     size_y: float,
     shape: str,
     *,
+    rotation_deg: float = 0.0,
     max_chord_error_mm: float = 0.005,
     max_arc_segments: int = 4096,
 ) -> ApertureTrackPolygonization:
     """Return the swept image of a centered C/R/O aperture along a line.
 
-    Rectangular apertures are exact. Circular and obround curved boundaries use
-    the same deterministic inscribed-chord policy as flash polygonization.
+    Rectangular apertures remain polygon-exact at arbitrary finite rotation.
+    Circular and obround curved boundaries use the same deterministic
+    inscribed-chord policy as flash polygonization.
     The sweep of a convex aperture along a line segment is the convex hull of
     the aperture translated to the two segment endpoints.
     """
@@ -180,6 +183,10 @@ def polygonize_aperture_track(
     sx = float(size_x)
     sy = float(size_y)
     kind = str(shape).upper()
+    rotation = float(rotation_deg)
+    if not isfinite(rotation):
+        raise ValueError("Gerber aperture-track rotation must be finite")
+    rotation %= 360.0
 
     if sx <= 0.0 or sy <= 0.0:
         raise ValueError("Gerber aperture-track dimensions must be positive")
@@ -206,6 +213,7 @@ def polygonize_aperture_track(
             shape=kind,
             size_x=sx,
             size_y=sy,
+            rotation_deg=rotation,
             length_mm=track.length_mm,
             curved_segments=track.curved_segments,
             max_chord_error_mm=track.max_chord_error_mm,
@@ -221,8 +229,17 @@ def polygonize_aperture_track(
         max_chord_error_mm=max_chord_error_mm,
         max_arc_segments=max_arc_segments,
     )
+    start_geometry = start_flash.geometry
+    if not isclose(rotation, 0.0, rel_tol=0.0, abs_tol=1e-15):
+        start_geometry = rotate(
+            start_geometry,
+            rotation,
+            origin=(x0, y0),
+            use_radians=False,
+        )
+
     if length <= 1e-15:
-        geometry = start_flash.geometry
+        geometry = start_geometry
     else:
         end_flash = polygonize_flash(
             x1,
@@ -233,7 +250,15 @@ def polygonize_aperture_track(
             max_chord_error_mm=max_chord_error_mm,
             max_arc_segments=max_arc_segments,
         )
-        geometry = start_flash.geometry.union(end_flash.geometry).convex_hull
+        end_geometry = end_flash.geometry
+        if not isclose(rotation, 0.0, rel_tol=0.0, abs_tol=1e-15):
+            end_geometry = rotate(
+                end_geometry,
+                rotation,
+                origin=(x1, y1),
+                use_radians=False,
+            )
+        geometry = start_geometry.union(end_geometry).convex_hull
 
     if not isinstance(geometry, Polygon):
         raise ValueError("Gerber aperture-track sweep produced non-polygonal geometry")
@@ -245,6 +270,7 @@ def polygonize_aperture_track(
         shape=kind,
         size_x=sx,
         size_y=sy,
+        rotation_deg=rotation,
         length_mm=length,
         curved_segments=start_flash.curved_segments,
         max_chord_error_mm=start_flash.max_chord_error_mm,

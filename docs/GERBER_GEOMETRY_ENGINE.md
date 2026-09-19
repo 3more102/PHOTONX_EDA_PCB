@@ -37,11 +37,12 @@ Deprecated `OF` applies an absolute translation in the active MO units to the co
 
 ## Aperture graphics-state transforms
 
-Modern Gerber `LM`, `LR`, and `LS` are modal object-creation transforms and are applied to the original current aperture rather than cumulatively mutating aperture definitions. For the current exact C/R/O geometry subset:
+Modern Gerber `LM`, `LR`, and `LS` are modal object-creation transforms and are applied to the original current aperture rather than cumulatively mutating aperture definitions. For the current representable C/R/O geometry subset:
 
 - `LMN/LMX/LMY/LMXY` are exact because supported standard apertures and reduced simple macros are centered and mirror-symmetric;
 - `LR` accepts any finite angle for circular apertures, where rotation is geometry-invariant;
-- rectangular and obround flashes are exact for rotations in 90-degree steps, swapping X/Y extents for 90/270 degrees;
+- rectangular and obround linear D01 sweeps accept arbitrary finite `LR`; rectangular sweeps remain polygon-exact and obround curved boundaries retain the 0.005 mm inscribed-chord error target;
+- rectangular and obround D03 flashes remain exact only for rotations in 90-degree steps, swapping X/Y extents for 90/270 degrees;
 - `LS` accepts any finite factor greater than zero and scales aperture dimensions, linear draw width, and circular-arc draw width;
 - non-orthogonal rectangular/obround flashes fail closed because the current `PadCandidate` model cannot represent a rotated axis-aligned shape exactly.
 
@@ -53,7 +54,7 @@ The production parser still rejects or diagnoses:
 
 - ambiguous or invalid **G74 single-quadrant** center resolution;
 - non-circular apertures used for curved interpolation;
-- region fills (G36/G37);
+- unsupported G36/G37 region topologies outside the documented bounded multi-contour/cut-in subset;
 - complex aperture macros outside the declared exact-reduction subset, and aperture blocks;
 - malformed/inconsistent arc geometry.
 

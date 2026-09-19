@@ -538,7 +538,7 @@ class GerberRS274XParser:
             (
                 f"Gerber LR{self.aperture_rotation_deg:.12g} rotates "
                 f"{aperture.shape} aperture D{aperture.code} to a non-axis-aligned "
-                "shape outside the current exact flash/sweep representation"
+                "shape for a flash outside the current PadCandidate representation"
             ),
             out,
         )
@@ -3962,13 +3962,11 @@ class GerberRS274XParser:
                             self.current = nxt
                             continue
 
-                        transformed_size = self._transformed_aperture_size(
-                            ap, p, line_no, line, out
-                        )
-                        if transformed_size is None:
-                            self.current = nxt
-                            continue
-                        size_x, size_y = self._rotate_image_size(*transformed_size)
+                        size_x = ap.x * self.aperture_scale
+                        size_y = ap.y * self.aperture_scale
+                        output_aperture_rotation = (
+                            self.aperture_rotation_deg + self.image_rotation_deg
+                        ) % 360.0
 
                         for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
                             start_point = self._transform_output_point(
@@ -3986,6 +3984,7 @@ class GerberRS274XParser:
                                     size_x,
                                     size_y,
                                     ap.shape,
+                                    rotation_deg=output_aperture_rotation,
                                     max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
                                     max_arc_segments=_MAX_ARC_SEGMENTS,
                                 )
@@ -4031,6 +4030,7 @@ class GerberRS274XParser:
                                 ap.shape,
                                 size_x,
                                 size_y,
+                                output_aperture_rotation,
                                 self.layer,
                             ]
                             id_parts.extend(self._image_transform_id_parts())
@@ -4056,6 +4056,8 @@ class GerberRS274XParser:
                                         f"length_mm={polygonization.length_mm:.12g}; "
                                         f"size_x_mm={size_x:.12g}; "
                                         f"size_y_mm={size_y:.12g}; "
+                                        f"rotation_deg_ccw="
+                                        f"{output_aperture_rotation:.12g}; "
                                         f"curved_segments={polygonization.curved_segments}; "
                                         f"max_chord_error_mm="
                                         f"{polygonization.max_chord_error_mm:.12g}; "
