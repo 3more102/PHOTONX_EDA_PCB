@@ -35,6 +35,7 @@ def launch(input_dir: str | Path) -> None:
     side.grid(row=0, column=1, rowspan=2, sticky="nsew")
     side.rowconfigure(0, weight=3)
     side.rowconfigure(1, weight=2)
+    side.rowconfigure(2, weight=1)
     side.columnconfigure(0, weight=1)
 
     inspector = Inspector(side, state)
@@ -119,13 +120,59 @@ def launch(input_dir: str | Path) -> None:
 
     review.bind("<<TreeviewSelect>>", inspect_review)
 
+    layer_frame = ttk.LabelFrame(side, text="Visible layers")
+    layer_frame.grid(row=2, column=0, sticky="nsew", padx=2, pady=2)
+    layer_frame.columnconfigure(0, weight=1)
+    layer_frame.rowconfigure(0, weight=1)
+
+    layers = state.available_layers
+    layer_list = tk.Listbox(
+        layer_frame,
+        selectmode=tk.MULTIPLE,
+        exportselection=False,
+        height=min(8, max(1, len(layers))),
+    )
+    layer_list.grid(row=0, column=0, columnspan=2, sticky="nsew")
+
+    for index, layer in enumerate(layers):
+        layer_list.insert("end", layer)
+        if state.is_layer_visible(layer):
+            layer_list.selection_set(index)
+
+    def apply_layer_selection(_event=None):
+        selected = {layer_list.get(index) for index in layer_list.curselection()}
+        state.set_visible_layers(selected)
+        canvas.redraw()
+
+    def show_all_layers():
+        state.show_all_layers()
+        layer_list.selection_set(0, "end")
+        canvas.redraw()
+
+    def hide_all_layers():
+        state.hide_all_layers()
+        layer_list.selection_clear(0, "end")
+        canvas.redraw()
+
+    layer_list.bind("<<ListboxSelect>>", apply_layer_selection)
+    ttk.Button(
+        layer_frame,
+        text="All",
+        command=show_all_layers,
+    ).grid(row=1, column=0, sticky="ew")
+    ttk.Button(
+        layer_frame,
+        text="None",
+        command=hide_all_layers,
+    ).grid(row=1, column=1, sticky="ew")
+
     status = (
         f"validation={'PASS' if result.validation.ok else 'FAIL'} | "
         f"errors={len(result.validation.errors)} | "
         f"warnings={len(result.validation.warnings)} | "
         f"review={len(review_queue.open_items())}"
     )
-    ttk.Label(side, text=status).grid(row=2, column=0, sticky="ew")
+    ttk.Label(side, text=status).grid(row=3, column=0, sticky="ew")
 
     root.geometry("1280x760")
     root.mainloop()
