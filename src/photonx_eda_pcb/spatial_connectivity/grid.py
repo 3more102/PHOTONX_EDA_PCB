@@ -10,7 +10,8 @@ class SpatialHashIndex:
         if oid in self._boxes:raise ValueError("duplicate spatial id")
         self._boxes[oid]=box
         for ix in self._range(box.min_x,box.max_x):
-            for iy in self._range(box.min_y,box.max_y):self._cells.setdefault((ix,iy),set()).add(oid)\n        self._revision+=1
+            for iy in self._range(box.min_y,box.max_y):self._cells.setdefault((ix,iy),set()).add(oid)
+        self._revision+=1
     def query(self,box):
         ids=set()
         for ix in self._range(box.min_x,box.max_x):
