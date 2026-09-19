@@ -38,7 +38,10 @@ def test_kicad_connectivity_roundtrip_matches_export_policy_and_reports_losses(t
     assert audit["source_equivalent"] is False
     assert audit["losses"] == {
         "skipped_track_ids": ["T_SKIP"],
+        "skipped_region_ids": [],
+        "skipped_slot_ids": [],
         "unresolved_pad_net_ids": ["P_UNRESOLVED"],
+        "unresolved_slot_net_ids": [],
     }
     assert audit["tracks"]["expected_count"] == 2
     assert audit["tracks"]["observed_count"] == 2
