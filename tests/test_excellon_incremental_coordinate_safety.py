@@ -66,9 +66,11 @@ def test_excellon_coordinate_mode_switching_is_modal(
 
     result = ExcellonParser(strict=True).parse(path)
 
-    assert [(d.center.x, d.center.y) for d in result.drills] == pytest.approx(
-        [(1.0, 1.0), (2.0, 1.0), (3.0, 4.0)]
-    )
+    points = [(d.center.x, d.center.y) for d in result.drills]
+    assert len(points) == 3
+    assert points[0] == pytest.approx((1.0, 1.0))
+    assert points[1] == pytest.approx((2.0, 1.0))
+    assert points[2] == pytest.approx((3.0, 4.0))
 
 
 @pytest.mark.parametrize("command", ["ICI,ON", "G91"])
@@ -89,9 +91,10 @@ def test_incremental_excellon_linear_route_endpoints_accumulate(
     result = ExcellonParser(strict=True).parse(path)
 
     assert len(result.routes) == 1
-    assert result.routes[0].points == pytest.approx(
-        ((1.0, 1.0), (2.0, 1.0), (2.0, 2.0))
-    )
+    assert len(result.routes[0].points) == 3
+    assert result.routes[0].points[0] == pytest.approx((1.0, 1.0))
+    assert result.routes[0].points[1] == pytest.approx((2.0, 1.0))
+    assert result.routes[0].points[2] == pytest.approx((2.0, 2.0))
 
 
 @pytest.mark.parametrize("command", ["ICI,ON", "G91"])
