@@ -39,6 +39,14 @@ The native ABI also supports batched point-radius candidate generation. PHOTONX 
 
 The batch path is used by drill association, footprint clustering and metrics, and component-pair inference and metrics. This reduces repeated Python-to-native transitions while preserving the previous Python result contract.
 
+## Stage 3: persistent native spatial indexes
+
+The Python adapter now keeps one opaque C++ spatial-index handle per `SpatialHashIndex` revision. The native handle owns both the AABB cell grid and the center-point grid, so repeated candidate-pair and radius-query calls reuse the same native indexing work instead of rebuilding both hash tables on every transition.
+
+`SpatialHashIndex` exposes a monotonically increasing `revision`. Every insertion increments it. The adapter reuses a handle only when the loaded shared-library instance and revision both still match; after mutation it builds a fresh handle automatically. Index-like objects without a stable revision remain supported, but they are treated as non-cacheable.
+
+The stateless ABI entry points remain available as compatibility wrappers, while ABI v3 adds explicit create/destroy plus handle-based query functions.
+
 ## Safety contract
 
 The native backend:
@@ -55,9 +63,9 @@ Unsupported native inputs fall back to the Python reference path in `auto` mode.
 
 The next safe candidates are:
 
-1. persistent/batch AABB index handles to avoid rebuilding native grids across independent calls;
-2. benchmark-gated connectivity candidate acceleration and crossover thresholds;
-3. cross-platform packaging of the optional native library;
+1. benchmark-gated connectivity candidate acceleration and crossover thresholds;
+2. cross-platform packaging and smoke CI for the optional native library;
+3. optional native-index instrumentation for build/reuse timing evidence;
 4. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
 
 Gerber/Excellon parsing, provenance, fail-closed diagnostics, and semantic inference should not be migrated merely for language uniformity. They should move only when a measured bottleneck and a parity strategy exist.
