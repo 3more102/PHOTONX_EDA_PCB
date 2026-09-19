@@ -2,7 +2,7 @@ from __future__ import annotations
 from math import hypot
 from ..models import BoardModel
 from ..provenance import Evidence
-from ..spatial_connectivity.points import build_point_index,radius_query
+from ..spatial_connectivity.points import build_point_index,radius_queries
 
 def _attach(pad,drill):
     pad.drill=drill.diameter
