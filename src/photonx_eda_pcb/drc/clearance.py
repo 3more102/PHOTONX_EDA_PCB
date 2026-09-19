@@ -11,7 +11,7 @@ def _issue(a,b,cfg):
     return DrcIssue("error","COPPER_CLEARANCE",f"clearance below {cfg.min_clearance_mm} mm",(a.id,b.id))
 
 def check_clearance_bruteforce(board,cfg):
-    objs=[*board.tracks,*board.pads];out=[];shapes={o.id:_shape(o) for o in objs}
+    objs=[*board.tracks,*board.pads,*getattr(board,"regions",())];out=[];shapes={o.id:_shape(o) for o in objs}
     for i,a in enumerate(objs):
         for b in objs[i+1:]:
             if getattr(a,"layer",None)!=getattr(b,"layer",None):continue
@@ -21,7 +21,7 @@ def check_clearance_bruteforce(board,cfg):
 
 def check_clearance(board,cfg,*,use_spatial_index=True,cell_size_mm=None):
     if not use_spatial_index:return check_clearance_bruteforce(board,cfg)
-    objs=[*board.tracks,*board.pads];out=[];shapes={o.id:_shape(o) for o in objs};by_layer={}
+    objs=[*board.tracks,*board.pads,*getattr(board,"regions",())];out=[];shapes={o.id:_shape(o) for o in objs};by_layer={}
     for o in objs:by_layer.setdefault(getattr(o,"layer",None),[]).append(o)
     index={o.id:o for o in objs}
     for layer,items in sorted(by_layer.items(),key=lambda kv:str(kv[0])):
