@@ -15,11 +15,12 @@ _INNER_COPPER_LAYER_RE=re.compile(r"^In([1-9]|[12][0-9]|30)\.Cu$")
 
 def _inner_copper_layers(board):
     observed={str(getattr(obj,"layer","")) for obj in [*board.tracks,*board.pads,*getattr(board,"regions",())]}
-    layers=[]
+    indices=[]
     for name in observed:
         match=_INNER_COPPER_LAYER_RE.fullmatch(name)
-        if match:layers.append((int(match.group(1)),name))
-    return tuple(sorted(layers))
+        if match:indices.append(int(match.group(1)))
+    highest=max(indices,default=0)
+    return tuple((index,f"In{index}.Cu") for index in range(1,highest+1))
 
 def _declared_copper_layer_names(board):
     return {"F.Cu","B.Cu"} | {name for _,name in _inner_copper_layers(board)}
