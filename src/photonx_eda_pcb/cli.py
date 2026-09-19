@@ -23,6 +23,7 @@ from .reporting import summary
 from .reporting.json_report import render_json_report
 from .reporting.junit import checks_to_junit
 from .reporting.markdown import render_markdown_report
+from .roundtrip import validate_kicad_connectivity_roundtrip
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -58,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument(
         "--kicad",
         action="store_true",
-        help="also emit reconstructed.kicad_pcb plus KiCad audit and validation artifacts",
+        help="also emit reconstructed.kicad_pcb plus KiCad audit, round-trip, and validation artifacts",
     )
     r.add_argument(
         "--review-artifacts",
@@ -181,6 +182,14 @@ def main(argv=None) -> int:
         write_omission_manifest(
             export_report,
             args.output / "kicad_omissions.json",
+        )
+        _write_json(
+            args.output / "kicad_connectivity_roundtrip.json",
+            validate_kicad_connectivity_roundtrip(
+                result.board,
+                kpath,
+                export_report,
+            ),
         )
         ok, detail = validate_with_kicad_cli(kpath)
         (args.output / "kicad_validation.txt").write_text(
