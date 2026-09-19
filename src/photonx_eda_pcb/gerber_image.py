@@ -49,6 +49,29 @@ class FlashPolygonization:
     approximated: bool
 
 
+@dataclass(frozen=True)
+class ImageOperationContribution:
+    """Effective ordered contribution from one image operation.
+
+    Dark contribution geometry is surviving material that operation actually
+    added. Clear contribution geometry is boundary that operation actually
+    created at the time it erased material. Consumers may intersect these
+    contributions with final components to derive component-local provenance.
+    """
+
+    sequence: int
+    polarity: Polarity
+    geometry: BaseGeometry
+
+
+@dataclass(frozen=True)
+class PolygonCompositionTrace:
+    """Final polygonal image plus effective per-operation contributions."""
+
+    image: Polygon | MultiPolygon | GeometryCollection
+    contributions: tuple[ImageOperationContribution, ...]
+
+
 def polygonize_flash(
     center_x: float,
     center_y: float,
@@ -266,6 +289,95 @@ class ImageCompositionStream(Generic[T]):
         self._next_sequence = 0
 
 
+def trace_polygon_operation_contributions(
+    operations: Iterable[ImageOperation[BaseGeometry]],
+) -> PolygonCompositionTrace:
+    """Trace effective ordered contributions while composing a Gerber image.
+
+    A dark operation contributes only material that was not already dark when
+    the operation occurred, and that material is reduced by every later clear
+    operation. A clear operation contributes only boundary newly created by an
+    actual subtraction. This prevents redundant/erased operations from leaking
+    into final component provenance while preserving source-order semantics.
+    """
+
+    items = tuple(operations)
+    image: BaseGeometry = GeometryCollection()
+    dark_material: dict[int, BaseGeometry] = {}
+    clear_boundaries: dict[int, BaseGeometry] = {}
+    expected_sequence = 0
+
+    for operation in items:
+        if operation.sequence != expected_sequence:
+            raise ValueError(
+                "Gerber image operations must be contiguous and ordered by sequence"
+            )
+        expected_sequence += 1
+
+        geometry = operation.geometry
+        if not isinstance(geometry, (Polygon, MultiPolygon)):
+            raise TypeError(
+                "Gerber polygon contribution tracing requires Polygon or "
+                "MultiPolygon geometry"
+            )
+        if not geometry.is_valid:
+            raise ValueError(
+                "Gerber polygon contribution tracing received invalid geometry"
+            )
+
+        if geometry.is_empty:
+            if operation.polarity == "dark":
+                dark_material[operation.sequence] = GeometryCollection()
+            elif operation.polarity == "clear":
+                clear_boundaries[operation.sequence] = GeometryCollection()
+            else:
+                raise ValueError(
+                    f"invalid Gerber image polarity: {operation.polarity!r}"
+                )
+            continue
+
+        before = image
+        if operation.polarity == "dark":
+            added = geometry.difference(before)
+            dark_material[operation.sequence] = added
+            image = before.union(geometry)
+        elif operation.polarity == "clear":
+            after = before.difference(geometry)
+            clear_boundaries[operation.sequence] = after.boundary.difference(
+                before.boundary
+            )
+            for sequence, surviving in tuple(dark_material.items()):
+                if surviving.is_empty:
+                    continue
+                dark_material[sequence] = surviving.difference(geometry)
+            image = after
+        else:
+            raise ValueError(f"invalid Gerber image polarity: {operation.polarity!r}")
+
+        if not image.is_valid:
+            raise ValueError(
+                "Gerber polygon contribution tracing produced invalid geometry"
+            )
+
+    final_image = _normalize_polygonal_image(
+        image,
+        error_prefix="Gerber polygon contribution tracing",
+    )
+    contributions = tuple(
+        ImageOperationContribution(
+            operation.sequence,
+            operation.polarity,
+            (
+                dark_material.get(operation.sequence, GeometryCollection())
+                if operation.polarity == "dark"
+                else clear_boundaries.get(operation.sequence, GeometryCollection())
+            ),
+        )
+        for operation in items
+    )
+    return PolygonCompositionTrace(final_image, contributions)
+
+
 def compose_polygon_operations(
     operations: Iterable[ImageOperation[BaseGeometry]],
 ) -> Polygon | MultiPolygon | GeometryCollection:
@@ -308,12 +420,21 @@ def compose_polygon_operations(
         if not image.is_valid:
             raise ValueError("Gerber polygon composition produced invalid geometry")
 
+    return _normalize_polygonal_image(
+        image,
+        error_prefix="Gerber polygon composition",
+    )
+
+
+def _normalize_polygonal_image(
+    image: BaseGeometry,
+    *,
+    error_prefix: str,
+) -> Polygon | MultiPolygon | GeometryCollection:
     if image.is_empty:
         return GeometryCollection()
     if not isinstance(image, (Polygon, MultiPolygon)):
-        raise ValueError(
-            "Gerber polygon composition produced non-polygonal residual geometry"
-        )
+        raise ValueError(f"{error_prefix} produced non-polygonal residual geometry")
     return image
 
 
