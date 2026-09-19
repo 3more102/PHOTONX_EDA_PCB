@@ -36,6 +36,7 @@ from ..ids import stable_id
 from ..models import CopperRegion, OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
 from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
+from .common.attributes import validate_x2_attribute_command
 from .gerber_parts.region_state import RegionState
 from .gerber_parts.step_repeat import parse_step_repeat
 from .gerber_parts.tokenizer import iter_gerber_statements
@@ -4250,6 +4251,20 @@ class GerberRS274XParser:
                 or line.startswith("%TO")
                 or line.startswith("%TD")
             ):
+                try:
+                    validate_x2_attribute_command(line)
+                except ValueError as exc:
+                    self._parse_error_or_warn(
+                        p,
+                        line_no,
+                        line,
+                        "INVALID_GERBER_X2_ATTRIBUTE",
+                        f"invalid Gerber X2 attribute command ({exc})",
+                        out,
+                    )
+                    if not self.strict:
+                        self._disable_image_geometry(out)
+                    continue
                 out.diagnostics.append(
                     ParseDiagnostic(
                         "info",
