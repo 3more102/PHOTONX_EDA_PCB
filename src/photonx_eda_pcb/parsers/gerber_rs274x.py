@@ -4085,6 +4085,10 @@ class GerberRS274XParser:
         out.tracks.clear()
 
     def parse(self, path: str | Path) -> GerberLayerResult:
+        # Treat every input file as an independent evidence source. Parser
+        # instances are reusable, so modal state, apertures, coordinates,
+        # polarity, and fail-closed suppression must not cross file boundaries.
+        GerberRS274XParser.__init__(self, self.layer, strict=self.strict)
         p = Path(path)
         out = GerberLayerResult()
 
