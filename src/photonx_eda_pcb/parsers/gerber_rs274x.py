@@ -1467,7 +1467,7 @@ class GerberRS274XParser:
             }
             primitives = parse_macro_body(body)
             evaluated = evaluate_macro(primitives, variables)
-        except (ValueError, SyntaxError, ZeroDivisionError) as exc:
+        except (ValueError, SyntaxError, ZeroDivisionError, OverflowError) as exc:
             self._fail_or_warn(
                 path,
                 line_no,
