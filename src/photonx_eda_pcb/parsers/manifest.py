@@ -67,38 +67,60 @@ def discover_manufacturing_files(
         suffix = p.suffix.lower()
         lower_name = p.name.lower()
 
-        is_drill = (
-            guess.format == "excellon"
-            or suffix in _DRILL_SUFFIXES
-            or "drill" in lower_name
-        )
+        # A concrete format detection must win over weak naming heuristics.
+        # This prevents files such as "drill_map.gbr" from being routed to the
+        # Excellon parser solely because "drill" appears in the filename, and
+        # keeps known non-manufacturing formats out of the PCB parser path.
+        if guess.format == "excellon":
+            result.append(
+                ManufacturingFile(
+                    p,
+                    "drill",
+                    None,
+                    guess.confidence,
+                    tuple(guess.reasons),
+                )
+            )
+            continue
+
+        if guess.format == "gerber":
+            layer = infer_layer(p, text)
+            result.append(
+                ManufacturingFile(
+                    p,
+                    "gerber",
+                    layer,
+                    guess.confidence,
+                    tuple(guess.reasons),
+                )
+            )
+            continue
+
+        if guess.format != "unknown":
+            continue
+
+        # Fall back to legacy filename/layer heuristics only when content and
+        # known extensions could not identify the format.
+        is_drill = suffix in _DRILL_SUFFIXES or "drill" in lower_name
         if is_drill:
-            reasons = guess.reasons or (
+            reasons = (
                 ("extension",) if suffix in _DRILL_SUFFIXES else ("filename",)
             )
-            confidence = guess.confidence or (
-                0.45 if suffix in _DRILL_SUFFIXES else 0.30
-            )
+            confidence = 0.45 if suffix in _DRILL_SUFFIXES else 0.30
             result.append(
-                ManufacturingFile(p, "drill", None, confidence, tuple(reasons))
+                ManufacturingFile(p, "drill", None, confidence, reasons)
             )
             continue
 
         layer = infer_layer(p, text)
-        is_gerber = (
-            guess.format == "gerber"
-            or suffix in _GERBER_SUFFIXES
-            or layer is not None
-        )
+        is_gerber = suffix in _GERBER_SUFFIXES or layer is not None
         if is_gerber:
-            reasons = guess.reasons or (
+            reasons = (
                 ("extension",) if suffix in _GERBER_SUFFIXES else ("layer_name",)
             )
-            confidence = guess.confidence or (
-                0.45 if suffix in _GERBER_SUFFIXES else 0.30
-            )
+            confidence = 0.45 if suffix in _GERBER_SUFFIXES else 0.30
             result.append(
-                ManufacturingFile(p, "gerber", layer, confidence, tuple(reasons))
+                ManufacturingFile(p, "gerber", layer, confidence, reasons)
             )
 
     return result
