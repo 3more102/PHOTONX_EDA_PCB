@@ -19,12 +19,12 @@ def attach_drills_bruteforce(board:BoardModel,tolerance_mm:float=0.15)->int:
         _,_,drill=min(candidates,key=lambda x:(x[0],x[1]));_attach(pad,drill);attached+=1
     return attached
 
-def attach_drills(board:BoardModel,tolerance_mm:float=0.15,*,use_spatial_index:bool=True,cell_size_mm:float|None=None)->int:
+def attach_drills(board:BoardModel,tolerance_mm:float=0.15,*,use_spatial_index:bool=True,cell_size_mm:float|None=None,backend:str="auto")->int:
     if not use_spatial_index:return attach_drills_bruteforce(board,tolerance_mm)
     if not board.drills or not board.pads:return 0
     idx=build_point_index(((d.id,d) for d in board.drills),lambda d:(d.center.x,d.center.y),float(cell_size_mm or max(1.0,tolerance_mm*8)))
     by_id={d.id:d for d in board.drills};attached=0
-    all_candidates=radius_queries(idx,((p.center.x,p.center.y,tolerance_mm) for p in board.pads))
+    all_candidates=radius_queries(idx,((p.center.x,p.center.y,tolerance_mm) for p in board.pads),backend=backend)
     for pad,candidates in zip(board.pads,all_candidates):
         if not candidates:continue
         _,did=candidates[0];_attach(pad,by_id[did]);attached+=1

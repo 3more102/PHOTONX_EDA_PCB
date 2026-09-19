@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -13,6 +14,8 @@ namespace {
 constexpr uint32_t kAbiVersion = 2;
 constexpr long double kMaxCellsPerBox = 1000000.0L;
 constexpr long double kMaxTotalInsertedCells = 20000000.0L;
+constexpr long double kMaxTotalQueriedCells = 20000000.0L;
+constexpr std::size_t kMaxOutputItems = 1000000U;
 
 struct Cell {
     int64_t x;
@@ -30,6 +33,14 @@ struct CellHash {
         return h1 ^ (h2 + static_cast<std::size_t>(0x9e3779b97f4a7c15ULL) +
                      (h1 << 6U) + (h1 >> 2U));
     }
+};
+
+struct QueryWindow {
+    photonx_aabb box;
+    int64_t min_x;
+    int64_t min_y;
+    int64_t max_x;
+    int64_t max_y;
 };
 
 bool finite_box(const photonx_aabb& box) noexcept {
@@ -173,24 +184,40 @@ int compute_pairs(
         }
     }
 
+    std::vector<QueryWindow> query_windows;
+    query_windows.reserve(box_count);
+    long double total_queried_cells = 0.0L;
+
+    for (uint32_t i = 0; i < box_count; ++i) {
+        QueryWindow window{};
+        if (!expanded_box(boxes[i], tolerance, window.box)) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        long double cell_count = 0.0L;
+        if (!cell_bounds(
+                window.box,
+                cell_size,
+                window.min_x,
+                window.min_y,
+                window.max_x,
+                window.max_y,
+                cell_count)) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        total_queried_cells += cell_count;
+        if (total_queried_cells > kMaxTotalQueriedCells) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+        query_windows.push_back(window);
+    }
+
     std::vector<uint32_t> visited(box_count, 0U);
     uint32_t generation = 0U;
 
     for (uint32_t i = 0; i < box_count; ++i) {
-        photonx_aabb query{};
-        if (!expanded_box(boxes[i], tolerance, query)) {
-            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
-        }
-
-        int64_t min_x = 0;
-        int64_t min_y = 0;
-        int64_t max_x = 0;
-        int64_t max_y = 0;
-        long double cell_count = 0.0L;
-        if (!cell_bounds(
-                query, cell_size, min_x, min_y, max_x, max_y, cell_count)) {
-            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
-        }
+        const QueryWindow& window = query_windows[i];
 
         ++generation;
         if (generation == 0U) {
@@ -198,8 +225,8 @@ int compute_pairs(
             generation = 1U;
         }
 
-        for (int64_t x = min_x;; ++x) {
-            for (int64_t y = min_y;; ++y) {
+        for (int64_t x = window.min_x;; ++x) {
+            for (int64_t y = window.min_y;; ++y) {
                 const auto it = grid.find(Cell{x, y});
                 if (it != grid.end()) {
                     for (const uint32_t candidate : it->second) {
@@ -207,18 +234,21 @@ int compute_pairs(
                             continue;
                         }
                         visited[candidate] = generation;
-                        if (intersects(boxes[candidate], query)) {
+                        if (intersects(boxes[candidate], window.box)) {
                             const uint32_t first = std::min(i, candidate);
                             const uint32_t second = std::max(i, candidate);
+                            if (pairs.size() >= kMaxOutputItems) {
+                                return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+                            }
                             pairs.push_back(photonx_pair{first, second});
                         }
                     }
                 }
-                if (y == max_y) {
+                if (y == window.max_y) {
                     break;
                 }
             }
-            if (x == max_x) {
+            if (x == window.max_x) {
                 break;
             }
         }
@@ -286,6 +316,10 @@ int compute_point_radius_candidates(
         grid[Cell{cell_x, cell_y}].push_back(i);
     }
 
+    std::vector<QueryWindow> query_windows;
+    query_windows.reserve(query_count);
+    long double total_queried_cells = 0.0L;
+
     for (uint32_t q = 0; q < query_count; ++q) {
         const double x = queries[q].x;
         const double y = queries[q].y;
@@ -295,34 +329,47 @@ int compute_point_radius_candidates(
             return PHOTONX_NATIVE_INVALID_ARGUMENT;
         }
 
-        photonx_aabb query_box{
-            x - radius,
-            y - radius,
-            x + radius,
-            y + radius,
+        QueryWindow window{
+            photonx_aabb{
+                x - radius,
+                y - radius,
+                x + radius,
+                y + radius,
+            },
+            0,
+            0,
+            0,
+            0,
         };
-        if (!finite_box(query_box)) {
+        if (!finite_box(window.box)) {
             return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
         }
 
-        int64_t min_x = 0;
-        int64_t min_y = 0;
-        int64_t max_x = 0;
-        int64_t max_y = 0;
         long double cell_count = 0.0L;
         if (!cell_bounds(
-                query_box,
+                window.box,
                 cell_size,
-                min_x,
-                min_y,
-                max_x,
-                max_y,
+                window.min_x,
+                window.min_y,
+                window.max_x,
+                window.max_y,
                 cell_count)) {
             return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
         }
 
-        for (int64_t cell_x = min_x;; ++cell_x) {
-            for (int64_t cell_y = min_y;; ++cell_y) {
+        total_queried_cells += cell_count;
+        if (total_queried_cells > kMaxTotalQueriedCells) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+        query_windows.push_back(window);
+    }
+
+    for (uint32_t q = 0; q < query_count; ++q) {
+        const QueryWindow& window = query_windows[q];
+        const photonx_aabb& query_box = window.box;
+
+        for (int64_t cell_x = window.min_x;; ++cell_x) {
+            for (int64_t cell_y = window.min_y;; ++cell_y) {
                 const auto it = grid.find(Cell{cell_x, cell_y});
                 if (it != grid.end()) {
                     for (const uint32_t point : it->second) {
@@ -330,15 +377,18 @@ int compute_point_radius_candidates(
                             center_x[point] <= query_box.max_x &&
                             center_y[point] >= query_box.min_y &&
                             center_y[point] <= query_box.max_y) {
+                            if (matches.size() >= kMaxOutputItems) {
+                                return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+                            }
                             matches.push_back(photonx_query_match{q, point});
                         }
                     }
                 }
-                if (cell_y == max_y) {
+                if (cell_y == window.max_y) {
                     break;
                 }
             }
-            if (cell_x == max_x) {
+            if (cell_x == window.max_x) {
                 break;
             }
         }
