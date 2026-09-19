@@ -47,6 +47,14 @@ The main spatial consumers expose the same backend contract as the low-level API
 
 This makes parity testing and deployment policy explicit at the workflow boundary instead of requiring callers to depend on environment discovery alone.
 
+## Stage 3: revision-safe native snapshot reuse
+
+Repeated native calls no longer remarshal an unchanged `SpatialHashIndex` into a new ctypes AABB array each time. The Python index exposes a monotonic `revision` counter, and the native adapter keeps a weak-keyed snapshot containing the sorted IDs, cell size, marshalled AABBs, and exact Python-style box centers.
+
+The snapshot is reused only while the index revision is unchanged. Any successful `insert()` increments the revision and forces a rebuild on the next native call. Duck-typed indexes without a revision contract remain supported, but are deliberately not cached.
+
+This removes avoidable Python/ctypes preparation work without changing the C ABI or any geometric predicate.
+
 ## Safety contract
 
 The native backend:
