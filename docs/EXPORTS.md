@@ -33,14 +33,15 @@ The bundle and individual flags are additive and may be combined. They do not al
 
 ## KiCad export audit artifacts
 
-When `photonx reconstruct ... --kicad` is requested, the CLI writes four KiCad-facing artifacts:
+When `photonx reconstruct ... --kicad` is requested, the CLI writes five KiCad-facing artifacts:
 
 - `reconstructed.kicad_pcb` — the experimental editable board representation;
 - `kicad_export_report.json` — the complete current `KicadExportReport`, including counts, exported/skipped IDs, structured issues, and `ok`;
 - `kicad_omissions.json` — the stable omission-manifest view covering slots, copper regions, tracks, and arbitrary routed paths;
+- `kicad_connectivity_roundtrip.json` — an immediate export/reload comparison of the net table plus track, recovered-pad, copper-region, and recovered-slot net bindings, with explicit connectivity-loss accounting for conservative omissions and unresolved net claims;
 - `kicad_validation.txt` — the independent native `kicad-cli pcb drc` result when the validator is available.
 
-Exporter warnings remain warnings and do not change reconstruction exit-code semantics. The audit files make conservative omissions, defaulted zone rules, omitted fill caches, and unresolved references visible instead of discarding that evidence in the normal CLI workflow.
+Exporter warnings and round-trip findings do not change reconstruction exit-code semantics. The connectivity artifact separates `roundtrip_equal` (every object the exporter reported as emitted re-reads with the same electrical binding) from `source_connectivity_complete` (no connectivity-bearing source object or net claim was conservatively omitted) and `source_equivalent` (both are true). Its scope covers the net table, board track segments, `PHOTONX:RecoveredPad` footprints, exported `CopperRegion` zones, and recovered NPTH/plated-slot footprints. CopperRegion shell/hole geometry remains independently checked by `compare_kicad_copper_regions()`. The audit files make conservative omissions, defaulted zone rules, omitted fill caches, unresolved references, and export/reload mismatches visible instead of discarding that evidence in the normal CLI workflow.
 
 ## KiCad native validation
 
