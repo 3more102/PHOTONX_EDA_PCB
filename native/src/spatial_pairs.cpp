@@ -113,21 +113,12 @@ bool box_center(
         return false;
     }
 
-    const long double cx =
-        (static_cast<long double>(box.min_x) +
-         static_cast<long double>(box.max_x)) /
-        2.0L;
-    const long double cy =
-        (static_cast<long double>(box.min_y) +
-         static_cast<long double>(box.max_y)) /
-        2.0L;
-
-    if (!std::isfinite(cx) || !std::isfinite(cy)) {
-        return false;
-    }
-
-    center_x = static_cast<double>(cx);
-    center_y = static_cast<double>(cy);
+    // Match radius_query() exactly: Python floats add and divide in
+    // IEEE-754 binary64. Extended precision here can move a center across a
+    // spatial-hash cell boundary and make the native broad phase omit a
+    // candidate that the Python reference would inspect.
+    center_x = (box.min_x + box.max_x) / 2.0;
+    center_y = (box.min_y + box.max_y) / 2.0;
     return std::isfinite(center_x) && std::isfinite(center_y);
 }
 
