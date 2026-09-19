@@ -5,6 +5,7 @@ from photonx_eda_pcb.spatial_connectivity import native_backend
 from photonx_eda_pcb.spatial_connectivity.points import radius_query, radius_queries
 from photonx_eda_pcb.spatial_connectivity.native_backend import (
     NativeBackendLoadError,
+    NativeBackendUnavailable,
     NativeBackendUnsupported,
     native_available,
 )
@@ -229,3 +230,179 @@ def test_cpp_radius_batch_rejects_excessive_total_query_work():
     with pytest.raises(NativeBackendUnsupported, match="status=3"):
         radius_queries(index, queries, backend="native")
 
+
+
+
+def test_native_pair_output_buffer_fast_path_uses_one_call(monkeypatch):
+    index = SpatialHashIndex(1.0)
+    index.insert("a", AABB(0.0, 0.0, 0.5, 0.5))
+    index.insert("b", AABB(0.25, 0.0, 0.75, 0.5))
+
+    class FakeLibrary:
+        calls = 0
+
+        def photonx_candidate_pairs(
+            self, boxes, box_count, tolerance, cell_size, out, capacity, out_count
+        ):
+            self.calls += 1
+            assert capacity.value >= 1
+            out_count._obj.value = 1
+            out[0].first = 0
+            out[0].second = 1
+            return native_backend._OK
+
+    fake = FakeLibrary()
+    monkeypatch.setattr(native_backend, "_load_library", lambda: fake)
+
+    assert native_backend.native_candidate_pairs(index) == [("a", "b")]
+    assert fake.calls == 1
+
+
+def test_native_pair_output_buffer_retries_with_exact_required_size(monkeypatch):
+    index = SpatialHashIndex(1.0)
+    index.insert("a", AABB(0.0, 0.0, 0.5, 0.5))
+    index.insert("b", AABB(0.25, 0.0, 0.75, 0.5))
+    index.insert("c", AABB(0.5, 0.0, 1.0, 0.5))
+
+    class FakeLibrary:
+        calls = 0
+
+        def photonx_candidate_pairs(
+            self, boxes, box_count, tolerance, cell_size, out, capacity, out_count
+        ):
+            self.calls += 1
+            out_count._obj.value = 2
+            if capacity.value < 2:
+                return native_backend._BUFFER_TOO_SMALL
+            out[0].first = 0
+            out[0].second = 1
+            out[1].first = 1
+            out[1].second = 2
+            return native_backend._OK
+
+    fake = FakeLibrary()
+    monkeypatch.setattr(native_backend, "_load_library", lambda: fake)
+    monkeypatch.setattr(native_backend, "_initial_output_capacity", lambda *_args: 1)
+
+    assert native_backend.native_candidate_pairs(index) == [("a", "b"), ("b", "c")]
+    assert fake.calls == 2
+
+
+def test_native_radius_output_buffer_fast_path_uses_one_call(monkeypatch):
+    index = SpatialHashIndex(1.0)
+    index.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+    index.insert("b", AABB(0.3, 0.0, 0.3, 0.0))
+
+    class FakeLibrary:
+        calls = 0
+
+        def photonx_point_radius_candidates(
+            self, boxes, box_count, queries, query_count, cell_size, out, capacity, out_count
+        ):
+            self.calls += 1
+            assert capacity.value >= 2
+            out_count._obj.value = 2
+            out[0].query = 0
+            out[0].point = 0
+            out[1].query = 0
+            out[1].point = 1
+            return native_backend._OK
+
+    fake = FakeLibrary()
+    monkeypatch.setattr(native_backend, "_load_library", lambda: fake)
+
+    assert native_backend.native_radius_queries(index, ((0.0, 0.0, 0.5),)) == [
+        [(0.0, "a"), (0.3, "b")]
+    ]
+    assert fake.calls == 1
+
+
+@pytest.mark.parametrize(
+    "records",
+    [
+        ((0, 1), (0, 1)),
+        ((1, 2), (0, 1)),
+    ],
+)
+def test_native_pair_output_rejects_duplicate_or_unsorted_records(monkeypatch, records):
+    index = SpatialHashIndex(1.0)
+    index.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+    index.insert("b", AABB(0.0, 0.0, 0.0, 0.0))
+    index.insert("c", AABB(0.0, 0.0, 0.0, 0.0))
+
+    class FakeLibrary:
+        def photonx_candidate_pairs(
+            self, _boxes, _box_count, _tolerance, _cell_size, out, _capacity, out_count
+        ):
+            out_count._obj.value = len(records)
+            for i, (first, second) in enumerate(records):
+                out[i].first = first
+                out[i].second = second
+            return native_backend._OK
+
+    monkeypatch.setattr(native_backend, "_load_library", lambda: FakeLibrary())
+
+    with pytest.raises(NativeBackendUnavailable, match="unsorted or duplicate"):
+        native_backend.native_candidate_pairs(index)
+
+
+def test_native_radius_output_rejects_duplicate_records(monkeypatch):
+    index = SpatialHashIndex(1.0)
+    index.insert("p", AABB(0.0, 0.0, 0.0, 0.0))
+    index.insert("q", AABB(0.0, 0.0, 0.0, 0.0))
+
+    class FakeLibrary:
+        def photonx_point_radius_candidates(
+            self, _boxes, _box_count, _queries, _query_count, _cell_size,
+            out, _capacity, out_count
+        ):
+            out_count._obj.value = 2
+            out[0].query = 0
+            out[0].point = 0
+            out[1].query = 0
+            out[1].point = 0
+            return native_backend._OK
+
+    monkeypatch.setattr(native_backend, "_load_library", lambda: FakeLibrary())
+
+    with pytest.raises(NativeBackendUnavailable, match="unsorted or duplicate radius"):
+        native_backend.native_radius_queries(index, ((0.0, 0.0, 0.0),))
+
+
+
+def test_native_pair_retry_rejects_impossible_required_count(monkeypatch):
+    index = SpatialHashIndex(1.0)
+    index.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+    index.insert("b", AABB(0.0, 0.0, 0.0, 0.0))
+
+    class FakeLibrary:
+        def photonx_candidate_pairs(
+            self, _boxes, _box_count, _tolerance, _cell_size, _out, _capacity, out_count
+        ):
+            out_count._obj.value = 2  # Only one unique pair can exist for two boxes.
+            return native_backend._BUFFER_TOO_SMALL
+
+    monkeypatch.setattr(native_backend, "_load_library", lambda: FakeLibrary())
+    monkeypatch.setattr(native_backend, "_initial_output_capacity", lambda *_args: 0)
+
+    with pytest.raises(NativeBackendUnavailable, match="impossible pair buffer"):
+        native_backend.native_candidate_pairs(index)
+
+
+def test_native_radius_retry_rejects_impossible_required_count(monkeypatch):
+    index = SpatialHashIndex(1.0)
+    index.insert("p", AABB(0.0, 0.0, 0.0, 0.0))
+
+    class FakeLibrary:
+        def photonx_point_radius_candidates(
+            self, _boxes, _box_count, _queries, _query_count, _cell_size,
+            _out, _capacity, out_count
+        ):
+            out_count._obj.value = 2  # One point x one query permits at most one match.
+            return native_backend._BUFFER_TOO_SMALL
+
+    monkeypatch.setattr(native_backend, "_load_library", lambda: FakeLibrary())
+    monkeypatch.setattr(native_backend, "_initial_output_capacity", lambda *_args: 0)
+
+    with pytest.raises(NativeBackendUnavailable, match="impossible radius buffer"):
+        native_backend.native_radius_queries(index, ((0.0, 0.0, 1.0),))
