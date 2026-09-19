@@ -1,7 +1,16 @@
+from math import isfinite
+
 from .ast import MacroVariableDefinition
 from .expression import eval_expr
 from .primitives import primitive_name
 from .variables import substitute
+
+
+def _finite(value, *, context):
+    number = float(value)
+    if not isfinite(number):
+        raise ValueError(f"{context} must be finite")
+    return number
 
 
 def evaluate_macro(primitives, variables=None):
@@ -17,7 +26,7 @@ def evaluate_macro(primitives, variables=None):
         token = str(int(token))
         if token in defined:
             raise ValueError(f"macro variable ${token} is defined more than once")
-        environment[token] = float(value)
+        environment[token] = _finite(value, context=f"macro variable ${token}")
         defined.add(token)
 
     out = []
@@ -26,14 +35,18 @@ def evaluate_macro(primitives, variables=None):
             token = str(statement.index)
             if token in defined:
                 raise ValueError(f"macro variable ${token} cannot be redefined")
-            environment[token] = eval_expr(
-                substitute(statement.expression, environment)
+            value = eval_expr(substitute(statement.expression, environment))
+            environment[token] = _finite(
+                value, context=f"macro variable ${token}"
             )
             defined.add(token)
             continue
 
         values = [
-            eval_expr(substitute(modifier, environment))
+            _finite(
+                eval_expr(substitute(modifier, environment)),
+                context=f"macro primitive {statement.code} modifier",
+            )
             for modifier in statement.modifiers
         ]
         out.append(
