@@ -6,7 +6,14 @@ from pathlib import Path
 
 from .capabilities import CAPABILITIES
 from .config import ReconstructionConfig
-from .exporters import export_json, export_kicad, validate_with_kicad_cli
+from .exporters import (
+    export_csv_tables,
+    export_graphml,
+    export_json,
+    export_kicad,
+    export_svg,
+    validate_with_kicad_cli,
+)
 from .io import write_reconstruction_bundle
 from .pipeline import reconstruct
 from .preflight import preflight as inspect_input
@@ -47,6 +54,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--kicad",
         action="store_true",
         help="also emit reconstructed.kicad_pcb",
+    )
+    r.add_argument(
+        "--svg",
+        action="store_true",
+        help="also emit reconstructed.svg for lightweight visual review",
+    )
+    r.add_argument(
+        "--graphml",
+        action="store_true",
+        help="also emit reconstructed.graphml for connectivity analysis",
+    )
+    r.add_argument(
+        "--csv",
+        action="store_true",
+        help="also emit csv/nets.csv and csv/components.csv summaries",
     )
     return p
 
@@ -94,6 +116,15 @@ def main(argv=None) -> int:
     result = reconstruct(args.input, cfg)
     write_reconstruction_bundle(result.board, result.validation, args.output)
     export_json(result.board, args.output / "reconstructed.json")
+
+    if args.svg:
+        export_svg(result.board, args.output / "reconstructed.svg")
+
+    if args.graphml:
+        export_graphml(result.board, args.output / "reconstructed.graphml")
+
+    if args.csv:
+        export_csv_tables(result.board, args.output / "csv")
 
     if args.kicad:
         kpath = export_kicad(result.board, args.output / "reconstructed.kicad_pcb")
