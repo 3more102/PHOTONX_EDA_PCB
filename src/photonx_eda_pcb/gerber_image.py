@@ -8,7 +8,7 @@ from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.geometry.polygon import orient
 
-from .gerber_geometry.arc import ArcSpec, arc_points
+from .gerber_geometry.arc import ArcSpec, arc_points, segments_for_chord_error
 from .gerber_geometry.model import GeoPoint
 
 Polarity = Literal["dark", "clear"]
@@ -196,12 +196,17 @@ def _circle_points(
 ) -> list[tuple[float, float]]:
     start = GeoPoint(cx + radius, cy)
     spec = ArcSpec(start=start, end=start, center=GeoPoint(cx, cy), clockwise=False)
-    points = arc_points(
+    segments = segments_for_chord_error(
         spec,
-        segments=None,
-        max_chord_error_mm=max_chord_error_mm,
+        max_chord_error_mm,
         max_segments=max_arc_segments,
     )
+    segments += (-segments) % 4
+    if segments > max_arc_segments:
+        raise ValueError(
+            "circle flash tessellation symmetry would exceed max_arc_segments"
+        )
+    points = arc_points(spec, segments=segments)
     return [(point.x, point.y) for point in points]
 
 
@@ -213,12 +218,18 @@ def _arc_polygon_points(
     max_chord_error_mm: float,
     max_arc_segments: int,
 ) -> list[tuple[float, float]]:
-    points = arc_points(
-        ArcSpec(start=start, end=end, center=center, clockwise=False),
-        segments=None,
-        max_chord_error_mm=max_chord_error_mm,
+    spec = ArcSpec(start=start, end=end, center=center, clockwise=False)
+    segments = segments_for_chord_error(
+        spec,
+        max_chord_error_mm,
         max_segments=max_arc_segments,
     )
+    segments += segments % 2
+    if segments > max_arc_segments:
+        raise ValueError(
+            "obround cap tessellation symmetry would exceed max_arc_segments"
+        )
+    points = arc_points(spec, segments=segments)
     return [(point.x, point.y) for point in points]
 
 
