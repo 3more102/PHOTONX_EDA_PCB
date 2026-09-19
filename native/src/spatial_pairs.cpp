@@ -429,7 +429,10 @@ int build_aabb_index_data(
 
     data.cell_size = cell_size;
     data.grid.clear();
-    data.boxes.assign(boxes, boxes + box_count);
+    data.boxes.clear();
+    if (box_count != 0U) {
+        data.boxes.assign(boxes, boxes + box_count);
+    }
 
     long double total_inserted_cells = 0.0L;
     for (uint32_t i = 0; i < box_count; ++i) {
