@@ -1597,6 +1597,7 @@ class GerberRS274XParser:
                 or not isfinite(vertices_value)
                 or not float(vertices_value).is_integer()
                 or not 3 <= int(vertices_value) <= 12
+                or not isfinite(diameter)
                 or diameter <= 0
                 or abs(center_x) > epsilon
                 or abs(center_y) > epsilon
