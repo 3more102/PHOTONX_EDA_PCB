@@ -1,6 +1,7 @@
 from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass,field
+from math import isfinite
 from .models import BoardModel
 from .excellon_routing.validation import validate_route
 from .geometry_kernel import region_shape
@@ -23,6 +24,12 @@ class ValidationReport:
     def ok(self):return not self.errors
 
 def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationReport:
+    if isinstance(outline_tolerance_mm,bool):
+        raise ValueError("outline_tolerance_mm must be a positive finite number")
+    try: outline_tolerance=float(outline_tolerance_mm)
+    except (TypeError,ValueError) as exc: raise ValueError("outline_tolerance_mm must be a positive finite number") from exc
+    if not isfinite(outline_tolerance) or outline_tolerance<=0:
+        raise ValueError("outline_tolerance_mm must be a positive finite number")
     r=ValidationReport()
     all_objects=[*board.tracks,*board.pads,*board.drills,*board.outline,*getattr(board,"slots",()),*getattr(board,"routes",()),*getattr(board,"regions",())]
     ids=[o.id for o in all_objects]
@@ -81,12 +88,25 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
         if shape.is_empty or float(shape.area)<=0 or not shape.is_valid:
             r.issues.append(ValidationIssue("error","REGION_GEOMETRY_INVALID","copper region polygon with holes is empty, zero-area, or invalid",(region.id,)))
     if board.outline:
-        degree={}
-        def key(pt):return (round(pt.x/outline_tolerance_mm)*outline_tolerance_mm,round(pt.y/outline_tolerance_mm)*outline_tolerance_mm)
+        degree={};invalid_outline=False
+        def key_xy(x,y):return (round(x/outline_tolerance)*outline_tolerance,round(y/outline_tolerance)*outline_tolerance)
         for seg in board.outline:
-            degree[key(seg.start)]=degree.get(key(seg.start),0)+1;degree[key(seg.end)]=degree.get(key(seg.end),0)+1
-        bad=[p for p,d in degree.items() if d!=2]
-        if bad:r.issues.append(ValidationIssue("warning","OUTLINE_NOT_CLOSED",f"outline has {len(bad)} non-degree-2 endpoints"))
+            try:coords=tuple(float(v) for v in (seg.start.x,seg.start.y,seg.end.x,seg.end.y))
+            except (TypeError,ValueError):coords=()
+            if len(coords)!=4 or not all(isfinite(v) for v in coords):
+                r.issues.append(ValidationIssue("error","OUTLINE_COORDINATE_INVALID","outline coordinates must be finite numbers",(seg.id,)))
+                invalid_outline=True
+                continue
+            sx,sy,ex,ey=coords
+            if sx==ex and sy==ey:
+                r.issues.append(ValidationIssue("error","OUTLINE_SEGMENT_ZERO_LENGTH","outline segment start and end are identical",(seg.id,)))
+                invalid_outline=True
+                continue
+            start_key=key_xy(sx,sy);end_key=key_xy(ex,ey)
+            degree[start_key]=degree.get(start_key,0)+1;degree[end_key]=degree.get(end_key,0)+1
+        if not invalid_outline:
+            bad=[p for p,d in degree.items() if d!=2]
+            if bad:r.issues.append(ValidationIssue("warning","OUTLINE_NOT_CLOSED",f"outline has {len(bad)} non-degree-2 endpoints"))
     else:r.issues.append(ValidationIssue("warning","NO_BOARD_OUTLINE","no board outline was reconstructed"))
     if not board.nets and (board.pads or board.tracks or getattr(board,"regions",())):r.issues.append(ValidationIssue("error","NO_CONNECTIVITY","copper objects exist but no connectivity groups were generated"))
     return r
