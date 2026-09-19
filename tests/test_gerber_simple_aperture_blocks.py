@@ -146,12 +146,15 @@ def test_preflight_accepts_exact_single_flash_aperture_block(tmp_path: Path):
 
 
 def test_unterminated_aperture_block_fails_closed(tmp_path: Path):
-    path = _write(
-        tmp_path,
+    path = tmp_path / "top.gtl"
+    path.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
         "%ADD10C,1.000*%\n"
         "%ABD11*%\n"
         "D10*\n"
         "X000000Y000000D03*\n",
+        encoding="utf-8",
     )
 
     with pytest.raises(ParseError, match="unterminated aperture block"):
