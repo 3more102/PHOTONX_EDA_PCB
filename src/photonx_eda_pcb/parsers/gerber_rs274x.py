@@ -103,6 +103,7 @@ class Aperture:
     shape: str
     x: float
     y: float
+    hole: float | None = None
 
 
 @dataclass(frozen=True)
@@ -1067,6 +1068,9 @@ class GerberRS274XParser:
             self.unsupported_apertures.add(code)
             return
 
+        ax = to_mm(values[0], self.units)
+        ay = ax if shape == "C" else to_mm(values[1], self.units)
+        hole_mm: float | None = None
         if len(values) == solid_parameter_count + 1:
             hole_diameter = values[-1]
             if hole_diameter <= 0:
@@ -1078,24 +1082,25 @@ class GerberRS274XParser:
                     "standard aperture hole diameter must be positive",
                     out,
                 )
-            else:
-                self._fail_or_warn(
+                self.unsupported_apertures.add(code)
+                return
+            hole_mm = to_mm(hole_diameter, self.units)
+            if hole_mm >= min(ax, ay):
+                self._parse_error_or_warn(
                     path,
                     line_no,
                     line,
-                    "UNSUPPORTED_GERBER_APERTURE_HOLE",
+                    "INVALID_GERBER_APERTURE_HOLE",
                     (
-                        f"{shape} standard aperture contains a {hole_diameter:.12g} "
-                        "hole; holed aperture image subtraction is not modeled safely"
+                        f"{shape} standard aperture hole diameter "
+                        f"{hole_mm:.12g} mm must be smaller than the outer aperture"
                     ),
                     out,
                 )
-            self.unsupported_apertures.add(code)
-            return
+                self.unsupported_apertures.add(code)
+                return
 
-        ax = to_mm(values[0], self.units)
-        ay = ax if shape == "C" else to_mm(values[1], self.units)
-        self.apertures[code] = Aperture(code, shape, ax, ay)
+        self.apertures[code] = Aperture(code, shape, ax, ay, hole_mm)
 
     def _register_aperture_macro(
         self,
@@ -2861,6 +2866,17 @@ class GerberRS274XParser:
             )
 
         aperture = self.apertures[self.current_aperture]
+        if aperture.hole is not None:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "UNSUPPORTED_GERBER_HOLED_DRAW",
+                "G02/G03 draws with holed apertures are not modeled safely",
+                out,
+            )
+            self.current = nxt
+            return
         if aperture.shape != "C":
             self._fail_or_warn(
                 path,
@@ -3896,6 +3912,17 @@ class GerberRS274XParser:
                 src = SourceRef(str(p), line_no, line)
 
                 if operation == "1":
+                    if ap.hole is not None:
+                        self._fail_or_warn(
+                            p,
+                            line_no,
+                            line,
+                            "UNSUPPORTED_GERBER_HOLED_DRAW",
+                            "D01 draws with holed apertures are not modeled safely",
+                            out,
+                        )
+                        self.current = nxt
+                        continue
                     if ap.shape != "C":
                         self._fail_or_warn(
                             p,
@@ -3986,20 +4013,94 @@ class GerberRS274XParser:
                             src, x_index or 0, y_index or 0, dx_mm, dy_mm
                         )
                         self._add_aperture_transform_provenance(prov)
-                        pad = PadCandidate(
-                            obj_id,
-                            center,
-                            size_x,
-                            size_y,
-                            ap.shape,
-                            self.layer,
-                            provenance=prov,
-                        )
-                        out.pads.append(pad)
-                        self.material_image_operations.append(
-                            self.layer_polarity,
-                            pad,
-                        )
+                        if ap.hole is not None:
+                            hole_diameter = ap.hole * self.aperture_scale
+                            outer = polygonize_flash(
+                                center.x,
+                                center.y,
+                                size_x,
+                                size_y,
+                                ap.shape,
+                                max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+                                max_arc_segments=_MAX_ARC_SEGMENTS,
+                            ).geometry
+                            inner = polygonize_flash(
+                                center.x,
+                                center.y,
+                                hole_diameter,
+                                hole_diameter,
+                                "C",
+                                max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+                                max_arc_segments=_MAX_ARC_SEGMENTS,
+                            ).geometry
+                            holed = outer.difference(inner)
+                            components = canonical_polygon_components(holed)
+                            if len(components) != 1:
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "INVALID_GERBER_HOLED_FLASH_GEOMETRY",
+                                    "holed D03 flash did not resolve to one polygon component",
+                                    out,
+                                )
+                                if not self.strict:
+                                    self._disable_image_geometry(out)
+                                self.current = nxt
+                                continue
+                            component = components[0]
+                            shell = tuple(Point(x, y) for x, y in component.shell)
+                            holes = tuple(
+                                tuple(Point(x, y) for x, y in ring)
+                                for ring in component.holes
+                            )
+                            region_id = stable_id(
+                                "hflash",
+                                obj_id,
+                                ap.hole,
+                                component.shell,
+                                component.holes,
+                            )
+                            prov.add_evidence(
+                                Evidence(
+                                    "gerber_aperture_hole",
+                                    (
+                                        f"shape={ap.shape}; "
+                                        f"hole_diameter_mm={hole_diameter:.12g}; "
+                                        f"max_chord_error_mm={_ARC_MAX_CHORD_ERROR_MM:.12g}; "
+                                        "semantic=image_clearance_not_physical_drill"
+                                    ),
+                                    1.0,
+                                    src,
+                                )
+                            )
+                            region = CopperRegion(
+                                region_id,
+                                shell,
+                                self.layer,
+                                provenance=prov,
+                                holes=holes,
+                            )
+                            out.regions.append(region)
+                            self.material_image_operations.append(
+                                self.layer_polarity,
+                                region,
+                            )
+                        else:
+                            pad = PadCandidate(
+                                obj_id,
+                                center,
+                                size_x,
+                                size_y,
+                                ap.shape,
+                                self.layer,
+                                provenance=prov,
+                            )
+                            out.pads.append(pad)
+                            self.material_image_operations.append(
+                                self.layer_polarity,
+                                pad,
+                            )
 
                 self.current = nxt
                 continue
