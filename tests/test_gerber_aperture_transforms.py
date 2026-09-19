@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 
 from photonx_eda_pcb.errors import ParseError, UnsupportedFeatureError
+from photonx_eda_pcb.geometry_kernel import region_shape
+from photonx_eda_pcb.gerber_image import polygonize_rotated_flash
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 from photonx_eda_pcb.preflight import preflight
 
@@ -171,7 +173,7 @@ def test_modal_rotation_reset_restores_original_rectangle_orientation(
     )
 
 
-def test_nonorthogonal_rectangle_rotation_fails_closed_in_strict_mode(
+def test_nonorthogonal_rectangle_rotation_materializes_exact_region(
     tmp_path: Path,
 ):
     path = _write(
@@ -180,14 +182,33 @@ def test_nonorthogonal_rectangle_rotation_fails_closed_in_strict_mode(
         "X010000Y020000D03*\n",
     )
 
-    with pytest.raises(
-        UnsupportedFeatureError,
-        match="non-axis-aligned shape",
-    ):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_rotated_flash(
+        1.0,
+        2.0,
+        0.6,
+        0.3,
+        "R",
+        rotation_deg=45.0,
+    ).geometry
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    actual = region_shape(result.regions[0])
+    assert actual.symmetric_difference(expected).area == pytest.approx(
+        0.0,
+        abs=1e-12,
+    )
+    assert any(
+        evidence.kind == "gerber_flash_polygonization"
+        and "method=rotated_polygon_exact" in evidence.detail
+        and "rotation_deg_ccw=45" in evidence.detail
+        and "approximated=false" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
 
 
-def test_nonorthogonal_rectangle_rotation_suppresses_permissive_file_geometry(
+def test_nonorthogonal_rectangle_rotation_preserves_other_file_geometry(
     tmp_path: Path,
 ):
     path = _write(
@@ -201,10 +222,11 @@ def test_nonorthogonal_rectangle_rotation_suppresses_permissive_file_geometry(
 
     result = GerberRS274XParser("F.Cu", strict=False).parse(path)
 
-    assert result.pads == []
+    assert len(result.pads) == 2
+    assert len(result.regions) == 1
     assert result.tracks == []
     assert result.outline == []
-    assert any(
+    assert not any(
         diagnostic.code == "UNSUPPORTED_GERBER_APERTURE_TRANSFORM"
         for diagnostic in result.diagnostics
     )
@@ -385,7 +407,7 @@ def test_preflight_accepts_supported_nonidentity_aperture_transforms(
     assert not report.strict_blockers
 
 
-def test_preflight_blocks_nonorthogonal_rectangle_rotation(tmp_path: Path):
+def test_preflight_accepts_nonorthogonal_rectangle_rotation(tmp_path: Path):
     path = _write(
         tmp_path,
         "%LR45*%\n"
@@ -395,11 +417,8 @@ def test_preflight_blocks_nonorthogonal_rectangle_rotation(tmp_path: Path):
     report = preflight(path)
 
     assert report.discovered_files == 1
-    assert not report.ready_for_strict_reconstruction
-    assert any(
-        "UNSUPPORTED_GERBER_APERTURE_TRANSFORM" in blocker
-        for blocker in report.strict_blockers
-    )
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
 
 
 def test_aperture_transform_changes_stable_id_on_same_source_path(tmp_path: Path):
@@ -420,3 +439,76 @@ def test_aperture_transform_changes_stable_id_on_same_source_path(tmp_path: Path
     scaled = GerberRS274XParser("F.Cu", strict=True).parse(path).pads[0]
 
     assert plain.id != scaled.id
+
+
+def test_nonorthogonal_obround_flash_is_materialized_with_bounded_curves(
+    tmp_path: Path,
+):
+    path = tmp_path / "obround_lr.gtl"
+    path.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10O,0.600X0.300*%\n"
+        "D10*\n"
+        "%LR30*%\n"
+        "X010000Y020000D03*\n"
+        "M02*\n",
+        encoding="utf-8",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_rotated_flash(
+        1.0,
+        2.0,
+        0.6,
+        0.3,
+        "O",
+        rotation_deg=30.0,
+    ).geometry
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    actual = region_shape(result.regions[0])
+    assert actual.symmetric_difference(expected).area == pytest.approx(
+        0.0,
+        abs=1e-12,
+    )
+    assert any(
+        evidence.kind == "gerber_flash_polygonization"
+        and "method=rotated_inscribed_chords" in evidence.detail
+        and "rotation_deg_ccw=30" in evidence.detail
+        and "max_chord_error_mm=0.005" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+
+def test_nonorthogonal_flash_rotation_composes_with_whole_image_rotation(
+    tmp_path: Path,
+):
+    path = _write(
+        tmp_path,
+        "%LR45*%\n"
+        "%IR90*%\n"
+        "X010000Y020000D03*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_rotated_flash(
+        -2.0,
+        1.0,
+        0.6,
+        0.3,
+        "R",
+        rotation_deg=135.0,
+    ).geometry
+
+    actual = region_shape(result.regions[0])
+    assert actual.symmetric_difference(expected).area == pytest.approx(
+        0.0,
+        abs=1e-12,
+    )
+    assert any(
+        evidence.kind == "gerber_flash_polygonization"
+        and "rotation_deg_ccw=135" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
