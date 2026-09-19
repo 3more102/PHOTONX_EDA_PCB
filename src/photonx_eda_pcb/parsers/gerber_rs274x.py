@@ -687,6 +687,54 @@ class GerberRS274XParser:
             )
             return
 
+        if primitive["kind"] == "lower_left_line":
+            if len(values) != 6:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"lower-left-line aperture macro {name!r} requires six modifiers",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            exposure, width, height, lower_left_x, lower_left_y, rotation = values
+            epsilon = 1e-12
+            centered_x = lower_left_x + width / 2.0
+            centered_y = lower_left_y + height / 2.0
+            if (
+                exposure != 1
+                or width <= 0
+                or height <= 0
+                or abs(rotation) > epsilon
+                or abs(centered_x) > epsilon
+                or abs(centered_y) > epsilon
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    (
+                        f"lower-left-line aperture macro {name!r} requires positive "
+                        "exposure/size, zero rotation, and lower-left coordinates "
+                        "that center the rectangle on the macro origin"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            self.apertures[code] = Aperture(
+                code,
+                "R",
+                to_mm(float(width), self.units),
+                to_mm(float(height), self.units),
+            )
+            return
+
         if primitive["kind"] == "center_line":
             if len(values) != 6:
                 self._fail_or_warn(
