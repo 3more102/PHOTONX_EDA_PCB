@@ -627,6 +627,66 @@ class GerberRS274XParser:
             self.apertures[code] = Aperture(code, "C", diameter_mm, diameter_mm)
             return
 
+        if primitive["kind"] == "vector_line":
+            if len(values) != 7:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"vector-line aperture macro {name!r} requires seven modifiers",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            exposure, width, start_x, start_y, end_x, end_y, rotation = values
+            epsilon = 1e-12
+            midpoint_x = (start_x + end_x) / 2.0
+            midpoint_y = (start_y + end_y) / 2.0
+            dx = end_x - start_x
+            dy = end_y - start_y
+
+            horizontal = abs(dy) <= epsilon and abs(dx) > epsilon
+            vertical = abs(dx) <= epsilon and abs(dy) > epsilon
+            if (
+                exposure != 1
+                or width <= 0
+                or abs(rotation) > epsilon
+                or abs(midpoint_x) > epsilon
+                or abs(midpoint_y) > epsilon
+                or not (horizontal or vertical)
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    (
+                        f"vector-line aperture macro {name!r} requires positive "
+                        "exposure/width, zero rotation, an origin-centered midpoint, "
+                        "and a non-zero axis-aligned segment"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            if horizontal:
+                size_x = abs(dx)
+                size_y = width
+            else:
+                size_x = width
+                size_y = abs(dy)
+
+            self.apertures[code] = Aperture(
+                code,
+                "R",
+                to_mm(float(size_x), self.units),
+                to_mm(float(size_y), self.units),
+            )
+            return
+
         if primitive["kind"] == "center_line":
             if len(values) != 6:
                 self._fail_or_warn(
