@@ -2,7 +2,8 @@ from .geometry import copper_shape
 from .spatial import layer_candidate_pairs
 
 def connectivity_candidate_metrics(board,tolerance_mm=.03,cell_size_mm=None):
-    objects=[*board.tracks,*board.pads];shapes={o.id:copper_shape(o) for o in objects}
+    objects=[*board.tracks,*board.pads,*getattr(board,"regions",())]
+    shapes={o.id:copper_shape(o) for o in objects}
     total=0
     by_layer={}
     for o in objects:by_layer[o.layer]=by_layer.get(o.layer,0)+1
