@@ -7,6 +7,8 @@ class KicadExportIssue:
     message:str
 @dataclass
 class KicadExportReport:
+    exported_pads:int=0
+    skipped_pads:int=0
     exported_slots:int=0
     skipped_slots:int=0
     exported_regions:int=0
@@ -17,6 +19,8 @@ class KicadExportReport:
     skipped_tracks:int=0
     skipped_routes:int=0
     issues:list[KicadExportIssue]=field(default_factory=list)
+    exported_pad_ids:list[str]=field(default_factory=list)
+    skipped_pad_ids:list[str]=field(default_factory=list)
     exported_slot_ids:list[str]=field(default_factory=list)
     skipped_slot_ids:list[str]=field(default_factory=list)
     exported_region_ids:list[str]=field(default_factory=list)
