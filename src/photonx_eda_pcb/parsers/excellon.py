@@ -286,9 +286,30 @@ class ExcellonParser:
 
     def parse(self,path:str|Path)->ExcellonResult:
         p=Path(path);out=ExcellonResult()
+        terminated=False
         for line_no,raw in enumerate(p.read_text(encoding="utf-8-sig",errors="strict").splitlines(),1):
             line=raw.strip().upper()
-            if not line or line in {"M48","%","M30","M95"} or line.startswith(";"):continue
+            if terminated:
+                if not line:
+                    continue
+                message="data after Excellon M30 end-of-file command"
+                if self.strict:
+                    raise ParseError(f"{p}:{line_no}: {message}: {line}")
+                out.diagnostics.append(
+                    ParseDiagnostic(
+                        "warning",
+                        "EXCELLON_TRAILING_DATA_AFTER_M30",
+                        message,
+                        str(p),
+                        line_no,
+                    )
+                )
+                self._disable_geometry(out)
+                break
+            if not line or line in {"M48","%","M95"} or line.startswith(";"):continue
+            if line=="M30":
+                terminated=True
+                continue
             if line.startswith("METRIC") or line == "M71":
                 self.units="mm";self.units_declared=True;self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(3,3,self.zero);continue
             if line.startswith("INCH") or line == "M72":
