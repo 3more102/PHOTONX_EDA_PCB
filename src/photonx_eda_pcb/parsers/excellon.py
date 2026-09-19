@@ -59,6 +59,27 @@ class ExcellonParser:
         out.drills.clear();out.slots.clear();out.routes.clear()
         self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
 
+    def _set_units(self,p,out,line_no,line,units):
+        if self.units_declared and self.units != units:
+            message=f"conflicting Excellon unit declaration: {self.units} -> {units}"
+            if self.strict:
+                raise ParseError(f"{p}:{line_no}: {message}: {line}")
+            out.diagnostics.append(
+                ParseDiagnostic(
+                    "warning",
+                    "CONFLICTING_EXCELLON_UNITS",
+                    message,
+                    str(p),
+                    line_no,
+                )
+            )
+            self._disable_geometry(out)
+            return
+        self.units=units
+        self.units_declared=True
+        self.zero="T" if "TZ" in line else "L"
+        self.fmt=CoordinateFormat(3,3,self.zero) if units=="mm" else CoordinateFormat(2,4,self.zero)
+
     def _decode(self, raw):
         if raw is None:return None
         value=float(raw) if "." in raw else self.fmt.decode(raw)
@@ -280,9 +301,9 @@ class ExcellonParser:
             line=raw.strip().upper()
             if not line or line in {"M48","%","M30","M95"} or line.startswith(";"):continue
             if line.startswith("METRIC") or line == "M71":
-                self.units="mm";self.units_declared=True;self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(3,3,self.zero);continue
+                self._set_units(p,out,line_no,line,"mm");continue
             if line.startswith("INCH") or line == "M72":
-                self.units="inch";self.units_declared=True;self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(2,4,self.zero);continue
+                self._set_units(p,out,line_no,line,"inch");continue
             if line.startswith(("FMAT,", "VER,")):
                 continue
             if line == "G90":
