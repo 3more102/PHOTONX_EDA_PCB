@@ -85,6 +85,46 @@ def test_missing_native_library_discovery_is_cached(monkeypatch):
         native_backend._library_candidates.cache_clear()
 
 
+def test_native_index_snapshot_cache_reuses_and_invalidates_after_insert():
+    index = SpatialHashIndex(0.5)
+    index.insert("a", AABB(0.0, 0.0, 0.1, 0.1))
+    index.insert("b", AABB(1.0, 1.0, 1.2, 1.2))
+
+    first = native_backend._native_index_snapshot(index)
+    second = native_backend._native_index_snapshot(index)
+
+    assert second is first
+    assert first.ids == ("a", "b")
+    assert first.revision == index.revision
+
+    old_revision = index.revision
+    index.insert("c", AABB(-1.0, -1.0, -0.8, -0.8))
+
+    third = native_backend._native_index_snapshot(index)
+    assert index.revision == old_revision + 1
+    assert third is not first
+    assert third.ids == ("a", "b", "c")
+    assert third.revision == index.revision
+
+
+def test_native_index_snapshot_is_not_cached_without_revision_contract():
+    class DuckIndex:
+        cell_size = 1.0
+
+        def ids(self):
+            return ("p",)
+
+        def box(self, _obj_id):
+            return AABB(0.0, 0.0, 0.0, 0.0)
+
+    index = DuckIndex()
+    first = native_backend._native_index_snapshot(index)
+    second = native_backend._native_index_snapshot(index)
+
+    assert second is not first
+    assert first.ids == second.ids == ("p",)
+
+
 @pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
 def test_cpp_backend_matches_python_reference_across_tolerances():
     index = SpatialHashIndex(0.4)
