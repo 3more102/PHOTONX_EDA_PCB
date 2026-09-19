@@ -1,14 +1,15 @@
 import re
 
+from ..excellon_numeric import SIGNED_DECIMAL_PATTERN, UNSIGNED_DECIMAL_PATTERN
 
-_DECIMAL = r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
-_SIGNED_DECIMAL = rf"[+-]?{_DECIMAL}"
+
 _EXCELLON_TOOL = re.compile(
-    rf"(?m)^T[0-9]+C{_DECIMAL}(?:F{_DECIMAL})?(?:S{_DECIMAL})?\s*$"
+    rf"(?m)^T[0-9]+C{UNSIGNED_DECIMAL_PATTERN}"
+    rf"(?:F{UNSIGNED_DECIMAL_PATTERN})?(?:S{UNSIGNED_DECIMAL_PATTERN})?\s*$"
 )
 _EXCELLON_COORD = re.compile(
-    rf"(?m)^(?:X{_SIGNED_DECIMAL}(?:Y{_SIGNED_DECIMAL})?|"
-    rf"Y{_SIGNED_DECIMAL}(?:X{_SIGNED_DECIMAL})?)\s*$"
+    rf"(?m)^(?:X{SIGNED_DECIMAL_PATTERN}(?:Y{SIGNED_DECIMAL_PATTERN})?|"
+    rf"Y{SIGNED_DECIMAL_PATTERN})\s*$"
 )
 
 
