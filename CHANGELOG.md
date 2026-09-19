@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened permissive Excellon parsing against unknown machine-state commands: any unrecognized statement now records `UNKNOWN_EXCELLON_STATEMENT` and suppresses the complete file geometry, matching strict rejection and preflight blocker semantics instead of preserving potentially misinterpreted drills, slots, or routes.
+
 - Added an optional C++17 native spatial-acceleration backend behind a versioned C ABI. The backend provides deterministic AABB candidate-pair generation plus batched point-radius broad-phase queries used by drill association, footprint clustering/metrics, and component inference/metrics; Python remains the correctness reference and automatic fallback, exact Euclidean/connectivity predicates stay authoritative, native discovery is cached, ABI/range failures are explicit, and CI builds/loads the shared library on Python 3.11/3.12/3.13 before running the full regression suite.
 
 - Added specification-compliant Gerber aperture-macro variable semantics and numeric hardening: AD parameters seed macro variables, ordered `$n=expression` assignments are evaluated in source order, undefined variables evaluate to zero, exact token substitution prevents `$1` from aliasing `$10`, and any redefinition is rejected. Code-1 circle reduction now requires exactly four or five finite modifiers and rejects active-unit conversion overflow, with parser/preflight regressions for supported and fail-closed paths.

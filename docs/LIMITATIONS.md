@@ -54,6 +54,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - zero-diameter Excellon tools: strict mode rejects them and permissive mode clears/suppresses file geometry instead of producing zero-width drills, slots, or routes;
 - unsupported or geometrically invalid Excellon routed arcs: strict mode rejects them; permissive mode clears/suppresses file geometry so a route cannot be emitted with the failed arc segment silently omitted;
 - malformed Excellon linear routes, malformed G85 slots, or invalid route-state transitions (including tool changes, drill hits, G05, empty route termination, or EOF while the tool is down): strict mode rejects them and permissive mode suppresses file geometry rather than emitting partial manufacturing geometry;
+- unrecognized Excellon statements: strict mode rejects them; permissive mode records `UNKNOWN_EXCELLON_STATEMENT` and suppresses all geometry from that file rather than retaining drill, slot, or route geometry under unknown machine state;
 - Excellon routed-arc dialects outside the bounded I/J center-offset subset and the standard XNC X/Y/A radius form;
 - automatic original net names when source data does not prove them;
 - definite component references/values from pad geometry alone;
