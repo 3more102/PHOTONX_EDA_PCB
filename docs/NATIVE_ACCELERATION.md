@@ -41,7 +41,9 @@ The batch path is used by drill association, footprint clustering and metrics, a
 
 ## Stage 3: persistent point-index handles
 
-Repeated radius-query batches now reuse an opaque C++ point-index handle instead of rebuilding the native center-point hash on every ctypes call. `SpatialHashIndex` carries a monotonic mutation revision; the Python bridge caches the native handle weakly and rebuilds it automatically after an insertion. Cache reset destroys native handles before the shared-library probe is cleared.
+Repeated radius-query batches now reuse an opaque C++ point-index handle instead of rebuilding the native center-point hash on every ctypes call. `SpatialHashIndex` carries a monotonic mutation revision; the Python bridge caches the native handle weakly and rebuilds it automatically after an insertion.
+
+Cache invalidation drops only the cache reference: a borrowed handle remains alive until the active query releases its own reference, avoiding a use-after-free during concurrent invalidation. Duck-typed indexes without a trustworthy revision contract use ephemeral native handles and are never cached.
 
 This stage changes only broad-phase reuse. Python still performs the authoritative Euclidean `distance <= radius` predicate and deterministic `(distance, id)` ordering.
 
