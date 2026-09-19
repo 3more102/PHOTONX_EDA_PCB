@@ -276,7 +276,14 @@ def native_radius_queries(index, queries, radius: float):
             raise NativeBackendUnavailable(
                 "native backend returned an out-of-range neighbor index"
             )
-        result[query_index].append((float(out[i].distance), ids[point_index]))
+        query = native_query_values[query_index]
+        point = native_point_values[point_index]
+        distance = hypot(query.x - point.x, query.y - point.y)
+        if distance <= radius_value:
+            result[query_index].append((distance, ids[point_index]))
+
+    for items in result:
+        items.sort(key=lambda item: (item[0], item[1]))
 
     return result
 
