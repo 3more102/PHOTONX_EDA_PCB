@@ -1,12 +1,12 @@
 from __future__ import annotations
 import re,shutil,subprocess,uuid
 from pathlib import Path
-from math import isfinite
+from math import atan2,degrees,hypot,isfinite
 from ..models import BoardModel
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
 from .kicad_policy import pad_shape_name,slot_geometry,slot_export_status
-from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
+from photonx_eda_pcb.excellon_routing import assess_route_export_readiness,is_exact_npth_slot_route
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
 def _u(name:str)->str:return str(uuid.uuid5(uuid.NAMESPACE_URL,"https://photonx.local/"+name))
@@ -225,17 +225,40 @@ def _region_lines(board,net_num,report):
         ))
     return lines
 
-def _record_route_skips(board,report):
-    readiness=assess_route_export_readiness(getattr(board,"routes",()))
-    for route_id in readiness.omitted:
+def _npth_route_lines(route,report):
+    (x0,y0),(x1,y1)=route.points
+    x0=float(x0);y0=float(y0);x1=float(x1);y1=float(y1);width=float(route.width_mm)
+    dx=x1-x0;dy=y1-y0;centerline=hypot(dx,dy)
+    cx=(x0+x1)/2;cy=(y0+y1)/2;long_dim=centerline+width
+    angle=degrees(atan2(dy,dx))
+    report.exported_routes+=1
+    report.exported_route_ids.append(route.id)
+    return [
+      f'  (footprint "PHOTONX:RecoveredNPTHRoute" (layer "F.Cu") (uuid {_u("route-fp:"+route.id)})',
+      f'    (at {cx:.6f} {cy:.6f})',
+      f'    (property "Reference" {_q(route.id)} (at 0 -2 0) (layer "F.SilkS") hide (uuid {_u("route-ref:"+route.id)}))',
+      f'    (pad "" np_thru_hole oval (at 0 0 {angle:.6f}) (size {long_dim:.6f} {width:.6f}) (drill oval {long_dim:.6f} {width:.6f}) (layers "*.Cu" "*.Mask") (uuid {_u("route-pad:"+route.id)}))',
+      '  )'
+    ]
+
+
+def _route_lines(board,report):
+    routes=getattr(board,"routes",())
+    readiness=assess_route_export_readiness(routes)
+    lines=[]
+    for route in routes:
+        if is_exact_npth_slot_route(route):
+            lines.extend(_npth_route_lines(route,report))
+            continue
         report.skipped_routes+=1
-        report.skipped_route_ids.append(route_id)
+        report.skipped_route_ids.append(route.id)
         report.issues.append(KicadExportIssue(
             "warning",
-            readiness.reasons[route_id],
-            route_id,
-            "arbitrary routed milling is preserved in PHOTONX but cannot be represented faithfully by the current KiCad exporter; route omitted",
+            readiness.reasons.get(route.id,"KICAD_ARBITRARY_ROUTE_UNSUPPORTED"),
+            route.id,
+            "routed milling is preserved in PHOTONX but only exact straight non-plated routes can be represented faithfully by the current KiCad exporter; route omitted",
         ))
+    return lines
 
 
 def _slot_lines(board,net_num,report):
@@ -264,7 +287,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
     p=Path(path);p.parent.mkdir(parents=True,exist_ok=True);report=KicadExportReport();net_num={net.id:i+1 for i,net in enumerate(board.nets)}
     lines=['(kicad_pcb (version 20240108) (generator "photonx_eda_pcb")','  (general (thickness 1.6))','  (paper "A4")','  (layers',*_copper_layer_lines(board),'    (36 "B.SilkS" user "b.silkscreen")','    (37 "F.SilkS" user "f.silkscreen")','    (44 "Edge.Cuts" user)','  )','  (setup (pad_to_mask_clearance 0))','  (net 0 "")']
     for net in board.nets:lines.append(f'  (net {net_num[net.id]} {_q(net.label or net.id)})')
-    lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));lines.extend(_region_lines(board,net_num,report));lines.extend(_track_lines(board,net_num,report));_record_route_skips(board,report)
+    lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));lines.extend(_region_lines(board,net_num,report));lines.extend(_track_lines(board,net_num,report));lines.extend(_route_lines(board,report))
     for seg in board.outline:lines.append(f'  (gr_line (start {seg.start.x:.6f} {seg.start.y:.6f}) (end {seg.end.x:.6f} {seg.end.y:.6f}) (stroke (width 0.1) (type default)) (layer "Edge.Cuts") (uuid {_u("edge:"+seg.id)}))')
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
 def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]
