@@ -1,6 +1,9 @@
+import json
+
 import pytest
 
 from photonx_eda_pcb.benchmark_comparisons import spatial_native
+from photonx_eda_pcb.cli import main
 from photonx_eda_pcb.performance_profiles.model import BenchmarkResult, BenchmarkSample
 from photonx_eda_pcb.spatial_connectivity import AABB, SpatialHashIndex
 from photonx_eda_pcb.spatial_connectivity.native_backend import (
@@ -63,6 +66,17 @@ def test_backend_timing_summary_reports_ratio_without_claiming_threshold():
     }
 
 
+def test_native_benchmark_index_is_deterministic_and_validated():
+    with pytest.raises(ValueError, match="object_count"):
+        spatial_native.build_native_benchmark_index(0)
+    with pytest.raises(ValueError, match="cell_size"):
+        spatial_native.build_native_benchmark_index(2, cell_size=float("inf"))
+
+    index = spatial_native.build_native_benchmark_index(7, cell_size=0.5)
+    assert len(index) == 7
+    assert index.ids()[0] == "obj-00000000"
+
+
 @pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
 def test_native_spatial_benchmarks_preserve_reference_parity():
     index = _index()
@@ -82,3 +96,47 @@ def test_native_spatial_benchmarks_preserve_reference_parity():
     )
     assert python_radius.samples[0].result_size == 2
     assert native_radius.samples[0].result_size == 2
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_native_spatial_benchmark_report_has_machine_readable_evidence():
+    report = spatial_native.native_spatial_benchmark_report(
+        32,
+        iterations=1,
+        warmup=0,
+    )
+
+    assert report["native_available"] is True
+    assert report["objects"] == 32
+    assert report["queries"] == 32
+    assert report["candidate_pairs"]["result_pairs"] >= 0
+    assert report["radius_queries"]["result_matches"] >= 32
+    assert report["candidate_pairs"]["python_seconds"] >= 0.0
+    assert report["candidate_pairs"]["native_seconds"] >= 0.0
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_native_benchmark_cli_emits_and_writes_json(tmp_path, capsys):
+    output = tmp_path / "native-benchmark.json"
+
+    status = main(
+        [
+            "native-benchmark",
+            "--objects",
+            "24",
+            "--iterations",
+            "1",
+            "--warmup",
+            "0",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert status == 0
+    stdout_report = json.loads(capsys.readouterr().out)
+    file_report = json.loads(output.read_text(encoding="utf-8"))
+    assert stdout_report == file_report
+    assert stdout_report["objects"] == 24
+    assert stdout_report["candidate_pairs"]["result_pairs"] >= 0
+    assert stdout_report["radius_queries"]["result_matches"] >= 24
