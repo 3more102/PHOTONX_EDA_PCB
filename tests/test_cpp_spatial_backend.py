@@ -229,3 +229,46 @@ def test_cpp_radius_batch_rejects_excessive_total_query_work():
     with pytest.raises(NativeBackendUnsupported, match="status=3"):
         radius_queries(index, queries, backend="native")
 
+
+
+
+def test_spatial_index_revision_changes_only_after_successful_insert():
+    index = SpatialHashIndex(1.0)
+    assert index.revision == 0
+    index.insert("a", AABB(0.0, 0.0, 0.5, 0.5))
+    assert index.revision == 1
+    with pytest.raises(ValueError, match="duplicate spatial id"):
+        index.insert("a", AABB(1.0, 1.0, 2.0, 2.0))
+    assert index.revision == 1
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_candidate_pairs_reuses_persistent_index_and_invalidates_on_mutation():
+    index = SpatialHashIndex(0.5)
+    index.insert("a", AABB(0.0, 0.0, 0.2, 0.2))
+    index.insert("b", AABB(0.25, 0.0, 0.45, 0.2))
+
+    assert candidate_pairs(index, 0.1, backend="native") == [("a", "b")]
+    first_cache = index._photonx_native_aabb_cache
+    assert first_cache.handle is not None
+
+    assert candidate_pairs(index, 0.0, backend="native") == []
+    assert index._photonx_native_aabb_cache is first_cache
+
+    index.insert("c", AABB(0.46, 0.0, 0.6, 0.2))
+    expected = candidate_pairs(index, 0.02, backend="python")
+    assert candidate_pairs(index, 0.02, backend="native") == expected
+
+    second_cache = index._photonx_native_aabb_cache
+    assert second_cache is not first_cache
+    assert first_cache.handle is None
+    assert second_cache.revision == index.revision
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_persistent_index_handles_empty_indexes():
+    index = SpatialHashIndex(1.0)
+    assert candidate_pairs(index, backend="native") == []
+    cache = index._photonx_native_aabb_cache
+    assert cache.ids == ()
+    assert cache.revision == 0
