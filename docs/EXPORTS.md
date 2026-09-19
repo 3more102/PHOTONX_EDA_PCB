@@ -31,6 +31,16 @@ For individually addressable outputs, use `--svg`, `--graphml`, and/or `--csv`:
 
 The bundle and individual flags are additive and may be combined. They do not alter reconstruction semantics, validation severity, or exit-code behavior. The optional `--kicad` flag remains separate because KiCad export has its own conservative omission and native-validation policy.
 
+## KiCad export audit report
+
+When `photonx reconstruct ... --kicad` is requested, the CLI writes three KiCad-facing artifacts:
+
+- `reconstructed.kicad_pcb` — the experimental editable board;
+- `kicad_export_report.json` — a structured audit of exported/skipped features and exporter warnings;
+- `kicad_validation.txt` — the independent `kicad-cli pcb drc` result when the native validator is available.
+
+The JSON report preserves exporter issue severity, code, object ID, message, exported/skipped slot counts and IDs, skipped region IDs, and an `ok` flag. Warnings do not become errors, and omitted or unsupported evidence stays explicit instead of disappearing from the CLI workflow.
+
 ## KiCad native validation
 
 `validate_with_kicad_cli()` runs `kicad-cli pcb drc` with a 30-second timeout by default. Callers may override this with the keyword-only `timeout_s` argument. Missing executables, launch failures, and timeouts return an indeterminate `None` validation result with a diagnostic string instead of being reported as successful validation or hanging the reconstruction workflow. Non-positive or non-finite timeout values are rejected.
