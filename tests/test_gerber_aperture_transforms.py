@@ -320,14 +320,34 @@ def test_exact_reduced_macro_composes_with_aperture_transform(tmp_path: Path):
     assert (pad.size_x, pad.size_y) == pytest.approx((4.0, 2.0))
 
 
-def test_non_positive_scaling_is_invalid(tmp_path: Path):
+@pytest.mark.parametrize(
+    "command",
+    [
+        "%LS0*%\n",
+        "%LS-1*%\n",
+        "%LS999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999*%\n",
+    ],
+)
+def test_invalid_aperture_scaling_is_rejected(tmp_path: Path, command: str):
     path = _write(
         tmp_path,
-        "%LS0*%\n"
+        command
+        + "X010000Y020000D03*\n",
+    )
+
+    with pytest.raises(ParseError):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
+def test_non_finite_rotation_is_rejected(tmp_path: Path):
+    huge = "9" * 400
+    path = _write(
+        tmp_path,
+        f"%LR{huge}*%\n"
         "X010000Y020000D03*\n",
     )
 
-    with pytest.raises(ParseError, match="greater than zero"):
+    with pytest.raises(ParseError, match="rotation must be finite"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
