@@ -219,6 +219,29 @@ class GerberRS274XParser:
             ParseDiagnostic("warning", code, message, str(path), line_no)
         )
 
+    def _record_zero_size_object(
+        self,
+        path: Path,
+        line_no: int,
+        raw: str,
+        out: GerberLayerResult,
+        operation: str,
+    ) -> None:
+        """Record a legal C0 object that has no image effect."""
+
+        out.diagnostics.append(
+            ParseDiagnostic(
+                "info",
+                "GERBER_ZERO_SIZE_OBJECT_NO_IMAGE",
+                (
+                    "zero-diameter C aperture object has no image effect "
+                    f"(operation=D0{operation})"
+                ),
+                str(path),
+                line_no,
+            )
+        )
+
     def _disable_image_geometry(self, out: GerberLayerResult) -> None:
         """Prevent unsupported file-image semantics from leaking geometry."""
         self.image_geometry_enabled = False
@@ -1048,13 +1071,13 @@ class GerberRS274XParser:
             self.unsupported_apertures.add(code)
             return
 
-        if shape == "C" and values[0] <= 0:
+        if shape == "C" and values[0] < 0:
             self._parse_error_or_warn(
                 path,
                 line_no,
                 line,
                 "INVALID_GERBER_STANDARD_APERTURE_SIZE",
-                "C standard aperture diameter must be positive",
+                "C standard aperture diameter must be non-negative",
                 out,
             )
             self.unsupported_apertures.add(code)
@@ -3001,6 +3024,16 @@ class GerberRS274XParser:
         source_direction = "CW" if clockwise else "CCW"
         output_direction = self._output_arc_direction(clockwise)
         width = max(aperture.x, aperture.y) * self.aperture_scale
+        if isclose(width, 0.0, rel_tol=0.0, abs_tol=0.0):
+            self._record_zero_size_object(
+                path,
+                line_no,
+                line,
+                out,
+                "1",
+            )
+            self.current = nxt
+            return
 
         for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
             repeated_center = self._transform_output_point(
@@ -3923,6 +3956,22 @@ class GerberRS274XParser:
 
                 ap = self.apertures[self.current_aperture]
                 src = SourceRef(str(p), line_no, line)
+
+                if (
+                    ap.shape == "C"
+                    and isclose(ap.x, 0.0, rel_tol=0.0, abs_tol=0.0)
+                    and ap.hole_diameter is None
+                    and operation in {"1", "3"}
+                ):
+                    self._record_zero_size_object(
+                        p,
+                        line_no,
+                        line,
+                        out,
+                        operation,
+                    )
+                    self.current = nxt
+                    continue
 
                 if operation == "1":
                     if ap.hole_diameter is not None:

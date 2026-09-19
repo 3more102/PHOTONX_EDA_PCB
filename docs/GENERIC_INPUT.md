@@ -74,6 +74,7 @@ The generic input path also handles several common real-world variations:
 
 - Gerber UTF-8 BOMs;
 - modal/omitted D01/D02/D03 operation codes after an operation is established;
+- specification-defined zero-diameter C apertures as legal no-image objects; D01/D03/G02/G03 commands using them advance parser coordinate state without emitting material geometry;
 - standalone D01/D02/D03 modal operation selection;
 - legacy G70/G71 unit selection plus modal G90/G91 absolute/incremental coordinate notation;
 - deprecated FS `A`/`I` absolute/incremental notation, with X/Y deltas accumulated safely and arc I/J retained as center offsets;
