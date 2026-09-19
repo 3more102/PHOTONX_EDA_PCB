@@ -4815,21 +4815,8 @@ class GerberRS274XParser:
                                     mirror=self.aperture_mirror,
                                     object_rotation_deg=output_rotation,
                                 )
-                                flash_geometry = polygonization.geometry
-                                if (
-                                    scaled_rect_hole_x is not None
-                                    and scaled_rect_hole_y is not None
-                                ):
-                                    flash_geometry = subtract_rectangular_aperture_hole(
-                                        flash_geometry,
-                                        center.x,
-                                        center.y,
-                                        scaled_rect_hole_x,
-                                        scaled_rect_hole_y,
-                                        hole_rotation_deg=self.image_rotation_deg,
-                                    ).geometry
                                 components = canonical_polygon_components(
-                                    flash_geometry
+                                    polygonization.geometry
                                 )
                             except (TypeError, ValueError) as exc:
                                 self._parse_error_or_warn(
@@ -5314,8 +5301,21 @@ class GerberRS274XParser:
                                     max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
                                     max_arc_segments=_MAX_ARC_SEGMENTS,
                                 )
+                                flash_geometry = polygonization.geometry
+                                if (
+                                    scaled_rect_hole_x is not None
+                                    and scaled_rect_hole_y is not None
+                                ):
+                                    flash_geometry = subtract_rectangular_aperture_hole(
+                                        flash_geometry,
+                                        center.x,
+                                        center.y,
+                                        scaled_rect_hole_x,
+                                        scaled_rect_hole_y,
+                                        hole_rotation_deg=self.image_rotation_deg,
+                                    ).geometry
                                 components = canonical_polygon_components(
-                                    polygonization.geometry
+                                    flash_geometry
                                 )
                             except (TypeError, ValueError) as exc:
                                 self._parse_error_or_warn(
