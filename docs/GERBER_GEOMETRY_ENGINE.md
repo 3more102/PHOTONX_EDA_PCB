@@ -13,14 +13,14 @@ The high-level Gerber parser supports a deliberately bounded circular-arc subset
 - metric/inch coordinate handling through the active Gerber format;
 - deterministic tessellation with a maximum chord-error target of **0.005 mm**;
 - exact parsed start/end points retained at tessellation boundaries;
-- source-line provenance and `gerber_arc_tessellation` evidence on every generated segment;
+- source-line provenance and `gerber_arc_tessellation` evidence on every generated segment, including both source and transformed CW/CCW orientation;
 - composition with supported Gerber step-and-repeat.
 
 Arc center/radius consistency is checked using the active coordinate resolution so valid quantized files are not rejected solely because of last-digit rounding.
 
 ## Legacy image transforms
 
-Deprecated Gerber `MI` mirroring is applied to coordinate data before later image transforms. A1 negates the A/X coordinate and B1 negates the B/Y coordinate. Apertures are not mirrored. Step-repeat distances are not coordinate data and are therefore added after MI rather than mirrored.
+Deprecated Gerber `MI` mirroring is applied to coordinate data before later image transforms. A1 negates the A/X coordinate and B1 negates the B/Y coordinate. Apertures are not mirrored. Step-repeat distances are not coordinate data and are therefore added after MI rather than mirrored. Reflecting exactly one axis reverses arc orientation (CW ↔ CCW); reflecting both axes preserves it. Arc provenance records both the source-command direction and the transformed output direction.
 
 Deprecated Gerber `IR` image rotation is applied as an exact origin-centered transform after supported source geometry is resolved. The four specification-defined values are supported:
 
