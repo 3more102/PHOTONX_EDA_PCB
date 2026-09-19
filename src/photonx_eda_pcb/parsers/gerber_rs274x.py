@@ -1495,13 +1495,13 @@ class GerberRS274XParser:
         values = primitive["values"]
 
         if primitive["kind"] == "circle":
-            if len(values) < 4:
+            if len(values) not in {4, 5}:
                 self._fail_or_warn(
                     path,
                     line_no,
                     line,
                     "INVALID_GERBER_APERTURE_MACRO",
-                    f"circle aperture macro {name!r} has too few modifiers",
+                    f"circle aperture macro {name!r} requires four or five modifiers",
                     out,
                 )
                 self.unsupported_apertures.add(code)
@@ -1509,8 +1509,13 @@ class GerberRS274XParser:
 
             exposure, diameter, center_x, center_y = values[:4]
             rotation = values[4] if len(values) > 4 else 0.0
+            finite_values = all(
+                isfinite(float(value))
+                for value in (exposure, diameter, center_x, center_y, rotation)
+            )
             if (
-                exposure != 1
+                not finite_values
+                or exposure != 1
                 or diameter <= 0
                 or abs(center_x) > 1e-12
                 or abs(center_y) > 1e-12
@@ -1521,9 +1526,9 @@ class GerberRS274XParser:
                     line,
                     "UNSUPPORTED_GERBER_APERTURE_MACRO",
                     (
-                        f"aperture macro {name!r} requires positive exposure/diameter "
-                        "and origin-centered geometry; rotation is immaterial for a "
-                        "centered circle"
+                        f"aperture macro {name!r} requires finite positive "
+                        "exposure/diameter, origin-centered geometry, and finite "
+                        "rotation; rotation is immaterial for a centered circle"
                     ),
                     out,
                 )
