@@ -4319,18 +4319,6 @@ class GerberRS274XParser:
                     if not self.strict:
                         self._disable_image_geometry(out)
                     continue
-                if self.region_state.active:
-                    self._parse_error_or_warn(
-                        p,
-                        line_no,
-                        line,
-                        "GERBER_ATTRIBUTE_IN_REGION",
-                        "Gerber attribute commands are not allowed inside G36/G37 regions",
-                        out,
-                    )
-                    if not self.strict:
-                        self._disable_image_geometry(out)
-                    continue
                 if command in {"TO", "TD"}:
                     self._update_object_attribute_state(
                         command,
