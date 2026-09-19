@@ -39,6 +39,14 @@ The native ABI also supports batched point-radius candidate generation. PHOTONX 
 
 The batch path is used by drill association, footprint clustering and metrics, and component-pair inference and metrics. This reduces repeated Python-to-native transitions while preserving the previous Python result contract.
 
+## Stage 3: persistent native index handles
+
+The C ABI now exposes reusable spatial-index handles. Python caches one native handle per live `SpatialHashIndex` and reuses the prebuilt AABB and center-point grids across candidate-pair and point-radius calls.
+
+`SpatialHashIndex` carries a monotonic revision counter. Any insert invalidates the cached handle and the next native query rebuilds it from the authoritative Python boxes. Library reloads also clear and destroy cached handles.
+
+This removes repeated grid construction and box marshaling from hot paths while keeping the same safety boundary: native code only returns broad-phase candidates, and Python/exact geometry remains authoritative.
+
 ## Safety contract
 
 The native backend:
@@ -55,9 +63,9 @@ Unsupported native inputs fall back to the Python reference path in `auto` mode.
 
 The next safe candidates are:
 
-1. persistent/batch AABB index handles to avoid rebuilding native grids across independent calls;
-2. benchmark-gated connectivity candidate acceleration and crossover thresholds;
-3. cross-platform packaging of the optional native library;
+1. benchmark-gated connectivity candidate acceleration and crossover thresholds;
+2. native package/install integration across supported platforms;
+3. native build/fallback telemetry and diagnostics;
 4. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
 
 Gerber/Excellon parsing, provenance, fail-closed diagnostics, and semantic inference should not be migrated merely for language uniformity. They should move only when a measured bottleneck and a parity strategy exist.
