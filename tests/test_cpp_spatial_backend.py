@@ -85,6 +85,27 @@ def test_missing_native_library_discovery_is_cached(monkeypatch):
         native_backend._library_candidates.cache_clear()
 
 
+def test_native_index_snapshot_is_reused_until_index_mutates():
+    index = _sample_index()
+    generation = index.generation
+
+    ids_first, boxes_first, cell_size_first = native_backend._native_index_snapshot(index)
+    ids_second, boxes_second, cell_size_second = native_backend._native_index_snapshot(index)
+
+    assert index.generation == generation
+    assert ids_second is ids_first
+    assert boxes_second is boxes_first
+    assert cell_size_second == cell_size_first
+
+    index.insert("new", AABB(4.0, 4.0, 4.1, 4.1))
+    assert index.generation == generation + 1
+
+    ids_third, boxes_third, cell_size_third = native_backend._native_index_snapshot(index)
+    assert boxes_third is not boxes_first
+    assert ids_third == tuple(sorted((*ids_first, "new")))
+    assert cell_size_third == cell_size_first
+
+
 @pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
 def test_cpp_backend_matches_python_reference_across_tolerances():
     index = SpatialHashIndex(0.4)
