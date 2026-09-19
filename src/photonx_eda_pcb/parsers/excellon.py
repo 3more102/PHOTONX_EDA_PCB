@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from math import hypot, pi, sqrt
+from math import hypot, isfinite, pi, sqrt
 import re
 from pathlib import Path
 from ..errors import ParseError, UnsupportedFeatureError
@@ -29,9 +29,13 @@ from .excellon_parts.slots import parse_slot_command
 _TOOL_DEF = re.compile(r"^T(\d+)C([0-9.]+)(?:F[0-9.]+)?(?:S[0-9.]+)?$")
 _TOOL_SEL = re.compile(r"^T(\d+)$")
 _HIT = re.compile(r"^(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?$")
+_REPEAT_HOLE = re.compile(
+    r"^R(\d+)(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?$"
+)
 
 _ROUTE_ARC_MAX_CHORD_ERROR_MM = 0.005
 _ROUTE_ARC_MAX_SEGMENTS = 4096
+_MAX_REPEAT_HOLES = 10_000
 
 @dataclass
 class ExcellonResult:
@@ -53,11 +57,13 @@ class ExcellonParser:
         self.fmt = CoordinateFormat(2, 4, "L"); self.tools = {}; self.tool = None; self.current = Point(0.0, 0.0)
         self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
         self.geometry_enabled=True
+        self._repeat_anchor_valid=False
 
     def _disable_geometry(self,out:ExcellonResult):
         self.geometry_enabled=False
         out.drills.clear();out.slots.clear();out.routes.clear()
         self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
+        self._repeat_anchor_valid=False
 
     def _decode(self, raw):
         if raw is None:return None
@@ -255,6 +261,7 @@ class ExcellonParser:
             )
         )
         self.current=Point(x,y)
+        self._repeat_anchor_valid=False
 
     def _finish_route(self,p,out,line_no,line):
         try:pts=self.route.raise_tool()
@@ -273,6 +280,97 @@ class ExcellonParser:
         prov=Provenance(list(self._route_sources),list(self._route_evidence))
         out.routes.append(RoutedPath(rid,pts,self.tools[self.tool],"unknown",f"T{self.tool}",prov))
         self._route_sources=[];self._route_evidence=[]
+
+    def _repeat_holes(self,p,out,line_no,line,match):
+        if self.route.tool_down:
+            message="repeat-hole command encountered while route tool is down"
+            if self.strict:raise ParseError(f"{p}:{line_no}: {message}")
+            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_REPEAT_ROUTE_STATE",message,str(p),line_no))
+            self._disable_geometry(out)
+            return
+        if not self._repeat_anchor_valid:
+            message="repeat-hole command requires a preceding drill hit"
+            if self.strict:raise ParseError(f"{p}:{line_no}: {message}")
+            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_REPEAT_NO_ANCHOR",message,str(p),line_no))
+            self._disable_geometry(out)
+            return
+        if self.tool is None or self.tool not in self.tools:
+            raise ParseError(f"{p}:{line_no}: repeat-hole command before valid tool selection")
+
+        count=int(match.group(1))
+        if count <= 0:
+            message="repeat-hole count must be positive"
+            if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
+            out.diagnostics.append(ParseDiagnostic("warning","INVALID_EXCELLON_REPEAT_COUNT",message,str(p),line_no))
+            self._disable_geometry(out)
+            return
+        if count > _MAX_REPEAT_HOLES:
+            message=(
+                f"repeat-hole count {count} exceeds safety limit "
+                f"{_MAX_REPEAT_HOLES}"
+            )
+            if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}")
+            out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_REPEAT_LIMIT",message,str(p),line_no))
+            self._disable_geometry(out)
+            return
+
+        xraw,yraw=match.group(2),match.group(3)
+        if xraw is None and yraw is None:
+            message="repeat-hole command requires an X and/or Y step"
+            if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
+            out.diagnostics.append(ParseDiagnostic("warning","INVALID_EXCELLON_REPEAT_STEP",message,str(p),line_no))
+            self._disable_geometry(out)
+            return
+
+        step_x=0.0 if xraw is None else self._decode(xraw)
+        step_y=0.0 if yraw is None else self._decode(yraw)
+        final_x=self.current.x + count * step_x
+        final_y=self.current.y + count * step_y
+        if not all(isfinite(v) for v in (step_x,step_y,final_x,final_y)):
+            message="repeat-hole step or expanded coordinate is non-finite"
+            if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
+            out.diagnostics.append(ParseDiagnostic("warning","INVALID_EXCELLON_REPEAT_STEP",message,str(p),line_no))
+            self._disable_geometry(out)
+            return
+
+        src=SourceRef(str(p),line_no,line)
+        for repeat_index in range(1,count+1):
+            pt=Point(
+                self.current.x + step_x,
+                self.current.y + step_y,
+            )
+            evidence=[
+                Evidence(
+                    "excellon_repeat_hole",
+                    (
+                        f"repeat_index={repeat_index}; repeat_count={count}; "
+                        f"step_mm=({step_x:.12g},{step_y:.12g})"
+                    ),
+                    1.0,
+                    src,
+                )
+            ]
+            obj_id=stable_id(
+                "drill-repeat",
+                p.name,
+                line_no,
+                repeat_index,
+                pt.x,
+                pt.y,
+                self.tool,
+            )
+            out.drills.append(
+                DrillHit(
+                    obj_id,
+                    pt,
+                    self.tools[self.tool],
+                    "unknown",
+                    f"T{self.tool}",
+                    Provenance([src],evidence),
+                )
+            )
+            self.current=pt
+        self._repeat_anchor_valid=True
 
     def parse(self,path:str|Path)->ExcellonResult:
         p=Path(path);out=ExcellonResult()
@@ -304,6 +402,16 @@ class ExcellonParser:
                 self._disable_geometry(out)
                 continue
             if not self.geometry_enabled:
+                continue
+            repeat_match=_REPEAT_HOLE.match(line)
+            if repeat_match:
+                self._repeat_holes(p,out,line_no,line,repeat_match)
+                continue
+            if line.startswith("R"):
+                message=f"unsupported Excellon repeat-hole syntax: {line}"
+                if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}")
+                out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_REPEAT_SYNTAX",message,str(p),line_no))
+                self._disable_geometry(out)
                 continue
             if "G85" in line:
                 if self.route.tool_down:
@@ -338,7 +446,7 @@ class ExcellonParser:
                     src=SourceRef(str(p),line_no,line)
                 slot_id=stable_id("slot",p.name,line_no,x1,y1,x2,y2,self.tool)
                 out.slots.append(SlotFeature(slot_id,(x1,y1),(x2,y2),self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],evidence)))
-                self.current=Point(x2,y2);continue
+                self.current=Point(x2,y2);self._repeat_anchor_valid=False;continue
             if line.startswith(("G02","G03")):
                 self._route_arc(p,out,line_no,line);continue
             if line.startswith(("G00","G01")):
@@ -357,7 +465,7 @@ class ExcellonParser:
                         out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no))
                         self._disable_geometry(out)
                         continue
-                    self.current=Point(x,y);self._route_sources=[src];self._route_evidence=[];continue
+                    self.current=Point(x,y);self._repeat_anchor_valid=False;self._route_sources=[src];self._route_evidence=[];continue
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: linear route before valid tool selection")
                 if not self.route.tool_down:
                     if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: standalone G01 routing is unsupported; use G00/M15/G01/M16 sequence")
@@ -370,7 +478,7 @@ class ExcellonParser:
                     out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE",str(exc),str(p),line_no))
                     self._disable_geometry(out)
                     continue
-                self.current=Point(x,y);self._route_sources.append(src);continue
+                self.current=Point(x,y);self._repeat_anchor_valid=False;self._route_sources.append(src);continue
             control=classify_route_control(line)
             if control=="tool_down":
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: M15 before valid tool selection")
@@ -443,7 +551,7 @@ class ExcellonParser:
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: drill hit before valid tool selection")
                 x,y=self._route_xy(m.group(1),m.group(2));pt=Point(x,y)
                 src=SourceRef(str(p),line_no,line);obj_id=stable_id("drill",p.name,line_no,pt.x,pt.y,self.tool)
-                out.drills.append(DrillHit(obj_id,pt,self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],[])));self.current=pt;continue
+                out.drills.append(DrillHit(obj_id,pt,self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],[])));self.current=pt;self._repeat_anchor_valid=True;continue
             if self.strict:raise ParseError(f"{p}:{line_no}: unrecognized Excellon statement: {line}")
             out.diagnostics.append(ParseDiagnostic("warning","UNKNOWN_EXCELLON_STATEMENT",line,str(p),line_no))
         if self.route.tool_down:
