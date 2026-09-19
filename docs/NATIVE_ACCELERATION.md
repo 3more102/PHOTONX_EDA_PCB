@@ -64,7 +64,7 @@ Unsupported native inputs fall back to the Python reference path in `auto` mode.
 The next safe candidates are:
 
 1. benchmark-gated connectivity candidate acceleration and crossover thresholds;
-2. cross-platform packaging and smoke CI for the optional native library;
+2. distributable cross-platform packaging for the optional native shared library;
 3. optional native-index instrumentation for build/reuse timing evidence;
 4. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
 
