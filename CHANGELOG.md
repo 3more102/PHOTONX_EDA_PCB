@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added exact reduction of deprecated Gerber aperture-macro Code 22 lower-left-line rectangles when exposure is positive, width/height are positive, rotation is zero, and the lower-left point centers the rectangle exactly on the macro origin; offset, rotated, zero-size, and exposure-off cases remain fail-closed.
 - Added exact reduction of single positive origin-centered, zero-rotation, axis-aligned Code-20 vector-line Gerber macros (plus the deprecated Code-2 alias) to rectangular apertures; diagonal, offset, rotated, zero-width, and zero-length cases remain fail-closed.
 - Added legacy Gerber incremental coordinate support for `G91` and FS `I` notation: X/Y values now accumulate from the preceding coordinate position, `G90`/FS `A` restore absolute notation, and arc I/J values remain center offsets from the arc start.
 - Added exact reduction of single positive origin-centered, zero-rotation Code-21 center-line Gerber macros to rectangular apertures, with active-unit conversion and fail-closed boundaries.
