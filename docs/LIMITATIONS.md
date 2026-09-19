@@ -10,10 +10,11 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - G75 multi-quadrant G02/G03 circular arcs with signed I/J center offsets and circular draw apertures, tessellated with explicit approximation evidence;
 - bounded legacy G74 single-quadrant G02/G03 arcs using unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90 degrees;
 - single positive origin-centered circle aperture macros, including parameterized diameters, reduced exactly to circular apertures; centered-circle rotation is geometry-invariant;
-- exact rectangular reduction for centered axis-aligned Code-20 vector-line macros (plus deprecated Code-2 alias) with 90-degree-step rotation;
-- single positive Code-21 center-line aperture macros reduced exactly to centered rectangular apertures with 90-degree-step rotation;
-- deprecated Code-22 lower-left rectangle macros reduced exactly when their lower-left coordinates place the rectangle center at the macro origin and rotation is in 90-degree steps;
-- single positive Code-5 polygon macros reduced exactly to standard P apertures when they use an integer 3–12 vertex count, are centered at the macro origin, have positive circumscribed diameter, and finite rotation;
+- exact rectangular reduction for centered non-zero Code-20 vector-line macros (plus deprecated Code-2 alias), including arbitrarily oriented segments and arbitrary finite primitive rotation;
+- single positive Code-21 center-line aperture macros reduced exactly to centered rectangular apertures with arbitrary finite primitive rotation;
+- deprecated Code-22 lower-left rectangle macros reduced exactly when their lower-left coordinates place the rectangle center at the macro origin, with arbitrary finite primitive rotation;
+- intrinsic rectangular macro rotation is preserved through supported LM/LR/LS aperture transforms and whole-image IR; non-orthogonal material flashes/draws use exact polygonal rectangle geometry rather than axis-aligned approximation;
+- single positive Code-5 polygon macros are reduced exactly to standard P apertures when they use an integer 3–12 vertex count, are centered at the macro origin, have positive circumscribed diameter, and finite rotation;
 - explicit X2 `.FilePolarity,Positive` metadata is recognized without changing positive-image geometry;
 - Gerber `%LPD*%` dark layer polarity is accepted as the supported positive-object state;
 - modal Gerber aperture transforms are supported for the representable subset: LM on centered symmetric C/R/O apertures, arbitrary LR on circles and R/O linear D01 sweeps/flashes, and positive LS scaling on supported object geometry; orthogonal R/O flashes remain PadCandidate objects while non-orthogonal flashes are materialized as CopperRegion polygons;
