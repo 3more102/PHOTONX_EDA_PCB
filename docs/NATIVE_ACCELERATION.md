@@ -39,6 +39,8 @@ The native ABI also supports batched point-radius candidate generation. PHOTONX 
 
 The batch path is used by drill association, footprint clustering and metrics, and component-pair inference and metrics. This reduces repeated Python-to-native transitions while preserving the previous Python result contract.
 
+The Python binding also supplies a bounded optimistic output buffer on the first native call. Sparse broad-phase results therefore complete in one native computation instead of an unconditional count pass followed by a second full computation. The speculative buffer is capped at 65,536 records (512 KiB for the current two-`uint32_t` result structs); denser results use the ABI's exact required-count response and retry with precisely sized storage.
+
 The main spatial consumers expose the same backend contract as the low-level API:
 
 - `attach_drills(..., backend="auto" | "python" | "native")`
