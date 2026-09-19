@@ -60,3 +60,17 @@ def test_disjoint_closed_outline_loops_remain_valid_for_cutout_style_geometry():
 
     assert report.ok
     assert not any(i.code == "OUTLINE_SELF_INTERSECTION" for i in report.issues)
+
+
+def test_closed_loops_touching_at_one_vertex_are_not_treated_as_a_normal_joint():
+    board = BoardModel(
+        outline=[
+            *_rectangle("A", 0.0, 0.0, 2.0, 2.0),
+            *_rectangle("B", 2.0, 2.0, 4.0, 4.0),
+        ]
+    )
+
+    report = validate_board(board, outline_tolerance_mm=0.01)
+
+    assert not report.ok
+    assert any(i.code == "OUTLINE_SELF_INTERSECTION" for i in report.errors)
