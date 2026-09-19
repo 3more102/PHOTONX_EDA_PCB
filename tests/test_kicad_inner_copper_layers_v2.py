@@ -38,12 +38,27 @@ def test_kicad_export_declares_observed_inner_copper_layers(tmp_path):
     ]
     positions = [text.index(layer) for layer in expected_layers]
     assert positions == sorted(positions)
-    assert text.count('(1 "In1.Cu" signal)') == 1
-    assert text.count('(2 "In2.Cu" signal)') == 1
-    assert text.count('(30 "In30.Cu" signal)') == 1
+    for index in range(1, 31):
+        assert text.count(f'({index} "In{index}.Cu" signal)') == 1
     assert '(layer "In1.Cu")' in text
     assert '(layer "In2.Cu")' in text
     assert '(layer "In30.Cu")' in text
+
+
+
+def test_highest_observed_inner_layer_implies_contiguous_stack_prefix(tmp_path):
+    board = BoardModel(
+        tracks=[Track("T3", Point(0, 0), Point(1, 0), 0.2, "In3.Cu")]
+    )
+
+    path, report = export_kicad_with_report(board, tmp_path / "inner_prefix.kicad_pcb")
+    text = path.read_text(encoding="utf-8")
+
+    assert report.ok
+    assert '    (1 "In1.Cu" signal)' in text
+    assert '    (2 "In2.Cu" signal)' in text
+    assert '    (3 "In3.Cu" signal)' in text
+    assert '"In4.Cu" signal' not in text
 
 
 def test_inner_copper_region_exports_as_declared_zone(tmp_path):
