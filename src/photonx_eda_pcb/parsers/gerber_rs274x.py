@@ -5,7 +5,7 @@ from math import atan2, cos, degrees, hypot, isclose, isfinite, pi, radians, sin
 from pathlib import Path
 import re
 
-from shapely.geometry import LineString, MultiPoint
+from shapely.geometry import LineString, MultiPoint, Polygon
 from shapely.ops import unary_union
 
 from ..aperture_macros import evaluate_macro, parse_macro_body
@@ -114,6 +114,8 @@ class Aperture:
     base_rotation_deg: float = 0.0
     polygon_vertices: int | None = None
     polygon_rotation_deg: float = 0.0
+    outline_vertices: tuple[tuple[float, float], ...] | None = None
+    outline_rotation_deg: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -1390,6 +1392,48 @@ class GerberRS274XParser:
             rotation += self.image_rotation_deg
         return rotation % 360.0
 
+    def _outline_macro_flash_points(
+        self,
+        aperture: Aperture,
+        center: Point,
+    ) -> tuple[Point, ...]:
+        """Materialize one Code 4 outline flash with exact affine transforms."""
+
+        if not aperture.outline_vertices:
+            raise ValueError("outline aperture has no vertices")
+
+        primitive_angle = radians(aperture.outline_rotation_deg)
+        primitive_cos = cos(primitive_angle)
+        primitive_sin = sin(primitive_angle)
+        object_angle = radians(
+            (self.aperture_rotation_deg + self.image_rotation_deg) % 360.0
+        )
+        object_cos = cos(object_angle)
+        object_sin = sin(object_angle)
+
+        points: list[Point] = []
+        for source_x, source_y in aperture.outline_vertices:
+            # Primitive rotation is part of the macro definition and therefore
+            # precedes modal LM/LR/LS object transforms.
+            x = source_x * primitive_cos - source_y * primitive_sin
+            y = source_x * primitive_sin + source_y * primitive_cos
+
+            if "X" in self.aperture_mirror:
+                x = -x
+            if "Y" in self.aperture_mirror:
+                y = -y
+
+            x *= self.aperture_scale
+            y *= self.aperture_scale
+
+            rotated_x = x * object_cos - y * object_sin
+            rotated_y = x * object_sin + y * object_cos
+            points.append(
+                Point(center.x + rotated_x, center.y + rotated_y)
+            )
+
+        return tuple(points)
+
     def _instantiate_macro_aperture(
         self,
         code: int,
@@ -1654,6 +1698,131 @@ class GerberRS274XParser:
                 diameter_mm,
                 polygon_vertices=int(vertices_value),
                 polygon_rotation_deg=float(rotation) % 360.0,
+            )
+            return
+
+        if primitive["kind"] == "outline":
+            if len(values) < 2:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"outline aperture macro {name!r} has too few modifiers",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            exposure, vertices_value = values[:2]
+            if (
+                not isfinite(exposure)
+                or exposure != 1
+                or not isfinite(vertices_value)
+                or not float(vertices_value).is_integer()
+                or not 3 <= int(vertices_value) <= 5000
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    (
+                        f"outline aperture macro {name!r} requires exposure on "
+                        "and an integer vertex count in 3..5000"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            vertex_count = int(vertices_value)
+            expected_modifier_count = 2 * vertex_count + 5
+            if len(values) != expected_modifier_count:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    (
+                        f"outline aperture macro {name!r} with {vertex_count} "
+                        f"vertices requires {expected_modifier_count} modifiers"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            coordinate_values = values[2:-1]
+            rotation = values[-1]
+            if (
+                not isfinite(rotation)
+                or any(not isfinite(value) for value in coordinate_values)
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"outline aperture macro {name!r} requires finite coordinates and rotation",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            vertices = [
+                (float(coordinate_values[index]), float(coordinate_values[index + 1]))
+                for index in range(0, len(coordinate_values), 2)
+            ]
+            start_x, start_y = vertices[0]
+            end_x, end_y = vertices[-1]
+            epsilon = 1e-12
+            if (
+                abs(start_x - end_x) > epsilon
+                or abs(start_y - end_y) > epsilon
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"outline aperture macro {name!r} must repeat its start vertex as the final vertex",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            source_polygon = Polygon(vertices[:-1])
+            if (
+                source_polygon.is_empty
+                or not source_polygon.is_valid
+                or source_polygon.area <= 1e-24
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    (
+                        f"outline aperture macro {name!r} must define one valid "
+                        "non-self-intersecting, non-zero-area contour"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            vertices_mm = tuple(
+                (to_mm(x, self.units), to_mm(y, self.units))
+                for x, y in vertices[:-1]
+            )
+            self.apertures[code] = Aperture(
+                code,
+                "AM4",
+                0.0,
+                0.0,
+                outline_vertices=vertices_mm,
+                outline_rotation_deg=float(rotation) % 360.0,
             )
             return
 
@@ -4233,6 +4402,22 @@ class GerberRS274XParser:
                     continue
 
                 if operation == "1":
+                    if ap.shape == "AM4":
+                        self._fail_or_warn(
+                            p,
+                            line_no,
+                            line,
+                            "UNSUPPORTED_GERBER_OUTLINE_MACRO_DRAW",
+                            (
+                                "Code 4 outline macro apertures are supported as "
+                                "exact D03 flashes only; D01 sweeps of arbitrary "
+                                "outline geometry remain fail-closed"
+                            ),
+                            out,
+                        )
+                        self.current = nxt
+                        continue
+
                     if ap.shape == "P":
                         if ap.hole_diameter is not None:
                             self._fail_or_warn(
@@ -4586,6 +4771,130 @@ class GerberRS274XParser:
                             )
 
                 elif operation == "3":
+                    if ap.shape == "AM4":
+                        if self.layer == "Edge.Cuts":
+                            self._fail_or_warn(
+                                p,
+                                line_no,
+                                line,
+                                "UNSUPPORTED_GERBER_OUTLINE_MACRO_FLASH_EDGE",
+                                (
+                                    "Code 4 outline macro D03 flashes are supported "
+                                    "only on material layers"
+                                ),
+                                out,
+                            )
+                            self.current = nxt
+                            continue
+                        if not ap.outline_vertices:
+                            self._parse_error_or_warn(
+                                p,
+                                line_no,
+                                line,
+                                "GERBER_OUTLINE_MACRO_FLASH_INVALID",
+                                "Code 4 outline aperture is missing its vertices",
+                                out,
+                            )
+                            self.current = nxt
+                            continue
+
+                        output_rotation = (
+                            self.aperture_rotation_deg + self.image_rotation_deg
+                        ) % 360.0
+                        for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
+                            center = self._transform_output_point(
+                                nxt, dx_mm, dy_mm
+                            )
+                            try:
+                                flash_points = self._outline_macro_flash_points(
+                                    ap, center
+                                )
+                                geometry = Polygon(
+                                    [(point.x, point.y) for point in flash_points]
+                                )
+                                components = canonical_polygon_components(geometry)
+                            except (TypeError, ValueError) as exc:
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "GERBER_OUTLINE_MACRO_FLASH_INVALID",
+                                    f"Code 4 outline flash materialization failed: {exc}",
+                                    out,
+                                )
+                                continue
+
+                            if len(components) != 1 or components[0].holes:
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "GERBER_OUTLINE_MACRO_FLASH_INVALID",
+                                    (
+                                        "Code 4 outline flash did not produce one "
+                                        "simply connected polygon"
+                                    ),
+                                    out,
+                                )
+                                continue
+
+                            component = components[0]
+                            shell = tuple(Point(x, y) for x, y in component.shell)
+                            id_parts = [
+                                p.name,
+                                line_no,
+                                "outline_macro_flash",
+                                nxt.x,
+                                nxt.y,
+                                ap.code,
+                                ap.outline_vertices,
+                                ap.outline_rotation_deg,
+                                self.aperture_mirror,
+                                self.aperture_scale,
+                                output_rotation,
+                                self.layer,
+                            ]
+                            id_parts.extend(self._image_transform_id_parts())
+                            id_parts.extend(self._aperture_transform_id_parts())
+                            if self.step_repeat is not None:
+                                id_parts.extend(["sr", x_index, y_index])
+                            obj_id = stable_id("reg", *id_parts)
+                            prov = self._step_repeat_provenance(
+                                src, x_index or 0, y_index or 0, dx_mm, dy_mm
+                            )
+                            self._add_aperture_transform_provenance(prov)
+                            prov.add_evidence(
+                                Evidence(
+                                    "gerber_outline_macro_flash",
+                                    (
+                                        f"vertices={len(ap.outline_vertices)}; "
+                                        f"primitive_rotation_deg_ccw="
+                                        f"{ap.outline_rotation_deg:.12g}; "
+                                        f"mirror={self.aperture_mirror}; "
+                                        f"aperture_scale={self.aperture_scale:.12g}; "
+                                        f"object_rotation_deg_ccw={output_rotation:.12g}; "
+                                        "method=exact_linear_outline; "
+                                        "approximated=false"
+                                    ),
+                                    1.0,
+                                    src,
+                                )
+                            )
+                            region = CopperRegion(
+                                obj_id,
+                                shell,
+                                self.layer,
+                                provenance=prov,
+                            )
+                            out.regions.append(region)
+                            self.material_image_operations.append(
+                                self.layer_polarity,
+                                region,
+                            )
+
+                        self.current = nxt
+                        continue
+
                     if ap.shape == "P":
                         if self.layer == "Edge.Cuts":
                             self._fail_or_warn(
