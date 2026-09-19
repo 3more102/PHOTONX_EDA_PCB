@@ -67,6 +67,8 @@ def _is_strict_blocker(code: str) -> bool:
         code.startswith("UNSUPPORTED_")
         or code.startswith("UNKNOWN_")
         or code.startswith("INVALID_")
+        or code.startswith("LATE_GERBER_")
+        or code.startswith("DUPLICATE_GERBER_")
         or code.startswith("GERBER_ARC_") and code.endswith("_UNSUPPORTED")
         or code in {
             "NON_CIRCULAR_DRAW",
