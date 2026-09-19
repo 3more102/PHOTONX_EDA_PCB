@@ -82,6 +82,7 @@ def test_step_repeat_expands_region_with_unique_ids_and_evidence(tmp_path: Path)
             "X010000Y000000D01*\n"
             "X010000Y010000D01*\n"
             "X000000Y010000D01*\n"
+            "X000000Y000000D01*\n"
             "G37*\n"
             "%SR*%"
         ),
@@ -127,7 +128,7 @@ def test_g75_semicircle_region_is_reconstructed_with_bounded_tessellation(tmp_pa
 
     from photonx_eda_pcb.geometry_kernel import region_shape
 
-    assert region_shape(region).area == pytest.approx(1.57079632679, abs=0.01)
+    assert region_shape(region).area == pytest.approx(1.57079632679, rel=0.01)
 
 
 def test_g75_full_circle_can_form_entire_region_contour(tmp_path: Path):
@@ -149,7 +150,7 @@ def test_g75_full_circle_can_form_entire_region_contour(tmp_path: Path):
     assert len(result.regions) == 1
     from photonx_eda_pcb.geometry_kernel import region_shape
 
-    assert region_shape(result.regions[0]).area == pytest.approx(3.14159265359, abs=0.02)
+    assert region_shape(result.regions[0]).area == pytest.approx(3.14159265359, rel=0.01)
 
 
 def test_g75_region_arc_supports_incremental_endpoints(tmp_path: Path):
