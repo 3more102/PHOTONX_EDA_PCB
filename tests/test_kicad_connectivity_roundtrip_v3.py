@@ -1,4 +1,4 @@
-from photonx_eda_pcb.exporters.kicad import export_kicad_with_report
+import pytest\n\nfrom photonx_eda_pcb.exporters.kicad import export_kicad_with_report
 from photonx_eda_pcb.kicad_reader import read_kicad_board_text
 from photonx_eda_pcb.mechanical_features import SlotFeature
 from photonx_eda_pcb.models import (
@@ -203,3 +203,72 @@ def test_connectivity_roundtrip_separates_export_losses(tmp_path):
         "unresolved_pad_net_ids": ["P_UNRESOLVED"],
         "unresolved_slot_net_ids": [],
     }
+
+
+def test_connectivity_roundtrip_detects_missing_pad_net_name(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    pad_fp = next(
+        footprint
+        for footprint in readback["footprints"]
+        if footprint["name"] == "PHOTONX:RecoveredPad"
+    )
+    pad_fp["pads"][0]["net_name"] = None
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["roundtrip_equal"] is False
+    assert any(
+        issue["code"] == "KICAD_ROUNDTRIP_NET_NAME_MISMATCH"
+        and issue["object_kind"] == "pad"
+        for issue in audit["issues"]
+    )
+
+
+def test_kicad_reader_rejects_fractional_net_table_ordinal():
+    with pytest.raises(ValueError, match="net table ordinal must be an integer"):
+        read_kicad_board_text(
+            '(kicad_pcb (net 1.5 "GND"))'
+        )
+
+
+def test_kicad_reader_rejects_fractional_segment_net_ordinal():
+    text = """
+    (kicad_pcb
+      (net 1 "GND")
+      (segment
+        (start 0 0)
+        (end 1 0)
+        (width 0.25)
+        (layer "F.Cu")
+        (net 1.5)
+      )
+    )
+    """
+    with pytest.raises(ValueError, match="segment net ordinal must be an integer"):
+        read_kicad_board_text(text)
+
+
+def test_kicad_reader_rejects_fractional_pad_net_ordinal():
+    text = """
+    (kicad_pcb
+      (net 1 "GND")
+      (footprint "PHOTONX:RecoveredPad"
+        (layer "F.Cu")
+        (at 0 0)
+        (property "Reference" "P1")
+        (pad "1" smd circle
+          (at 0 0)
+          (size 1 1)
+          (layers "F.Cu")
+          (net 1.5 "GND")
+        )
+      )
+    )
+    """
+    with pytest.raises(ValueError, match="pad net ordinal must be an integer"):
+        read_kicad_board_text(text)
