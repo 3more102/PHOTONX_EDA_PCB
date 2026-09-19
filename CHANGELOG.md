@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added optional C++17 spatial acceleration behind a stable C ABI for AABB candidate pairs and batched point-radius broad-phase queries, while retaining Python/Shapely/Euclidean predicates as correctness authorities. Added parity-checked native-vs-Python benchmark APIs and a `photonx native-benchmark` JSON workflow so future backend crossover decisions can be based on reproducible evidence rather than hard-coded assumptions.
+
 - Added specification-compliant Gerber aperture-macro variable semantics and numeric hardening: AD parameters seed macro variables, ordered `$n=expression` assignments are evaluated in source order, undefined variables evaluate to zero, exact token substitution prevents `$1` from aliasing `$10`, and any redefinition is rejected. Code-1 circle reduction now requires exactly four or five finite modifiers and rejects active-unit conversion overflow, with parser/preflight regressions for supported and fail-closed paths.
 
 - Extended Code-4 aperture-macro support beyond centered rectangle/regular-polygon reduction: any valid single-positive simple linear outline with 3–5000 vertices can now be retained exactly for D03 flashes on material layers, including irregular, concave, and off-center shapes. The production path rejects zero-length, self-touching, self-intersecting, open, non-finite, and zero-area contours; preserves primitive rotation before LM/LR/LS plus supported whole-image IR; and carries exact CopperRegion geometry through step-repeat, provenance, and ordered LPD/LPC composition. General Code-4 D01 sweeps and Edge.Cuts flashes remain fail-closed.
