@@ -13,6 +13,7 @@ from photonx_eda_pcb.parsers.layer_map import infer_layer
         ("%TF.FileFunction,Legend,Bot*%", "B.SilkS"),
         ("%TF.FileFunction,Paste,Top*%", "F.Paste"),
         ("%TF.FileFunction,Profile,NP*%", "Edge.Cuts"),
+        ("G04 #@! TF.FileFunction,Copper,L1,Top*", "F.Cu"),
     ],
 )
 def test_valid_x2_file_functions(attribute: str, expected: str) -> None:
@@ -34,6 +35,8 @@ def test_valid_x2_file_functions(attribute: str, expected: str) -> None:
         "%TF.FileFunction,Outline,Top*%",
         "%TF.FileFunction,Copper,L1,Top*%\n%TF.FileFunction,Copper,L2,Bot*%",
         "%TF.FileFunction,Copper,L1,Top*%\n%TF.FileFunction*%",
+        "G04 #@! TF.FileFunction*",
+        "%TF.FileFunction,Copper,L1,Top*%\nG04 #@! TF.FileFunction,Soldermask,Top*",
     ],
 )
 def test_present_but_unusable_x2_does_not_fall_back_to_filename(attribute: str) -> None:

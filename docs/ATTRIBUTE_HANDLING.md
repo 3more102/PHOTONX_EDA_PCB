@@ -6,7 +6,8 @@ Attribute absence must never be filled with invented semantics.
 ## `.FileFunction` layer inference
 
 PHOTONX treats an explicit `%TF.FileFunction,...*%` declaration as stronger
-layer evidence than the filename.
+layer evidence than the filename. The standardized legacy comment form
+`G04 #@! TF.FileFunction,...*` is recognized with the same semantics.
 
 For the layer classes currently materialized by the reconstruction pipeline,
 the supported standard mappings are:

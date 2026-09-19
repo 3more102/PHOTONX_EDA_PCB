@@ -59,7 +59,8 @@ def _x2_file_function_layer(text: str) -> str | None:
     if not match:
         return None
 
-    parts = [p.strip() for p in match.group("value").split(",")]
+    value = match.group("direct") or match.group("comment") or ""
+    parts = [p.strip() for p in value.split(",")]
     if not parts or any(not p for p in parts):
         return None
 
