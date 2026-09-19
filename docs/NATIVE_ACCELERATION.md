@@ -15,6 +15,7 @@ The Python API keeps the existing call form and adds an optional backend selecto
 - `backend="native"`: require the native implementation and report unavailability/unsupported input explicitly.
 
 The native library is optional. A missing compiler or missing shared library must not make the normal Python package unusable.
+If no native library is discovered, `auto` falls back to Python. If a native library is discovered/configured but fails to load, exposes the wrong ABI, or is missing required symbols, that installation error is surfaced instead of being silently hidden by fallback.
 
 ## Build
 
