@@ -19,6 +19,10 @@ class NativeBackendUnavailable(RuntimeError):
     pass
 
 
+class NativeBackendLoadError(RuntimeError):
+    pass
+
+
 class NativeBackendUnsupported(RuntimeError):
     pass
 
@@ -66,7 +70,7 @@ def _configure_library(library: ctypes.CDLL) -> ctypes.CDLL:
     library.photonx_native_abi_version.argtypes = []
     library.photonx_native_abi_version.restype = ctypes.c_uint32
     if int(library.photonx_native_abi_version()) != _ABI_VERSION:
-        raise NativeBackendUnavailable("unsupported PHOTONX native ABI version")
+        raise NativeBackendLoadError("unsupported PHOTONX native ABI version")
 
     library.photonx_candidate_pairs.argtypes = [
         ctypes.POINTER(_NativeAABB),
@@ -83,15 +87,18 @@ def _configure_library(library: ctypes.CDLL) -> ctypes.CDLL:
 
 @lru_cache(maxsize=1)
 def _load_library() -> ctypes.CDLL:
+    candidates = _library_candidates()
+    if not candidates:
+        raise NativeBackendUnavailable("no native library discovered")
+
     errors: list[str] = []
-    for candidate in _library_candidates():
+    for candidate in candidates:
         try:
             return _configure_library(ctypes.CDLL(candidate))
-        except (OSError, AttributeError, NativeBackendUnavailable) as exc:
+        except (OSError, AttributeError, NativeBackendLoadError) as exc:
             errors.append(f"{candidate}: {exc}")
 
-    detail = "; ".join(errors) if errors else "no native library discovered"
-    raise NativeBackendUnavailable(detail)
+    raise NativeBackendLoadError("; ".join(errors))
 
 
 def native_available() -> bool:
