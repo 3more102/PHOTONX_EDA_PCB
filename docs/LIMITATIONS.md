@@ -29,6 +29,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - metric/inch units and coordinate formats for the supported subset;
 - legacy Gerber absolute (`G90` / FS `A`) and incremental (`G91` / FS `I`) X/Y coordinate notation, with I/J retained as arc-center offsets;
 - point Excellon drill hits in absolute or incremental (`G91` / `ICI,ON`) coordinate mode;
+- bounded Excellon `R#(X#Y#)` repeat-hole commands, where X/Y are incremental steps from the preceding drill hit regardless of global coordinate mode; expansion is capped at 10,000 generated holes per command and malformed, anchorless, or over-limit repeats fail closed;
 - Excellon G85 straight slots in absolute or incremental mode, with the incremental start relative to the preceding coordinate and the incremental end relative to the slot start;
 - Excellon linear-route and supported routed-arc endpoints in absolute or incremental coordinate mode, while I/J remain arc-center offsets;
 - Excellon routed arcs using I/J center offsets and standard XNC X/Y/A radius form, tessellated with explicit approximation evidence;

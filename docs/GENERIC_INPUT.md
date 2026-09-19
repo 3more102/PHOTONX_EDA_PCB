@@ -88,6 +88,7 @@ The generic input path also handles several common real-world variations:
 - dark G36/G37 Gerber region statements with multiple explicitly closed contours, linear segments plus bounded G74 single-quadrant and G75 multi-quadrant G02/G03 circular boundaries, and multiple cut-in holes per contour when each bridge is a fully-coincident opposite horizontal/vertical linear pair and all bridges in that contour share one axis direction; holes are represented explicitly in CopperRegion geometry and compose with deterministic arc tessellation, supported MI/SF/OF/IR whole-image transforms, and step-repeat;
 - Excellon M71/M72 metric/inch selection;
 - Excellon tool definitions with feed/spindle suffixes;
+- bounded Excellon `R#(X#Y#)` repeat-hole commands using incremental step semantics from the preceding drill hit, with deterministic provenance and a 10,000-hole per-command safety cap;
 - standard XNC G02/G03 routed arcs using explicit X/Y endpoints plus A radius
   (bounded to the <=180-degree semantics defined by XNC);
 - additional Protel/Altium/EAGLE-style layer/file extensions;
