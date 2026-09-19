@@ -67,6 +67,11 @@ def test_identity_legacy_transforms_keep_supported_geometry(
     result = GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     assert len(result.tracks) == 1
+    if command == "%IPPOS*%":
+        assert any(
+            diagnostic.code == "GERBER_IMAGE_POLARITY_POSITIVE"
+            for diagnostic in result.diagnostics
+        )
 
 
 def test_non_default_legacy_transform_suppresses_permissive_geometry(
