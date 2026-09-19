@@ -209,3 +209,44 @@ def test_cpp_radius_batch_matches_python_center_rounding_at_cell_boundary():
     assert expected == [[(0.0, "edge")]]
     assert radius_queries(index, ((center, 0.0, 0.0),), backend="native") == expected
 
+
+
+def test_spatial_index_revision_tracks_insertions():
+    index = SpatialHashIndex(1.0)
+    assert index.revision == 0
+    index.insert("a", AABB(0.0, 0.0, 0.1, 0.1))
+    assert index.revision == 1
+    index.insert("b", AABB(0.1, 0.0, 0.2, 0.1))
+    assert index.revision == 2
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_persistent_index_handle_is_reused_until_revision_changes():
+    index = SpatialHashIndex(1.0)
+    index.insert("a", AABB(0.0, 0.0, 0.1, 0.1))
+
+    library = native_backend._load_library()
+    first = native_backend._get_native_index(index, library)
+    second = native_backend._get_native_index(index, library)
+    assert second is first
+
+    index.insert("b", AABB(0.1, 0.0, 0.2, 0.1))
+    third = native_backend._get_native_index(index, library)
+    assert third is not first
+    assert third.ids == ("a", "b")
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_persistent_index_refreshes_results_after_mutation():
+    index = SpatialHashIndex(1.0)
+    index.insert("a", AABB(0.0, 0.0, 0.1, 0.1))
+
+    assert candidate_pairs(index, backend="native") == []
+    assert radius_query(index, 0.15, 0.05, 0.06, backend="native") == []
+
+    index.insert("b", AABB(0.1, 0.0, 0.2, 0.1))
+
+    assert candidate_pairs(index, backend="native") == [("a", "b")]
+    assert radius_query(index, 0.15, 0.05, 0.06, backend="native") == [
+        (0.0, "b")
+    ]
