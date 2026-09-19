@@ -7,6 +7,7 @@ def canonical_board_dict(board):
       "pads":sorted([{"id":x.id,"center":pt(x.center),"size":[round(x.size_x,6),round(x.size_y,6)],"shape":x.shape,"layer":x.layer,"drill":x.drill,"net_id":x.net_id} for x in board.pads],key=lambda x:x["id"]),
       "drills":sorted([{"id":x.id,"center":pt(x.center),"diameter":round(x.diameter,6),"plating":x.plating} for x in board.drills],key=lambda x:x["id"]),
       "slots":sorted([slot(x) for x in getattr(board,"slots",())],key=lambda x:x["id"]),
+      "regions":sorted([{"id":x.id,"points":[pt(p) for p in x.points],"layer":x.layer,"net_id":x.net_id} for x in getattr(board,"regions",())],key=lambda x:x["id"]),
       "outline":sorted([{"id":x.id,"start":pt(x.start),"end":pt(x.end)} for x in board.outline],key=lambda x:x["id"]),
       "nets":sorted([{"id":x.id,"members":sorted(x.members),"label":x.label} for x in board.nets],key=lambda x:x["id"])
     }
