@@ -75,6 +75,7 @@ The generic input path also handles several common real-world variations:
 - Gerber UTF-8 BOMs;
 - modal/omitted D01/D02/D03 operation codes after an operation is established;
 - specification-defined zero-diameter C apertures as legal no-image objects; D01/D03/G02/G03 commands using them advance parser coordinate state without emitting material geometry;
+- deprecated centered rectangular-hole X/Y modifiers on standard C/R/O/P apertures for D03 material flashes when the hole strictly fits the outer aperture; the hole scales with LS and follows whole-image IR but, per the legacy rule, does not rotate with LR or P template rotation. Holed D01/G02/G03 draws remain fail-closed;
 - standalone D01/D02/D03 modal operation selection;
 - legacy G70/G71 unit selection plus modal G90/G91 absolute/incremental coordinate notation;
 - deprecated FS `A`/`I` absolute/incremental notation, with X/Y deltas accumulated safely and arc I/J retained as center offsets;
@@ -122,7 +123,7 @@ sniff window are ignored by content detection.
 ### Fail-closed boundaries
 
 PHOTONX still rejects or explicitly diagnoses semantics that would be unsafe to
-guess, including legacy Gerber IPNEG whole-image inversion (IPPOS is accepted once before coordinate data), anisotropic-SF circular interpolation, unsupported region forms such as disjoint or mixed-axis/invalid cut-in or Edge.Cuts regions, and LPC files that mix clear polarity with outline material geometry (C/R/O/P D03 flashes, including supported single-round-holed variants, and linear C/R/O/P D01 aperture sweeps are supported; round holes are transparent within the flash operation, rectangular sweeps are exact, and C/O curved boundaries use explicitly evidenced 0.005 mm chord-error-bounded polygonization), complex aperture macros, aperture blocks, and Excellon routed-arc dialects outside the bounded G02/G03 I/J or standard XNC X/Y/A-radius subsets. An input being discovered does not mean
+guess, including legacy Gerber IPNEG whole-image inversion (IPPOS is accepted once before coordinate data), anisotropic-SF circular interpolation, unsupported region forms such as disjoint or mixed-axis/invalid cut-in or Edge.Cuts regions, and LPC files that mix clear polarity with outline material geometry (C/R/O/P D03 flashes, including supported round-holed and legacy rectangular-holed variants, and linear C/R/O/P D01 aperture sweeps are supported; aperture holes are transparent within the flash operation, rectangular sweeps are exact, and C/O curved boundaries use explicitly evidenced 0.005 mm chord-error-bounded polygonization), complex aperture macros, aperture blocks, and Excellon routed-arc dialects outside the bounded G02/G03 I/J or standard XNC X/Y/A-radius subsets. An input being discovered does not mean
 every construct inside it is automatically accepted.
 
 
