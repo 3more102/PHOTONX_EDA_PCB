@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Hardened single-circle Gerber aperture-macro reduction against non-finite evaluated values. Diameter, center coordinates, exposure, and optional rotation must now all be finite before exact reduction, preventing NaN/Inf macro expressions from entering production geometry; strict parsing and preflight fail closed with regression coverage.
+- Hardened single-circle Gerber aperture-macro reduction against malformed evaluated values. Code 1 now accepts only the supported four/five-modifier forms, and exposure, diameter, center coordinates, plus optional rotation must all be finite before exact reduction, preventing extra fields or NaN/Inf expressions from entering production geometry; strict parsing and preflight fail closed with regression coverage.
 
 - Extended exact single-primitive rectangular Gerber aperture-macro reduction to arbitrary finite rotation. Centered Code-20/Code-2 vector lines may now use non-axis-aligned segments, while Code-21 center-line and deprecated Code-22 lower-left rectangles preserve arbitrary primitive rotation; intrinsic macro orientation composes with LM/LR/LS and supported whole-image IR, with non-orthogonal material flashes/draws emitted as exact polygonal rectangle geometry.
 
