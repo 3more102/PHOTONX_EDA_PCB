@@ -18,7 +18,7 @@ Current conservative policies include:
 
 - unknown-plating or unsupported plated slots are skipped;
 - valid copper-region shells and holes are exported as editable zone contours; hole-bearing zones omit cached fill and require an explicit KiCad repour, while invalid topology, unsupported layers, and unresolved-net regions are skipped;
-- tracks with a non-empty unresolved `net_id` are skipped instead of being relabelled net 0;
+- tracks with a non-empty unresolved `net_id`, or a layer outside the declared canonical KiCad copper set (`F.Cu`, `B.Cu`, `In1.Cu`..`In30.Cu`), are skipped instead of being relabelled or emitted on an undeclared layer;
 - arbitrary Excellon routed paths remain preserved in PHOTONX/JSON but omitted from KiCad.
 
 Older manifests remain readable: missing newer list keys are interpreted as empty lists.

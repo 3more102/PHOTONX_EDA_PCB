@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened KiCad track export against undeclared/noncanonical layer references. Track segments now export only on the board's declared canonical copper layers (`F.Cu`, `B.Cu`, and the structurally declared `In1.Cu`..`In30.Cu` prefix); invalid layers such as `In31.Cu` or user/documentation layers are omitted with `KICAD_TRACK_LAYER_UNSUPPORTED`, included in unified omission accounting, and may coexist with independent unresolved-net diagnostics without double-counting the skipped track.
+
 - Exposed the conservative KiCad export audit in the normal `photonx reconstruct --kicad` workflow. The CLI now emits the editable board, a complete `kicad_export_report.json`, the stable unified `kicad_omissions.json` manifest, and the separate native `kicad_validation.txt` result, preserving current slot/region/track/route export decisions and structured warnings without changing reconstruction exit-code semantics.
 
 - Extended conservative KiCad `CopperRegion` zone export to valid shell-and-hole geometry, including canonical inner-copper layers. The shell is emitted as the first zone polygon and reconstructed holes as subsequent polygons; hole-bearing zones are intentionally left unfilled with no cached `filled_polygon`, so observed voids are never silently refilled using invented copper. Invalid topology remains fail-closed, and the export report records that a KiCad repour is required under exporter-default zone rules.
