@@ -78,6 +78,7 @@ The generic input path also handles several common real-world variations:
 - legacy G70/G71 unit selection plus modal G90/G91 absolute/incremental coordinate notation;
 - deprecated FS `A`/`I` absolute/incremental notation, with X/Y deltas accumulated safely and arc I/J retained as center offsets;
 - deprecated Gerber MI mirroring, applied exactly to coordinate data while deliberately leaving apertures and step-repeat distances unmirrored as required by the specification;
+- deprecated Gerber SF coordinate scaling within the specification range; apertures and step-repeat distances remain unscaled, uniform SF composes with circular arcs, and anisotropic SF arcs fail closed;
 - deprecated Gerber OF image translation in the active MO units, applied after MI/SF and before IR regardless of command appearance;
 - legacy AS axis-select forms are accepted as output-device-only metadata because they do not alter CAD-to-CAM image geometry;
 - legacy IN/LN names are preserved as diagnostic comment metadata; G55 and M01 are accepted as no-image-effect commands, while M00 terminates parsing like M02;
