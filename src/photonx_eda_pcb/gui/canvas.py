@@ -170,5 +170,5 @@ class BoardCanvas(tk.Canvas):
 
     def _wheel(self, event):
         factor = 1.15 if event.delta > 0 else 1 / 1.15
-        self.state.scale = min(100.0, max(2.0, self.state.scale * factor))
+        self.state.scale = min(100.0, max(0.05, self.state.scale * factor))
         self.redraw()
