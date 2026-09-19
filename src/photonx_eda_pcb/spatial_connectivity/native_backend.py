@@ -250,8 +250,10 @@ def _persistent_aabb_index(index, ids, library, cell_size):
             and cache.handle is not None
         ):
             return cache, False
-        cache.close()
-
+        # Do not close a stale handle here: another in-flight query may still
+        # hold this wrapper. Replacing the cache drops the index-owned reference;
+        # the wrapper destructor retires the native handle after the last user.
+        
     persistent = _create_persistent_aabb_index(
         index, ids, library, cell_size, revision
     )
@@ -328,6 +330,7 @@ def native_candidate_pairs(index, tolerance: float = 0.0):
     finally:
         if temporary:
             persistent.close()
+
 
 def native_radius_queries(index, queries):
     library = _load_library()
