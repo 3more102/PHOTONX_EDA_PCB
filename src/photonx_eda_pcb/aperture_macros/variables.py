@@ -13,6 +13,9 @@ def substitute(expr,variables,undefined=0.0):
             normalized[str(int(token))]=value
 
     def replace(match):
-        return str(normalized.get(str(int(match.group(1))),undefined))
+        index=int(match.group(1))
+        if index <= 0:
+            raise ValueError("macro variable names must use a positive integer")
+        return str(normalized.get(str(index),undefined))
 
     return _VARIABLE.sub(replace,str(expr))
