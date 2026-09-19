@@ -86,3 +86,22 @@ def test_cpp_backend_handles_touching_boundaries_and_negative_coordinates():
         ("gap", "touch"),
         ("left", "touch"),
     ]
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_backend_preserves_reverse_direction_float_boundary_parity():
+    def box_for(i):
+        row, col = divmod(i, 15)
+        x = col * 0.31 - 2.0
+        y = row * 0.29 - 1.0
+        width = 0.08 + (i % 4) * 0.015
+        height = 0.07 + (i % 5) * 0.01
+        return AABB(x, y, x + width, y + height)
+
+    index = SpatialHashIndex(0.4)
+    index.insert("a-upper", box_for(117))
+    index.insert("z-lower", box_for(102))
+
+    expected = candidate_pairs(index, 0.2, backend="python")
+    assert expected == [("a-upper", "z-lower")]
+    assert candidate_pairs(index, 0.2, backend="native") == expected
+
