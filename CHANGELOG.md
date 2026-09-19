@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added Gerber aperture-macro variable-definition semantics: ordered `$n=expression` assignments are evaluated before subsequent primitives, AD-supplied variables cannot be redefined, previously defined macro variables cannot be redefined, and undefined variables evaluate as zero per the current Gerber specification. Production parser/preflight coverage verifies valid definitions and fail-closed redefinition handling.
+
 - Extended exact single-primitive rectangular Gerber aperture-macro reduction to arbitrary finite rotation. Centered Code-20/Code-2 vector lines may now use non-axis-aligned segments, while Code-21 center-line and deprecated Code-22 lower-left rectangles preserve arbitrary primitive rotation; intrinsic macro orientation composes with LM/LR/LS and supported whole-image IR, with non-orthogonal material flashes/draws emitted as exact polygonal rectangle geometry.
 
 - Added exact production reduction for single positive origin-centered Gerber aperture-macro Polygon primitives (Code 5) to standard `P` apertures. The supported subset enforces integer vertex counts 3–12, positive circumscribed diameter, finite rotation, active-unit conversion, strict/preflight fail-closed validation, and reuses the existing exact P flash/D01/transform/LPD-LPC paths.
