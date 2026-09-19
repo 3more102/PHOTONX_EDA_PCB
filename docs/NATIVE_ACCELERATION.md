@@ -55,7 +55,8 @@ The native backend:
 2. preserves inclusive AABB intersection semantics;
 3. accepts only finite, normalized boxes, finite non-negative tolerance, and positive finite cell size;
 4. returns an unsupported-range status instead of attempting pathological cell expansions;
-5. never asserts copper connectivity itself.
+5. caps aggregate native query-cell work and intermediate pair/match output so dense or adversarial inputs fall back safely instead of exhausting memory;
+6. never asserts copper connectivity itself.
 
 Unsupported native inputs fall back to the Python reference path in `auto` mode.
 
