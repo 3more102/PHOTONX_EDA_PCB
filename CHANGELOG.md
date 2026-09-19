@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Corrected Gerber arc provenance under legacy image transforms: reflecting exactly one MI axis now reports the transformed output arc direction as the opposite of the source CW/CCW command, while two-axis mirroring, positive SF, OF translation, and IR rotation preserve orientation. Arc evidence now records both source and output directions.
 - Added legacy Gerber `SF` coordinate scaling for the specification range 0.0001..999.99999. SF scales coordinate data only; apertures and step-repeat distances remain unchanged. Uniform scaling is supported for circular interpolation with output-space chord-error preservation, while anisotropic circular interpolation fails closed instead of being approximated as an ellipse.
 - Added `gerber_scale_factor` provenance and transform-aware stable-ID inputs for non-identity SF state.
 - Added legacy non-geometric Gerber compatibility: both AS axis-select forms are accepted without changing CAD-to-CAM geometry, IN/LN names are preserved as comment diagnostics, G55 and M01 are accepted as no-ops, and M00 now terminates parsing like M02.

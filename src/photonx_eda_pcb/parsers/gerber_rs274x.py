@@ -798,6 +798,13 @@ class GerberRS274XParser:
             -point.y if self.mirror_b else point.y,
         )
 
+    def _output_arc_direction(self, clockwise: bool) -> str:
+        # A reflection over exactly one axis reverses planar orientation.
+        # Positive SF, translation, and rotation preserve orientation.
+        reflected_once = self.mirror_a ^ self.mirror_b
+        output_clockwise = bool(clockwise) ^ reflected_once
+        return "CW" if output_clockwise else "CCW"
+
     def _rotate_image_point(self, point: Point) -> Point:
         if self.image_rotation_deg == 90:
             return Point(-point.y, point.x)
@@ -1758,7 +1765,8 @@ class GerberRS274XParser:
             return
 
         src = SourceRef(str(path), line_no, line)
-        direction = "CW" if clockwise else "CCW"
+        source_direction = "CW" if clockwise else "CCW"
+        output_direction = self._output_arc_direction(clockwise)
         width = max(aperture.x, aperture.y)
 
         for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
@@ -1784,7 +1792,7 @@ class GerberRS274XParser:
                     nxt.y,
                     center.x,
                     center.y,
-                    direction,
+                    source_direction,
                     segment_index,
                     segment_count,
                     width,
@@ -1807,7 +1815,9 @@ class GerberRS274XParser:
                         "gerber_arc_tessellation",
                         (
                             f"quadrant_mode={self.quadrant_mode}; "
-                            f"direction={direction}; "
+                            f"direction={output_direction}; "
+                            f"source_direction={source_direction}; "
+                            f"output_direction={output_direction}; "
                             f"center_mm=({repeated_center.x:.12g},"
                             f"{repeated_center.y:.12g}); "
                             f"radius_mm={radius * self.scale_a:.12g}; "
