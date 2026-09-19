@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Hardened text-artifact durability by routing CLI reports, reconstruction bundles, JSON/CSV/SVG/KiCad exports, and KiCad omission/validation artifacts through same-directory atomic replacement. Temporary output is flushed and fsynced before `os.replace`, and failed replacement preserves the previous target instead of exposing a partial write.
+- Hardened text-artifact durability by routing CLI reports, reconstruction bundles, JSON/CSV/SVG/KiCad exports, and KiCad omission/validation artifacts through same-directory atomic replacement. Temporary output is flushed and fsynced before `os.replace`, failed replacement preserves the previous target instead of exposing a partial write, and the containing directory is best-effort fsynced after replacement where the platform/filesystem supports it.
 
 - Added an optional C++17 native spatial-acceleration backend behind a versioned C ABI. The backend provides deterministic AABB candidate-pair generation plus batched point-radius broad-phase queries used by drill association, footprint clustering/metrics, and component inference/metrics; Python remains the correctness reference and automatic fallback, exact Euclidean/connectivity predicates stay authoritative, native discovery is cached, ABI/range failures are explicit, and CI builds/loads the shared library on Python 3.11/3.12/3.13 before running the full regression suite.
 
