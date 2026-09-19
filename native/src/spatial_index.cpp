@@ -157,7 +157,11 @@ int build_index(
     }
 
     index.cell_size = cell_size;
-    index.boxes.assign(boxes, boxes + box_count);
+    if (box_count == 0U) {
+        index.boxes.clear();
+    } else {
+        index.boxes.assign(boxes, boxes + box_count);
+    }
     index.center_x.assign(box_count, 0.0);
     index.center_y.assign(box_count, 0.0);
     index.center_valid.assign(box_count, 0U);
