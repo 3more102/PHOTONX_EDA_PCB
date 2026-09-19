@@ -285,6 +285,10 @@ class ExcellonParser:
         self._route_sources=[];self._route_evidence=[]
 
     def parse(self,path:str|Path)->ExcellonResult:
+        # Treat every input file as an independent evidence source. Parser
+        # instances are reusable, so no units, tools, coordinates, route state,
+        # or fail-closed suppression may leak from an earlier parse.
+        ExcellonParser.__init__(self, strict=self.strict)
         p=Path(path);out=ExcellonResult()
         for line_no,raw in enumerate(p.read_text(encoding="utf-8-sig",errors="strict").splitlines(),1):
             line=raw.strip().upper()
