@@ -51,15 +51,20 @@ _AD_STANDARD = re.compile(
 _AD_MACRO = re.compile(r"^%ADD(\d+)([A-Za-z_.$][A-Za-z0-9_.$-]*)(?:,([^*]*))?\*%$")
 _SELECT = re.compile(r"^(?:G54)?D(\d+)\*$")
 _OP_SELECT = re.compile(r"^D0?([123])\*$")
+_GERBER_UNSIGNED_DECIMAL_PATTERN = r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
+_GERBER_SIGNED_DECIMAL_PATTERN = rf"[+-]?{_GERBER_UNSIGNED_DECIMAL_PATTERN}"
 _COORD = re.compile(
-    r"^(?:G0?1)?(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?(?:D0?([123]))?\*$"
+    rf"^(?:G0?1)?"
+    rf"(?:X({_GERBER_SIGNED_DECIMAL_PATTERN}))?"
+    rf"(?:Y({_GERBER_SIGNED_DECIMAL_PATTERN}))?"
+    r"(?:D0?([123]))?\*$"
 )
 _ARC_COORD = re.compile(
     r"^(?:(G0?[23]))?"
-    r"(?:X([+-]?[0-9.]+))?"
-    r"(?:Y([+-]?[0-9.]+))?"
-    r"(?:I([+-]?[0-9.]+))?"
-    r"(?:J([+-]?[0-9.]+))?"
+    rf"(?:X({_GERBER_SIGNED_DECIMAL_PATTERN}))?"
+    rf"(?:Y({_GERBER_SIGNED_DECIMAL_PATTERN}))?"
+    rf"(?:I({_GERBER_SIGNED_DECIMAL_PATTERN}))?"
+    rf"(?:J({_GERBER_SIGNED_DECIMAL_PATTERN}))?"
     r"(?:D0?([12]))?\*$"
 )
 _COORDINATE_LIKE = re.compile(r"^(?:G0?[123](?=[XYIJD*])|[XYIJ])")
