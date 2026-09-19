@@ -5,8 +5,8 @@ import re
 _UNSIGNED_DECIMAL_PATTERN = r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
 _RE = re.compile(
     rf"%SR"
-    rf"(?:X(?P<x>\d+))?"
-    rf"(?:Y(?P<y>\d+))?"
+    rf"(?:X(?P<x>[0-9]+))?"
+    rf"(?:Y(?P<y>[0-9]+))?"
     rf"(?:I(?P<i>{_UNSIGNED_DECIMAL_PATTERN}))?"
     rf"(?:J(?P<j>{_UNSIGNED_DECIMAL_PATTERN}))?"
     rf"\*%"
