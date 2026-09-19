@@ -32,6 +32,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - Excellon G85 straight slots in absolute or incremental mode, with the incremental start relative to the preceding coordinate and the incremental end relative to the slot start;
 - Excellon linear-route and supported routed-arc endpoints in absolute or incremental coordinate mode, while I/J remain arc-center offsets;
 - Excellon routed arcs using I/J center offsets and standard XNC X/Y/A radius form, tessellated with explicit approximation evidence;
+- Excellon `M30` end-of-file semantics: `M30` terminates the program; any later non-empty command is rejected in strict mode and suppresses all permissive file geometry instead of leaking post-EOF manufacturing data;
 - deterministic source provenance;
 - geometry-based same-layer connectivity;
 - physical-net groups;
