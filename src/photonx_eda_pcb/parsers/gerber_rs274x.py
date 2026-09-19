@@ -174,6 +174,7 @@ class GerberRS274XParser:
         self.aperture_mirror_source: SourceRef | None = None
         self.aperture_rotation_source: SourceRef | None = None
         self.aperture_scale_source: SourceRef | None = None
+        self.image_body_started = False
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -537,7 +538,7 @@ class GerberRS274XParser:
                 self._disable_image_geometry(out)
             return
 
-        if out.tracks or out.pads or out.outline:
+        if self.image_body_started:
             self._parse_error_or_warn(
                 path,
                 line_no,
@@ -592,7 +593,7 @@ class GerberRS274XParser:
                 out,
             )
             return
-        if out.tracks or out.pads or out.outline:
+        if self.image_body_started:
             self._parse_error_or_warn(
                 path,
                 line_no,
@@ -675,7 +676,7 @@ class GerberRS274XParser:
                 self._disable_image_geometry(out)
             return
 
-        if out.tracks or out.pads or out.outline:
+        if self.image_body_started:
             self._fail_or_warn(
                 path,
                 line_no,
@@ -729,7 +730,7 @@ class GerberRS274XParser:
                 self._disable_image_geometry(out)
             return
 
-        if out.tracks or out.pads or out.outline:
+        if self.image_body_started:
             self._fail_or_warn(
                 path,
                 line_no,
@@ -795,7 +796,7 @@ class GerberRS274XParser:
                 self._disable_image_geometry(out)
             return
 
-        if out.tracks or out.pads or out.outline:
+        if self.image_body_started:
             self._fail_or_warn(
                 path,
                 line_no,
@@ -845,7 +846,7 @@ class GerberRS274XParser:
                 self._disable_image_geometry(out)
             return
 
-        if out.tracks or out.pads or out.outline:
+        if self.image_body_started:
             self._fail_or_warn(
                 path,
                 line_no,
@@ -2201,6 +2202,7 @@ class GerberRS274XParser:
                         self.interpolation = "ccw_arc"
 
                     nxt = self._coordinate_point(x_raw, y_raw)
+                    self.image_body_started = True
 
                     if not self.image_geometry_enabled:
                         self.current = nxt
@@ -2271,6 +2273,7 @@ class GerberRS274XParser:
                 if op is not None:
                     self.current_operation = op
                 nxt = self._coordinate_point(x_raw, y_raw)
+                self.image_body_started = True
 
                 if not self.image_geometry_enabled:
                     self.current = nxt
