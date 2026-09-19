@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Completed KiCad omission accounting across conditional geometry families. Export reports and the unified omission manifest now distinguish exported/skipped slots, exported/skipped copper regions, exported/skipped track segments, and omitted Excellon routed paths; manifest validation checks duplicate IDs, exported/skipped overlap, and family-specific reason codes while remaining compatible with older slot-only manifests.
+
 - Hardened KiCad net-reference export: a non-empty unknown `net_id` is no longer silently rewritten as net 0. Recovered pads and plated-slot pad geometry remain exportable without a net claim when identity is unresolved, while board track segments with unresolved net references are omitted and reported because their KiCad representation requires a net ordinal. Explicitly unassigned objects (`net_id is None`) retain net-0 behavior.
 
 - Extended KiCad PCB export for multilayer reconstructions: the highest observed canonical `InN.Cu` layer now declares the structurally required contiguous `In1.Cu` through `InN.Cu` prefix in the board layer table with KiCad-20240108-compatible ordinals. Inner-layer tracks and conservative inner-layer `CopperRegion` zones no longer reference undeclared canonical copper layers; dielectric/material/thickness stack-up data is not invented, and unsupported/noncanonical region layers remain explicit omissions.
