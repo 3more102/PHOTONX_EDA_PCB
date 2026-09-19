@@ -42,9 +42,9 @@ Modern Gerber `LM`, `LR`, and `LS` are modal object-creation transforms and are 
 - `LMN/LMX/LMY/LMXY` are exact because supported standard apertures and reduced simple macros are centered and mirror-symmetric;
 - `LR` accepts any finite angle for circular apertures, where rotation is geometry-invariant;
 - rectangular and obround linear D01 sweeps accept arbitrary finite `LR`; rectangular sweeps remain polygon-exact and obround curved boundaries retain the 0.005 mm inscribed-chord error target;
-- rectangular and obround D03 flashes remain exact only for rotations in 90-degree steps, swapping X/Y extents for 90/270 degrees;
-- `LS` accepts any finite factor greater than zero and scales aperture dimensions, linear draw width, and circular-arc draw width;
-- non-orthogonal rectangular/obround flashes fail closed because the current `PadCandidate` model cannot represent a rotated axis-aligned shape exactly.
+- rectangular and obround D03 flashes accept arbitrary finite `LR`; 90-degree-step cases remain axis-aligned PadCandidate objects, while non-orthogonal cases are materialized as CopperRegion polygons;
+- rotated rectangular flashes are polygon-exact; rotated obround flashes retain the deterministic 0.005 mm inscribed-chord boundary target;
+- `LS` accepts any finite factor greater than zero and scales aperture dimensions, linear draw width, and circular-arc draw width.
 
 The transform state can be changed multiple times. Each new LM/LR/LS command replaces that parameter's previous value, matching the Gerber graphics-state model. Active non-default states are recorded in provenance and deterministic IDs.
 

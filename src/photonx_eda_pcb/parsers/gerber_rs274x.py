@@ -25,6 +25,7 @@ from ..gerber_image import (
     canonical_polygon_components,
     polygonize_aperture_track,
     polygonize_flash,
+    polygonize_rotated_flash,
     polygonize_track,
     trace_polygon_operation_contributions,
 )
@@ -4080,48 +4081,178 @@ class GerberRS274XParser:
                             )
 
                 elif operation == "3":
-                    transformed_size = self._transformed_aperture_size(
-                        ap, p, line_no, line, out
+                    scaled_x = ap.x * self.aperture_scale
+                    scaled_y = ap.y * self.aperture_scale
+                    orthogonal_size = (
+                        (scaled_x, scaled_y)
+                        if ap.shape == "C"
+                        else self._orthogonal_rectangle_size(
+                            scaled_x,
+                            scaled_y,
+                            self.aperture_rotation_deg,
+                        )
                     )
-                    if transformed_size is None:
-                        self.current = nxt
-                        continue
-                    size_x, size_y = self._rotate_image_size(*transformed_size)
-                    for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
-                        center = self._transform_output_point(
-                            nxt, dx_mm, dy_mm
-                        )
-                        id_parts = [
-                            p.name,
-                            line_no,
-                            nxt.x,
-                            nxt.y,
-                            ap.code,
-                            self.layer,
-                        ]
-                        id_parts.extend(self._image_transform_id_parts())
-                        id_parts.extend(self._aperture_transform_id_parts())
-                        if self.step_repeat is not None:
-                            id_parts.extend(["sr", x_index, y_index])
-                        obj_id = stable_id("pad", *id_parts)
-                        prov = self._step_repeat_provenance(
-                            src, x_index or 0, y_index or 0, dx_mm, dy_mm
-                        )
-                        self._add_aperture_transform_provenance(prov)
-                        pad = PadCandidate(
-                            obj_id,
-                            center,
-                            size_x,
-                            size_y,
-                            ap.shape,
-                            self.layer,
-                            provenance=prov,
-                        )
-                        out.pads.append(pad)
-                        self.material_image_operations.append(
-                            self.layer_polarity,
-                            pad,
-                        )
+
+                    if orthogonal_size is not None:
+                        size_x, size_y = self._rotate_image_size(*orthogonal_size)
+                        for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
+                            center = self._transform_output_point(
+                                nxt, dx_mm, dy_mm
+                            )
+                            id_parts = [
+                                p.name,
+                                line_no,
+                                nxt.x,
+                                nxt.y,
+                                ap.code,
+                                self.layer,
+                            ]
+                            id_parts.extend(self._image_transform_id_parts())
+                            id_parts.extend(self._aperture_transform_id_parts())
+                            if self.step_repeat is not None:
+                                id_parts.extend(["sr", x_index, y_index])
+                            obj_id = stable_id("pad", *id_parts)
+                            prov = self._step_repeat_provenance(
+                                src, x_index or 0, y_index or 0, dx_mm, dy_mm
+                            )
+                            self._add_aperture_transform_provenance(prov)
+                            pad = PadCandidate(
+                                obj_id,
+                                center,
+                                size_x,
+                                size_y,
+                                ap.shape,
+                                self.layer,
+                                provenance=prov,
+                            )
+                            out.pads.append(pad)
+                            self.material_image_operations.append(
+                                self.layer_polarity,
+                                pad,
+                            )
+                    else:
+                        if self.layer == "Edge.Cuts":
+                            self._fail_or_warn(
+                                p,
+                                line_no,
+                                line,
+                                "UNSUPPORTED_GERBER_APERTURE_TRANSFORM",
+                                (
+                                    "non-orthogonal rectangular/obround D03 flashes "
+                                    "are supported only on material layers"
+                                ),
+                                out,
+                            )
+                            self.current = nxt
+                            continue
+
+                        output_aperture_rotation = (
+                            self.aperture_rotation_deg + self.image_rotation_deg
+                        ) % 360.0
+                        for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
+                            center = self._transform_output_point(
+                                nxt, dx_mm, dy_mm
+                            )
+                            try:
+                                polygonization = polygonize_rotated_flash(
+                                    center.x,
+                                    center.y,
+                                    scaled_x,
+                                    scaled_y,
+                                    ap.shape,
+                                    rotation_deg=output_aperture_rotation,
+                                    max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+                                    max_arc_segments=_MAX_ARC_SEGMENTS,
+                                )
+                                components = canonical_polygon_components(
+                                    polygonization.geometry
+                                )
+                            except (TypeError, ValueError) as exc:
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "GERBER_ROTATED_FLASH_INVALID",
+                                    f"rotated flash polygonization failed: {exc}",
+                                    out,
+                                )
+                                continue
+
+                            if len(components) != 1 or components[0].holes:
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "GERBER_ROTATED_FLASH_INVALID",
+                                    (
+                                        "rotated flash did not produce one simply "
+                                        "connected polygon"
+                                    ),
+                                    out,
+                                )
+                                continue
+
+                            component = components[0]
+                            shell = tuple(Point(x, y) for x, y in component.shell)
+                            id_parts = [
+                                p.name,
+                                line_no,
+                                "rotated_flash",
+                                nxt.x,
+                                nxt.y,
+                                ap.code,
+                                ap.shape,
+                                scaled_x,
+                                scaled_y,
+                                output_aperture_rotation,
+                                self.layer,
+                            ]
+                            id_parts.extend(self._image_transform_id_parts())
+                            id_parts.extend(self._aperture_transform_id_parts())
+                            if self.step_repeat is not None:
+                                id_parts.extend(["sr", x_index, y_index])
+                            obj_id = stable_id("reg", *id_parts)
+                            prov = self._step_repeat_provenance(
+                                src, x_index or 0, y_index or 0, dx_mm, dy_mm
+                            )
+                            self._add_aperture_transform_provenance(prov)
+                            method = (
+                                "rotated_polygon_exact"
+                                if not polygonization.approximated
+                                else "rotated_inscribed_chords"
+                            )
+                            prov.add_evidence(
+                                Evidence(
+                                    "gerber_flash_polygonization",
+                                    (
+                                        f"shape={ap.shape}; "
+                                        f"method={method}; "
+                                        f"size_x_mm={scaled_x:.12g}; "
+                                        f"size_y_mm={scaled_y:.12g}; "
+                                        f"rotation_deg_ccw="
+                                        f"{output_aperture_rotation:.12g}; "
+                                        f"curved_segments="
+                                        f"{polygonization.curved_segments}; "
+                                        f"max_chord_error_mm="
+                                        f"{polygonization.max_chord_error_mm:.12g}; "
+                                        f"approximated="
+                                        f"{str(polygonization.approximated).lower()}"
+                                    ),
+                                    1.0,
+                                    src,
+                                )
+                            )
+                            region = CopperRegion(
+                                obj_id,
+                                shell,
+                                self.layer,
+                                provenance=prov,
+                            )
+                            out.regions.append(region)
+                            self.material_image_operations.append(
+                                self.layer_polarity,
+                                region,
+                            )
 
                 self.current = nxt
                 continue

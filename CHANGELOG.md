@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-- Extended rectangular and obround linear D01 sweeps to arbitrary finite Gerber `LR` rotation. Rotated rectangular sweeps remain polygon-exact; obround curved boundaries retain the 0.005 mm chord-error policy. Effective aperture rotation composes with whole-image `IR`, is recorded in provenance, and participates in LPD/LPC composition. Non-orthogonal R/O D03 flashes remain fail-closed because PadCandidate has no orientation field.
+- Added arbitrary finite `LR` support for rectangular and obround D03 flashes on material layers. Orthogonal cases remain PadCandidate objects; non-orthogonal flashes are materialized as CopperRegion polygons so exact rectangular geometry and 0.005 mm chord-error-bounded obround geometry can participate in step-repeat, whole-image transforms, connectivity/DRC, provenance, and ordered LPD/LPC composition without suppressing the file.
 
-- Added bounded linear D01 support for rectangular and obround Gerber apertures on material layers. Rectangular sweeps are materialized exactly as deterministic CopperRegion polygons; obround sweeps use the existing 0.005 mm inscribed-chord policy for curved aperture boundaries. The geometry participates in step-repeat, supported MI/SF/OF/IR and LM/LR/LS transforms, ordered LPD/LPC image composition, connectivity, DRC, validation, and component-local provenance. Non-orthogonal R/O flashes and non-circular Edge.Cuts draws remain fail-closed.
+- Extended rectangular and obround linear D01 sweeps to arbitrary finite Gerber `LR` rotation. Rotated rectangular sweeps remain polygon-exact; obround curved boundaries retain the 0.005 mm chord-error policy. Effective aperture rotation composes with whole-image `IR`, is recorded in provenance, and participates in LPD/LPC composition. Non-circular Edge.Cuts draws remain fail-closed.
+
+- Added bounded linear D01 support for rectangular and obround Gerber apertures on material layers. Rectangular sweeps are materialized exactly as deterministic CopperRegion polygons; obround sweeps use the existing 0.005 mm inscribed-chord policy for curved aperture boundaries. The geometry participates in step-repeat, supported MI/SF/OF/IR and LM/LR/LS transforms, ordered LPD/LPC image composition, connectivity, DRC, validation, and component-local provenance. Non-circular Edge.Cuts draws remain fail-closed.
 
 - Extended bounded Gerber `%LPC*%` composition to tessellated G02/G03 circular-aperture tracks. Existing 0.005 mm centerline chord-error tessellation is composed with 0.005 mm capsule-cap polygonization and recorded with a conservative <=0.010 mm combined boundary-error budget; arc and track evidence remain component-local and source-ordered. Outline geometry remains fail-closed.
 
