@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from photonx_eda_pcb.errors import ParseError, UnsupportedFeatureError
+from photonx_eda_pcb.errors import ParseError
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 from photonx_eda_pcb.preflight import preflight
 
@@ -33,7 +33,7 @@ def test_dark_layer_polarity_keeps_supported_geometry(tmp_path: Path):
     assert len(result.tracks) == 1
 
 
-def test_clear_layer_polarity_fails_closed_in_strict_mode(tmp_path: Path):
+def test_clear_layer_polarity_linear_track_is_supported_noop_on_empty_image(tmp_path: Path):
     path = _write(
         tmp_path,
         "%LPC*%\n"
@@ -41,11 +41,13 @@ def test_clear_layer_polarity_fails_closed_in_strict_mode(tmp_path: Path):
         "X010000Y000000D01*\n",
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="tracks or outline geometry"):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks == []
+    assert result.regions == []
 
 
-def test_clear_layer_polarity_suppresses_geometry_in_permissive_mode(
+def test_clear_layer_polarity_linear_track_is_supported_in_permissive_mode(
     tmp_path: Path,
 ):
     path = _write(
@@ -59,14 +61,15 @@ def test_clear_layer_polarity_suppresses_geometry_in_permissive_mode(
 
     assert result.tracks == []
     assert result.pads == []
+    assert result.regions == []
     assert result.outline == []
-    assert any(
+    assert not any(
         diagnostic.code == "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY"
         for diagnostic in result.diagnostics
     )
 
 
-def test_late_clear_polarity_clears_prior_geometry_and_never_reenables(
+def test_late_clear_polarity_composes_prior_and_later_linear_tracks(
     tmp_path: Path,
 ):
     path = _write(
@@ -84,6 +87,11 @@ def test_late_clear_polarity_clears_prior_geometry_and_never_reenables(
     assert result.tracks == []
     assert result.pads == []
     assert result.outline == []
+    assert len(result.regions) == 2
+    assert any(
+        diagnostic.code == "GERBER_CLEAR_POLARITY_REGION_COMPOSITION"
+        for diagnostic in result.diagnostics
+    )
 
 
 def test_malformed_layer_polarity_fails_closed(tmp_path: Path):
@@ -115,7 +123,7 @@ def test_malformed_layer_polarity_suppresses_permissive_geometry(tmp_path: Path)
     )
 
 
-def test_preflight_blocks_clear_layer_polarity(tmp_path: Path):
+def test_preflight_accepts_clear_linear_track_subset(tmp_path: Path):
     path = _write(
         tmp_path,
         "%LPC*%\n"
@@ -126,8 +134,5 @@ def test_preflight_blocks_clear_layer_polarity(tmp_path: Path):
     report = preflight(path)
 
     assert report.discovered_files == 1
-    assert not report.ready_for_strict_reconstruction
-    assert any(
-        "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY" in blocker
-        for blocker in report.strict_blockers
-    )
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
