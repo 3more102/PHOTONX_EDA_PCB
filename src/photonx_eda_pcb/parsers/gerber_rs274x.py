@@ -544,7 +544,7 @@ class GerberRS274XParser:
                 line_no,
                 line,
                 "LATE_GERBER_AXIS_SELECT",
-                "legacy Gerber AS must appear before emitted image geometry",
+                "legacy Gerber AS must appear before any coordinate data",
                 out,
             )
             if not self.strict:
@@ -599,7 +599,7 @@ class GerberRS274XParser:
                 line_no,
                 line,
                 "LATE_GERBER_IMAGE_NAME",
-                "legacy Gerber IN must appear before emitted image geometry",
+                "legacy Gerber IN must appear before any coordinate data",
                 out,
             )
             return
@@ -682,7 +682,7 @@ class GerberRS274XParser:
                 line_no,
                 line,
                 "LATE_GERBER_MIRROR_IMAGE",
-                "legacy Gerber MI must precede emitted image geometry",
+                "legacy Gerber MI must precede any coordinate data",
                 out,
             )
             if not self.strict:
@@ -736,7 +736,7 @@ class GerberRS274XParser:
                 line_no,
                 line,
                 "LATE_GERBER_OFFSET",
-                "legacy Gerber OF must precede emitted image geometry",
+                "legacy Gerber OF must precede any coordinate data",
                 out,
             )
             if not self.strict:
@@ -802,7 +802,7 @@ class GerberRS274XParser:
                 line_no,
                 line,
                 "LATE_GERBER_IMAGE_ROTATION",
-                "legacy Gerber IR must precede emitted image geometry",
+                "legacy Gerber IR must precede any coordinate data",
                 out,
             )
             if not self.strict:
@@ -852,7 +852,7 @@ class GerberRS274XParser:
                 line_no,
                 line,
                 "LATE_GERBER_SCALE_FACTOR",
-                "legacy Gerber SF must precede emitted image geometry",
+                "legacy Gerber SF must precede any coordinate data",
                 out,
             )
             if not self.strict:
