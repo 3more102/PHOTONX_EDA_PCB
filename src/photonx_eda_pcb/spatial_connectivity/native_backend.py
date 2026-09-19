@@ -10,7 +10,7 @@ from pathlib import Path
 from threading import RLock
 
 
-_ABI_VERSION = 3
+_ABI_VERSION = 4
 _OK = 0
 _BUFFER_TOO_SMALL = 1
 _INVALID_ARGUMENT = 2
@@ -61,6 +61,28 @@ class _NativeQueryMatch(ctypes.Structure):
     ]
 
 
+class _PersistentAABBIndex:
+    def __init__(self, library, handle, ids, revision):
+        self.library = library
+        self.handle = handle
+        self.ids = ids
+        self.revision = revision
+
+    def close(self) -> None:
+        handle = self.handle
+        if handle is None:
+            return
+        self.handle = None
+        if handle.value:
+            self.library.photonx_aabb_index_destroy(handle)
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
 class _PersistentPointIndex:
     def __init__(self, library, handle, ids, revision):
         self.library = library
@@ -85,6 +107,9 @@ class _PersistentPointIndex:
 
 _POINT_INDEX_CACHE = weakref.WeakKeyDictionary()
 _POINT_INDEX_CACHE_LOCK = RLock()
+
+_AABB_INDEX_CACHE = weakref.WeakKeyDictionary()
+_AABB_INDEX_CACHE_LOCK = RLock()
 
 
 @lru_cache(maxsize=1)
@@ -127,6 +152,26 @@ def _configure_library(library: ctypes.CDLL) -> ctypes.CDLL:
         ctypes.POINTER(ctypes.c_uint32),
     ]
     library.photonx_candidate_pairs.restype = ctypes.c_int
+
+    library.photonx_aabb_index_create.argtypes = [
+        ctypes.POINTER(_NativeAABB),
+        ctypes.c_uint32,
+        ctypes.c_double,
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    library.photonx_aabb_index_create.restype = ctypes.c_int
+
+    library.photonx_aabb_index_destroy.argtypes = [ctypes.c_void_p]
+    library.photonx_aabb_index_destroy.restype = None
+
+    library.photonx_aabb_index_candidate_pairs.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_double,
+        ctypes.POINTER(_NativePair),
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    library.photonx_aabb_index_candidate_pairs.restype = ctypes.c_int
 
     library.photonx_point_index_create.argtypes = [
         ctypes.POINTER(_NativeAABB),
@@ -189,6 +234,13 @@ def _load_library() -> ctypes.CDLL:
     raise error_type(detail)
 
 
+def _clear_aabb_index_cache() -> None:
+    with _AABB_INDEX_CACHE_LOCK:
+        # Active callers keep a strong reference to borrowed handles, so
+        # clearing the weak cache cannot free an index while it is in use.
+        _AABB_INDEX_CACHE.clear()
+
+
 def _clear_point_index_cache() -> None:
     with _POINT_INDEX_CACHE_LOCK:
         # Do not force-close values here. An active query may still hold a
@@ -198,6 +250,7 @@ def _clear_point_index_cache() -> None:
 
 
 def _clear_library_cache() -> None:
+    _clear_aabb_index_cache()
     _clear_point_index_cache()
     _probe_library.cache_clear()
     clear_candidates = getattr(_library_candidates, "cache_clear", None)
@@ -217,23 +270,11 @@ def native_available() -> bool:
     return True
 
 
-def native_candidate_pairs(index, tolerance: float = 0.0):
-    library = _load_library()
-    ids = tuple(index.ids())
-
-    if len(ids) > 0xFFFFFFFF:
-        raise NativeBackendUnsupported("native backend supports at most 2^32-1 boxes")
-
+def _build_native_aabb_index(index, library, ids, revision):
     try:
-        tolerance_value = float(tolerance)
         cell_size = float(index.cell_size)
     except (TypeError, ValueError, AttributeError) as exc:
-        raise NativeBackendUnsupported("index/tolerance is not native-compatible") from exc
-
-    if tolerance_value < 0.0:
-        raise NativeBackendUnsupported(
-            "negative tolerance keeps the Python reference semantics"
-        )
+        raise NativeBackendUnsupported("index is not native-compatible") from exc
 
     box_array_type = _NativeAABB * len(ids)
     native_boxes = box_array_type(
@@ -248,49 +289,111 @@ def native_candidate_pairs(index, tolerance: float = 0.0):
         )
     )
 
-    required = ctypes.c_uint32(0)
+    handle = ctypes.c_void_p()
     status = int(
-        library.photonx_candidate_pairs(
+        library.photonx_aabb_index_create(
             native_boxes,
             ctypes.c_uint32(len(ids)),
-            ctypes.c_double(tolerance_value),
             ctypes.c_double(cell_size),
-            None,
-            ctypes.c_uint32(0),
-            ctypes.byref(required),
-        )
-    )
-
-    if status == _OK and required.value == 0:
-        return []
-    if status not in (_OK, _BUFFER_TOO_SMALL):
-        _raise_status(status)
-
-    out_type = _NativePair * required.value
-    out = out_type()
-    written = ctypes.c_uint32(0)
-    status = int(
-        library.photonx_candidate_pairs(
-            native_boxes,
-            ctypes.c_uint32(len(ids)),
-            ctypes.c_double(tolerance_value),
-            ctypes.c_double(cell_size),
-            out,
-            ctypes.c_uint32(required.value),
-            ctypes.byref(written),
+            ctypes.byref(handle),
         )
     )
     if status != _OK:
         _raise_status(status)
-    if written.value != required.value:
-        raise NativeBackendUnavailable(
-            "native backend changed pair count between sizing and fill calls"
+    if not handle.value:
+        raise NativeBackendUnavailable("native backend returned a null AABB-index handle")
+
+    return _PersistentAABBIndex(library, handle, ids, revision)
+
+
+def _native_aabb_index(index, library, ids):
+    revision = getattr(index, "revision", None)
+    if not isinstance(revision, int):
+        return _build_native_aabb_index(index, library, ids, revision=None), True
+
+    try:
+        with _AABB_INDEX_CACHE_LOCK:
+            cached = _AABB_INDEX_CACHE.get(index)
+            if (
+                cached is not None
+                and cached.revision == revision
+                and cached.ids == ids
+                and cached.handle is not None
+            ):
+                return cached, False
+
+            fresh = _build_native_aabb_index(index, library, ids, revision=revision)
+            # Do not force-close the replaced handle: an active query may still
+            # be borrowing it outside the cache lock.
+            _AABB_INDEX_CACHE[index] = fresh
+            return fresh, False
+    except TypeError:
+        # Unhashable/non-weak-referenceable duck indexes cannot safely
+        # participate in revision-based caching.
+        return _build_native_aabb_index(index, library, ids, revision=None), True
+
+
+def native_candidate_pairs(index, tolerance: float = 0.0):
+    library = _load_library()
+    ids = tuple(index.ids())
+
+    if len(ids) > 0xFFFFFFFF:
+        raise NativeBackendUnsupported("native backend supports at most 2^32-1 boxes")
+
+    try:
+        tolerance_value = float(tolerance)
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise NativeBackendUnsupported("index/tolerance is not native-compatible") from exc
+
+    if tolerance_value < 0.0:
+        raise NativeBackendUnsupported(
+            "negative tolerance keeps the Python reference semantics"
         )
 
-    return [
-        (ids[out[i].first], ids[out[i].second])
-        for i in range(written.value)
-    ]
+    aabb_index, ephemeral = _native_aabb_index(index, library, ids)
+    try:
+        required = ctypes.c_uint32(0)
+        status = int(
+            library.photonx_aabb_index_candidate_pairs(
+                aabb_index.handle,
+                ctypes.c_double(tolerance_value),
+                None,
+                ctypes.c_uint32(0),
+                ctypes.byref(required),
+            )
+        )
+
+        if status == _OK and required.value == 0:
+            return []
+        if status not in (_OK, _BUFFER_TOO_SMALL):
+            _raise_status(status)
+
+        out_type = _NativePair * required.value
+        out = out_type()
+        written = ctypes.c_uint32(0)
+        status = int(
+            library.photonx_aabb_index_candidate_pairs(
+                aabb_index.handle,
+                ctypes.c_double(tolerance_value),
+                out,
+                ctypes.c_uint32(required.value),
+                ctypes.byref(written),
+            )
+        )
+        if status != _OK:
+            _raise_status(status)
+        if written.value != required.value:
+            raise NativeBackendUnavailable(
+                "native backend changed pair count between sizing and fill calls"
+            )
+
+        return [
+            (ids[out[i].first], ids[out[i].second])
+            for i in range(written.value)
+        ]
+    finally:
+        if ephemeral:
+            aabb_index.close()
 
 
 def _build_native_point_index(index, library, ids, revision):
