@@ -276,9 +276,42 @@ class ExcellonParser:
 
     def parse(self,path:str|Path)->ExcellonResult:
         p=Path(path);out=ExcellonResult()
-        for line_no,raw in enumerate(p.read_text(encoding="utf-8-sig",errors="strict").splitlines(),1):
+        lines=p.read_text(encoding="utf-8-sig",errors="strict").splitlines()
+        for line_no,raw in enumerate(lines,1):
             line=raw.strip().upper()
-            if not line or line in {"M48","%","M30","M95"} or line.startswith(";"):continue
+            if line=="M30":
+                trailing=next(
+                    (
+                        (trailing_line_no,trailing_raw.strip().upper())
+                        for trailing_line_no,trailing_raw in enumerate(
+                            lines[line_no:],
+                            line_no+1,
+                        )
+                        if trailing_raw.strip()
+                    ),
+                    None,
+                )
+                if trailing is not None:
+                    trailing_line_no,trailing_line=trailing
+                    message=(
+                        "data after M30 end-of-file command is not allowed"
+                    )
+                    if self.strict:
+                        raise ParseError(
+                            f"{p}:{trailing_line_no}: {message}: {trailing_line}"
+                        )
+                    out.diagnostics.append(
+                        ParseDiagnostic(
+                            "warning",
+                            "INVALID_EXCELLON_DATA_AFTER_M30",
+                            f"{message}: {trailing_line}",
+                            str(p),
+                            trailing_line_no,
+                        )
+                    )
+                    self._disable_geometry(out)
+                break
+            if not line or line in {"M48","%","M95"} or line.startswith(";"):continue
             if line.startswith("METRIC") or line == "M71":
                 self.units="mm";self.units_declared=True;self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(3,3,self.zero);continue
             if line.startswith("INCH") or line == "M72":
