@@ -229,3 +229,119 @@ def test_cpp_radius_batch_rejects_excessive_total_query_work():
     with pytest.raises(NativeBackendUnsupported, match="status=3"):
         radius_queries(index, queries, backend="native")
 
+
+
+# Persistent native index regression coverage.
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_persistent_aabb_index_reuses_handle_and_refreshes_after_insert():
+    native_backend._clear_native_index_caches()
+    index = SpatialHashIndex(0.5)
+    index.insert("a", AABB(0.0, 0.0, 0.2, 0.2))
+
+    try:
+        assert candidate_pairs(index, backend="native") == []
+        cached = native_backend._AABB_INDEX_CACHE[index]
+        first_revision = cached.revision
+
+        assert candidate_pairs(index, backend="native") == []
+        assert native_backend._AABB_INDEX_CACHE[index] is cached
+
+        index.insert("b", AABB(0.1, 0.1, 0.3, 0.3))
+        assert candidate_pairs(index, backend="native") == [("a", "b")]
+
+        refreshed = native_backend._AABB_INDEX_CACHE[index]
+        assert refreshed is not cached
+        assert refreshed.revision == first_revision + 1
+    finally:
+        native_backend._clear_native_index_caches()
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_persistent_point_index_reuses_handle_and_refreshes_after_insert():
+    native_backend._clear_native_index_caches()
+    index = SpatialHashIndex(0.5)
+    index.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+
+    try:
+        assert radius_query(index, 0.0, 0.0, 0.2, backend="native") == [
+            (0.0, "a")
+        ]
+        cached = native_backend._POINT_INDEX_CACHE[index]
+        first_revision = cached.revision
+
+        assert radius_query(index, 0.0, 0.0, 0.2, backend="native") == [
+            (0.0, "a")
+        ]
+        assert native_backend._POINT_INDEX_CACHE[index] is cached
+
+        index.insert("b", AABB(0.1, 0.0, 0.1, 0.0))
+        result = radius_query(index, 0.0, 0.0, 0.2, backend="native")
+        assert result == [(0.0, "a"), (0.1, "b")]
+
+        refreshed = native_backend._POINT_INDEX_CACHE[index]
+        assert refreshed is not cached
+        assert refreshed.revision == first_revision + 1
+    finally:
+        native_backend._clear_native_index_caches()
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_duck_index_without_revision_uses_ephemeral_native_handles():
+    native_backend._clear_native_index_caches()
+    base = SpatialHashIndex(0.5)
+    base.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+
+    class DuckIndex:
+        __hash__ = None
+
+        def __init__(self, delegate):
+            self.delegate = delegate
+            self.cell_size = delegate.cell_size
+
+        def ids(self):
+            return self.delegate.ids()
+
+        def box(self, obj_id):
+            return self.delegate.box(obj_id)
+
+    duck = DuckIndex(base)
+    try:
+        assert candidate_pairs(duck, backend="native") == []
+        assert radius_query(duck, 0.0, 0.0, 0.1, backend="native") == [
+            (0.0, "a")
+        ]
+        assert len(native_backend._AABB_INDEX_CACHE) == 0
+        assert len(native_backend._POINT_INDEX_CACHE) == 0
+    finally:
+        native_backend._clear_native_index_caches()
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_native_cache_clear_preserves_borrowed_handle_lifetime():
+    native_backend._clear_native_index_caches()
+    index = SpatialHashIndex(0.5)
+    index.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+
+    borrowed_aabb = None
+    borrowed_point = None
+    try:
+        assert candidate_pairs(index, backend="native") == []
+        assert radius_query(index, 0.0, 0.0, 0.1, backend="native") == [
+            (0.0, "a")
+        ]
+        borrowed_aabb = native_backend._AABB_INDEX_CACHE[index]
+        borrowed_point = native_backend._POINT_INDEX_CACHE[index]
+
+        native_backend._clear_native_index_caches()
+
+        assert borrowed_aabb.handle is not None
+        assert borrowed_aabb.handle.value
+        assert borrowed_point.handle is not None
+        assert borrowed_point.handle.value
+    finally:
+        if borrowed_aabb is not None:
+            borrowed_aabb.close()
+        if borrowed_point is not None:
+            borrowed_point.close()
+        native_backend._clear_native_index_caches()
