@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added KiCad CopperRegion round-trip verification. The board reader now preserves zone shell/hole contours, layer/net/name identity, fill state, and cached filled polygons; a semantic comparator verifies exported regions independent of polygon start vertex or winding while retaining PhotonX region identity and net labels. Zone net ordinals are parsed fail-closed as integers instead of being silently coerced.
+
 - Hardened KiCad track export against undeclared/noncanonical layer references. Track segments now export only on the board's declared canonical copper layers (`F.Cu`, `B.Cu`, and the structurally declared `In1.Cu`..`In30.Cu` prefix); invalid layers such as `In31.Cu` or user/documentation layers are omitted with `KICAD_TRACK_LAYER_UNSUPPORTED`, included in unified omission accounting, and may coexist with independent unresolved-net diagnostics without double-counting the skipped track.
 
 - Exposed the conservative KiCad export audit in the normal `photonx reconstruct --kicad` workflow. The CLI now emits the editable board, a complete `kicad_export_report.json`, the stable unified `kicad_omissions.json` manifest, and the separate native `kicad_validation.txt` result, preserving current slot/region/track/route export decisions and structured warnings without changing reconstruction exit-code semantics.
