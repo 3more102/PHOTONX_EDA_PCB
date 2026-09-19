@@ -78,6 +78,7 @@ The generic input path also handles several common real-world variations:
 - legacy G70/G71 unit selection plus modal G90/G91 absolute/incremental coordinate notation;
 - deprecated FS `A`/`I` absolute/incremental notation, with X/Y deltas accumulated safely and arc I/J retained as center offsets;
 - deprecated Gerber MI mirroring, applied exactly to coordinate data while deliberately leaving apertures and step-repeat distances unmirrored as required by the specification;
+- deprecated Gerber OF image translation in the active MO units, applied after MI/SF and before IR regardless of command appearance;
 - deprecated whole-image Gerber IR rotation at the specification-defined 0/90/180/270-degree angles, applied exactly to flashes, linear/arc geometry, outlines, and step-repeat instances;
 - identity legacy Gerber SF/AS/IP/MI/OF transform statements; non-identity SF remains fail-closed;
 - Excellon M71/M72 metric/inch selection;
@@ -108,7 +109,7 @@ sniff window are ignored by content detection.
 ### Fail-closed boundaries
 
 PHOTONX still rejects or explicitly diagnoses semantics that would be unsafe to
-guess, including unsupported legacy Gerber AS/IP/OF/SF transforms, Gerber regions/complex aperture macros not supported by the production
+guess, including unsupported legacy Gerber AS/IP/SF transforms, Gerber regions/complex aperture macros not supported by the production
 geometry path, aperture blocks, and Excellon routed-arc dialects outside the bounded G02/G03 I/J or standard XNC X/Y/A-radius subsets. An input being discovered does not mean
 every construct inside it is automatically accepted.
 
