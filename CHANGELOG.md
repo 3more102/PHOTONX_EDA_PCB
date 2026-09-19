@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened bounded Gerber LPC materialization so each composed CopperRegion carries only the dark/clear region provenance and LP graphics-state sources that geometrically contribute to that final component. Unrelated disjoint operations no longer contaminate component provenance or stable IDs, while point-only clear contact is treated as a no-op dependency.
+
 - Added bounded Gerber `%LPC*%` parser support for region-only files. Supported G36/G37 CopperRegion operations now retain source order across LPD/LPC switches, compose through exact polygon union/difference, and materialize deterministic shells/holes with composition provenance; clear-before-dark, dark-after-clear refill, split components, and preflight are covered. Any LPC file containing tracks, flashes, or outline material geometry remains fail-closed and suppresses the complete permissive file image.
 
 - Added deterministic ordered Gerber polygon image composition on top of the image-operation stream: dark Polygon/MultiPolygon operations union into accumulated material, clear operations subtract only from material already present, invalid/non-polygonal geometry and sequence gaps fail closed, and composed shells/holes are canonicalized for stable downstream materialization. This engine is now used by the bounded region-only LPC parser subset described above.
