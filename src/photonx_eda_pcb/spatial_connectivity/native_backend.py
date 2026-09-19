@@ -232,10 +232,27 @@ def native_candidate_pairs(index, tolerance: float = 0.0):
             "native backend changed pair count between sizing and fill calls"
         )
 
-    return [
-        (ids[out[i].first], ids[out[i].second])
-        for i in range(written.value)
-    ]
+    pairs = []
+    previous_pair = None
+    for i in range(written.value):
+        first = int(out[i].first)
+        second = int(out[i].second)
+        if first >= len(ids) or second >= len(ids):
+            raise NativeBackendUnavailable(
+                "native backend returned an out-of-range candidate pair"
+            )
+        if first >= second:
+            raise NativeBackendUnavailable(
+                "native backend returned a non-canonical candidate pair"
+            )
+        native_pair = (first, second)
+        if previous_pair is not None and native_pair <= previous_pair:
+            raise NativeBackendUnavailable(
+                "native backend returned unsorted or duplicate candidate pairs"
+            )
+        previous_pair = native_pair
+        pairs.append((ids[first], ids[second]))
+    return pairs
 
 
 def native_radius_queries(index, queries):
