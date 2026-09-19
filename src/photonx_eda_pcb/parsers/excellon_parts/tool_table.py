@@ -1,9 +1,9 @@
 import re
 from dataclasses import dataclass
 
-from ...excellon_numeric import UNSIGNED_DECIMAL_PATTERN
+from ...excellon_numeric import TOOL_NUMBER_PATTERN, UNSIGNED_DECIMAL_PATTERN
 
-_RE = re.compile(rf"T(?P<tool>\d+)(?:C(?P<diam>{UNSIGNED_DECIMAL_PATTERN}))?")
+_RE = re.compile(rf"T(?P<tool>{TOOL_NUMBER_PATTERN})(?:C(?P<diam>{UNSIGNED_DECIMAL_PATTERN}))?")
 
 
 @dataclass(frozen=True)
