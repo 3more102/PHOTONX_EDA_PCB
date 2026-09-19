@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Enforced XNC M30 end-of-file semantics in the Excellon parser: strict mode rejects any non-empty command after M30, permissive mode suppresses all file geometry and records `EXCELLON_TRAILING_DATA_AFTER_M30`, and preflight treats the diagnostic as a strict blocker so post-terminator drill or route data cannot leak into reconstruction.
+- Hardened XNC end-of-file and tool-table validation. `M30` is terminal for manufacturing commands; non-comment trailing data fails closed with `INVALID_EXCELLON_DATA_AFTER_M30`, duplicate tool definitions and undefined tool selections are rejected, tool-diameter conversion must remain finite and positive, permissive failures suppress all file geometry, and preflight surfaces the resulting `INVALID_EXCELLON_*` blockers.
 
 - Added an optional C++17 native spatial-acceleration backend behind a versioned C ABI. The backend provides deterministic AABB candidate-pair generation plus batched point-radius broad-phase queries used by drill association, footprint clustering/metrics, and component inference/metrics; Python remains the correctness reference and automatic fallback, exact Euclidean/connectivity predicates stay authoritative, native discovery is cached, ABI/range failures are explicit, and CI builds/loads the shared library on Python 3.11/3.12/3.13 before running the full regression suite.
 
