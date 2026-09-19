@@ -44,13 +44,19 @@ def test_broken_native_library_does_not_silently_fallback(monkeypatch):
         lambda: ("broken-photonx-native.so",),
     )
 
+    attempts = 0
+
     def fail_load(_candidate):
+        nonlocal attempts
+        attempts += 1
         raise OSError("simulated loader failure")
 
     monkeypatch.setattr(native_backend.ctypes, "CDLL", fail_load)
     try:
-        with pytest.raises(NativeBackendLoadError, match="simulated loader failure"):
-            candidate_pairs(index, 0.1, backend="auto")
+        for _ in range(2):
+            with pytest.raises(NativeBackendLoadError, match="simulated loader failure"):
+                candidate_pairs(index, 0.1, backend="auto")
+        assert attempts == 1
     finally:
         native_backend._load_library.cache_clear()
 
