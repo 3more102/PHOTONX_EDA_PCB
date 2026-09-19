@@ -1,13 +1,20 @@
 from photonx_eda_pcb.models import BoardModel,PadCandidate,DrillHit,Point
 from photonx_eda_pcb.stackup.model import StackupModel,LayerSpec
 from photonx_eda_pcb.via_span.resolve import resolve_via_spans
+
+
 def make_data():
+    drill=DrillHit("D",Point(0,0),.4,"plated")
+    drill.layer_span=("F.Cu","B.Cu")
+    drill.span_proven=True
     board=BoardModel(
       pads=[PadCandidate("F",Point(0,0),1,1,"C","F.Cu"),PadCandidate("B",Point(0,0),1,1,"C","B.Cu")],
-      drills=[DrillHit("D",Point(0,0),.4,"plated")]
+      drills=[drill]
     )
     stack=StackupModel([LayerSpec("F.Cu","top",0,True),LayerSpec("B.Cu","bottom",1,True)])
     return board,stack
+
+
 def test_via_span_spatial_matches_bruteforce():
     b,s=make_data()
     a=resolve_via_spans(b,s,use_spatial_index=False)[0]
