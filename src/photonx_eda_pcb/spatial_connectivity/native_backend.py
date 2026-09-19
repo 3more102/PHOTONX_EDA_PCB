@@ -216,13 +216,21 @@ def _build_native_index_snapshot(index) -> _NativeIndexSnapshot:
 def _native_index_snapshot(index) -> _NativeIndexSnapshot:
     """Return a revision-safe cached ctypes representation when possible."""
     revision = getattr(index, "revision", None)
+    try:
+        cell_size = float(index.cell_size)
+    except (TypeError, ValueError, AttributeError, OverflowError) as exc:
+        raise NativeBackendUnsupported("index is not native-compatible") from exc
 
     if revision is not None:
         try:
             cached = _native_index_snapshots.get(index)
         except TypeError:
             cached = None
-        if cached is not None and cached.revision == revision:
+        if (
+            cached is not None
+            and cached.revision == revision
+            and cached.cell_size == cell_size
+        ):
             return cached
 
     snapshot = _build_native_index_snapshot(index)
