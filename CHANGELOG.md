@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extended bounded Gerber `%LPC*%` image composition beyond region-only files to include rectangular D03 flashes. Supported regions and R flashes now share one ordered dark/clear operation stream and materialize to deterministic CopperRegion shells/holes; clear-before-dark, dark refill, mixed region/flash ordering, and step-repeat are covered. Circular/obround flashes, tracks, and outlines remain fail-closed.
+
 - Hardened bounded Gerber LPC materialization so each composed CopperRegion carries only the dark/clear region provenance and LP graphics-state sources that geometrically contribute to that final component. Unrelated disjoint operations no longer contaminate component provenance or stable IDs, while point-only clear contact is treated as a no-op dependency.
 
 - Added bounded Gerber `%LPC*%` parser support for region-only files. Supported G36/G37 CopperRegion operations now retain source order across LPD/LPC switches, compose through exact polygon union/difference, and materialize deterministic shells/holes with composition provenance; clear-before-dark, dark-after-clear refill, split components, and preflight are covered. Any LPC file containing tracks, flashes, or outline material geometry remains fail-closed and suppresses the complete permissive file image.
