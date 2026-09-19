@@ -8,6 +8,7 @@ from photonx_eda_pcb.spatial_connectivity.points import radius_query, radius_que
 from photonx_eda_pcb.spatial_connectivity.native_backend import (
     NativeBackendLoadError,
     NativeBackendUnavailable,
+    NativeBackendUnsupported,
     native_available,
 )
 
@@ -317,3 +318,24 @@ def test_cpp_radius_queries_deterministic_randomized_parity():
         index, queries, backend="python"
     )
 
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_backend_rejects_pathological_dense_pair_output():
+    index = SpatialHashIndex(1.0)
+    for i in range(1100):
+        index.insert(f"dense-{i:04d}", AABB(0.0, 0.0, 0.0, 0.0))
+
+    with pytest.raises(NativeBackendUnsupported, match="status=3"):
+        candidate_pairs(index, backend="native")
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_radius_backend_rejects_pathological_dense_match_output():
+    index = SpatialHashIndex(1.0)
+    for i in range(1001):
+        index.insert(f"dense-{i:04d}", AABB(0.0, 0.0, 0.0, 0.0))
+
+    queries = tuple((0.0, 0.0, 0.0) for _ in range(1000))
+    with pytest.raises(NativeBackendUnsupported, match="status=3"):
+        radius_queries(index, queries, backend="native")
