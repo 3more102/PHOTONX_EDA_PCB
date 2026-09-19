@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import cos, isclose, isfinite, pi
+from math import atan2, cos, degrees, hypot, isclose, isfinite, pi, radians, sin
 from pathlib import Path
 import re
 
@@ -111,6 +111,7 @@ class Aperture:
     x: float
     y: float
     hole_diameter: float | None = None
+    base_rotation_deg: float = 0.0
     polygon_vertices: int | None = None
     polygon_rotation_deg: float = 0.0
 
@@ -550,16 +551,19 @@ class GerberRS274XParser:
         size_x = aperture.x * self.aperture_scale
         size_y = aperture.y * self.aperture_scale
 
-        # All currently representable C/R/O apertures and exactly reduced
-        # simple macros are centered and mirror-symmetric, so LM does not alter
-        # their extents. LR is geometry-invariant for circles.
+        # Circles are rotation-invariant. Rectangular/obround apertures may
+        # carry intrinsic rotation from an exactly reduced aperture macro; LM
+        # reflects that original orientation before modal LR.
         if aperture.shape == "C":
             return size_x, size_y
 
         rotated = self._orthogonal_rectangle_size(
             size_x,
             size_y,
-            self.aperture_rotation_deg,
+            self._effective_rectangular_aperture_rotation(
+                aperture,
+                include_image_rotation=False,
+            ),
         )
         if rotated is not None:
             return rotated
@@ -1366,6 +1370,26 @@ class GerberRS274XParser:
             return height, width
         return width, height
 
+    def _effective_rectangular_aperture_rotation(
+        self,
+        aperture: Aperture,
+        *,
+        include_image_rotation: bool = True,
+    ) -> float:
+        """Compose intrinsic macro rotation, LM reflection, LR, and optional IR."""
+
+        angle = radians(aperture.base_rotation_deg)
+        dx = cos(angle)
+        dy = sin(angle)
+        if "X" in self.aperture_mirror:
+            dx = -dx
+        if "Y" in self.aperture_mirror:
+            dy = -dy
+        rotation = degrees(atan2(dy, dx)) + self.aperture_rotation_deg
+        if include_image_rotation:
+            rotation += self.image_rotation_deg
+        return rotation % 360.0
+
     def _instantiate_macro_aperture(
         self,
         code: int,
@@ -1484,27 +1508,26 @@ class GerberRS274XParser:
             midpoint_y = (start_y + end_y) / 2.0
             dx = end_x - start_x
             dy = end_y - start_y
-
-            horizontal = abs(dy) <= epsilon and abs(dx) > epsilon
-            vertical = abs(dx) <= epsilon and abs(dy) > epsilon
-            base_size = None
-            if horizontal:
-                base_size = (abs(dx), width)
-            elif vertical:
-                base_size = (width, abs(dy))
-            rotated_size = (
-                None
-                if base_size is None
-                else self._orthogonal_rectangle_size(
-                    base_size[0], base_size[1], rotation
+            segment_length = hypot(dx, dy)
+            finite_values = all(
+                isfinite(float(value))
+                for value in (
+                    exposure,
+                    width,
+                    start_x,
+                    start_y,
+                    end_x,
+                    end_y,
+                    rotation,
                 )
             )
             if (
-                exposure != 1
+                not finite_values
+                or exposure != 1
                 or width <= 0
                 or abs(midpoint_x) > epsilon
                 or abs(midpoint_y) > epsilon
-                or rotated_size is None
+                or segment_length <= epsilon
             ):
                 self._fail_or_warn(
                     path,
@@ -1512,21 +1535,22 @@ class GerberRS274XParser:
                     line,
                     "UNSUPPORTED_GERBER_APERTURE_MACRO",
                     (
-                        f"vector-line aperture macro {name!r} requires positive "
-                        "exposure/width, an origin-centered midpoint, a non-zero "
-                        "axis-aligned segment, and rotation in 90-degree steps"
+                        f"vector-line aperture macro {name!r} requires finite positive "
+                        "exposure/width and a non-zero segment whose midpoint is the "
+                        "macro origin"
                     ),
                     out,
                 )
                 self.unsupported_apertures.add(code)
                 return
 
-            size_x, size_y = rotated_size
+            base_rotation = degrees(atan2(dy, dx)) + rotation
             self.apertures[code] = Aperture(
                 code,
                 "R",
-                to_mm(float(size_x), self.units),
-                to_mm(float(size_y), self.units),
+                to_mm(float(segment_length), self.units),
+                to_mm(float(width), self.units),
+                base_rotation_deg=base_rotation % 360.0,
             )
             return
 
@@ -1544,14 +1568,17 @@ class GerberRS274XParser:
                 return
 
             exposure, width, height, center_x, center_y, rotation = values
-            rotated_size = self._orthogonal_rectangle_size(width, height, rotation)
+            finite_values = all(
+                isfinite(float(value))
+                for value in (exposure, width, height, center_x, center_y, rotation)
+            )
             if (
-                exposure != 1
+                not finite_values
+                or exposure != 1
                 or width <= 0
                 or height <= 0
                 or abs(center_x) > 1e-12
                 or abs(center_y) > 1e-12
-                or rotated_size is None
             ):
                 self._fail_or_warn(
                     path,
@@ -1559,21 +1586,20 @@ class GerberRS274XParser:
                     line,
                     "UNSUPPORTED_GERBER_APERTURE_MACRO",
                     (
-                        f"center-line aperture macro {name!r} requires positive "
-                        "exposure/size, origin-centered geometry, and rotation in "
-                        "90-degree steps"
+                        f"center-line aperture macro {name!r} requires finite positive "
+                        "exposure/size and origin-centered geometry"
                     ),
                     out,
                 )
                 self.unsupported_apertures.add(code)
                 return
 
-            size_x, size_y = rotated_size
             self.apertures[code] = Aperture(
                 code,
                 "R",
-                to_mm(float(size_x), self.units),
-                to_mm(float(size_y), self.units),
+                to_mm(float(width), self.units),
+                to_mm(float(height), self.units),
+                base_rotation_deg=float(rotation) % 360.0,
             )
             return
 
@@ -1647,14 +1673,24 @@ class GerberRS274XParser:
             exposure, width, height, lower_left_x, lower_left_y, rotation = values
             center_x = lower_left_x + width / 2.0
             center_y = lower_left_y + height / 2.0
-            rotated_size = self._orthogonal_rectangle_size(width, height, rotation)
+            finite_values = all(
+                isfinite(float(value))
+                for value in (
+                    exposure,
+                    width,
+                    height,
+                    lower_left_x,
+                    lower_left_y,
+                    rotation,
+                )
+            )
             if (
-                exposure != 1
+                not finite_values
+                or exposure != 1
                 or width <= 0
                 or height <= 0
                 or abs(center_x) > 1e-12
                 or abs(center_y) > 1e-12
-                or rotated_size is None
             ):
                 self._fail_or_warn(
                     path,
@@ -1662,21 +1698,20 @@ class GerberRS274XParser:
                     line,
                     "UNSUPPORTED_GERBER_APERTURE_MACRO",
                     (
-                        f"lower-left aperture macro {name!r} requires positive "
-                        "exposure/size, a rectangle centered on the macro origin, "
-                        "and rotation in 90-degree steps"
+                        f"lower-left aperture macro {name!r} requires finite positive "
+                        "exposure/size and a rectangle centered on the macro origin"
                     ),
                     out,
                 )
                 self.unsupported_apertures.add(code)
                 return
 
-            size_x, size_y = rotated_size
             self.apertures[code] = Aperture(
                 code,
                 "R",
-                to_mm(float(size_x), self.units),
-                to_mm(float(size_y), self.units),
+                to_mm(float(width), self.units),
+                to_mm(float(height), self.units),
+                base_rotation_deg=float(rotation) % 360.0,
             )
             return
 
@@ -4432,8 +4467,12 @@ class GerberRS274XParser:
                         size_x = ap.x * self.aperture_scale
                         size_y = ap.y * self.aperture_scale
                         output_aperture_rotation = (
-                            self.aperture_rotation_deg + self.image_rotation_deg
-                        ) % 360.0
+                            self._effective_rectangular_aperture_rotation(ap)
+                            if ap.shape in {"R", "O"}
+                            else (
+                                self.aperture_rotation_deg + self.image_rotation_deg
+                            ) % 360.0
+                        )
 
                         for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
                             start_point = self._transform_output_point(
@@ -4724,8 +4763,10 @@ class GerberRS274XParser:
                         scaled_y = ap.y * self.aperture_scale
                         scaled_hole = ap.hole_diameter * self.aperture_scale
                         output_aperture_rotation = (
-                            self.aperture_rotation_deg + self.image_rotation_deg
-                        ) % 360.0
+                            self._effective_rectangular_aperture_rotation(ap)
+                            if ap.shape in {"R", "O"}
+                            else (self.aperture_rotation_deg + self.image_rotation_deg) % 360.0
+                        )
 
                         for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
                             center = self._transform_output_point(
@@ -4842,13 +4883,21 @@ class GerberRS274XParser:
 
                     scaled_x = ap.x * self.aperture_scale
                     scaled_y = ap.y * self.aperture_scale
+                    local_aperture_rotation = (
+                        0.0
+                        if ap.shape == "C"
+                        else self._effective_rectangular_aperture_rotation(
+                            ap,
+                            include_image_rotation=False,
+                        )
+                    )
                     orthogonal_size = (
                         (scaled_x, scaled_y)
                         if ap.shape == "C"
                         else self._orthogonal_rectangle_size(
                             scaled_x,
                             scaled_y,
-                            self.aperture_rotation_deg,
+                            local_aperture_rotation,
                         )
                     )
 
@@ -4864,6 +4913,8 @@ class GerberRS274XParser:
                                 nxt.x,
                                 nxt.y,
                                 ap.code,
+                                ap.base_rotation_deg,
+                                local_aperture_rotation,
                                 self.layer,
                             ]
                             id_parts.extend(self._image_transform_id_parts())
@@ -4906,8 +4957,8 @@ class GerberRS274XParser:
                             continue
 
                         output_aperture_rotation = (
-                            self.aperture_rotation_deg + self.image_rotation_deg
-                        ) % 360.0
+                            self._effective_rectangular_aperture_rotation(ap)
+                        )
                         for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
                             center = self._transform_output_point(
                                 nxt, dx_mm, dy_mm
