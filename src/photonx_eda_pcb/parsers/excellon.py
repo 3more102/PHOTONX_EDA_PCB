@@ -69,8 +69,14 @@ class ExcellonParser:
             raise ParseError(f"Excellon {exc}") from exc
 
     def _iter_limited_lines(self, path: Path):
+        read_size = max(1, self.limits.max_line_length + 2)
         with path.open(encoding="utf-8-sig", errors="strict") as stream:
-            for line_no, raw in enumerate(stream, 1):
+            line_no = 0
+            while True:
+                raw = stream.readline(read_size)
+                if raw == "":
+                    break
+                line_no += 1
                 try:
                     self.limits.check_line(raw.rstrip("\r\n"), line_no)
                 except ValueError as exc:
