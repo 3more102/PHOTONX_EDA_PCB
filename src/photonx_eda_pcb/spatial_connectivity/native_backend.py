@@ -64,7 +64,10 @@ def _library_candidates() -> tuple[str, ...]:
     candidates: list[str] = []
     configured = os.environ.get("PHOTONX_NATIVE_LIBRARY")
     if configured:
-        candidates.append(configured)
+        # An explicit override is authoritative. If it is broken or exposes
+        # the wrong ABI, surface that configuration error instead of silently
+        # loading a different system/package library.
+        return (configured,)
 
     discovered = find_library("photonx_native")
     if discovered:
