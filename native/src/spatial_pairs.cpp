@@ -39,15 +39,18 @@ bool finite_box(const photonx_aabb& box) noexcept {
 }
 
 bool to_cell(double coordinate, double cell_size, int64_t& out) noexcept {
-    const long double scaled =
-        std::floor(static_cast<long double>(coordinate) /
-                   static_cast<long double>(cell_size));
+    // Match Python SpatialHashIndex._range exactly: both operands are Python
+    // floats, so division is IEEE-754 binary64 before floor().  Promoting the
+    // operands to long double changes rounding at exact cell boundaries and
+    // can make the native broad phase omit candidates that Python includes.
+    const double scaled = std::floor(coordinate / cell_size);
+    const long double scaled_ld = static_cast<long double>(scaled);
     const long double lo =
         static_cast<long double>(std::numeric_limits<int64_t>::min());
     const long double hi =
         static_cast<long double>(std::numeric_limits<int64_t>::max());
 
-    if (!std::isfinite(scaled) || scaled < lo || scaled > hi) {
+    if (!std::isfinite(scaled) || scaled_ld < lo || scaled_ld > hi) {
         return false;
     }
 
