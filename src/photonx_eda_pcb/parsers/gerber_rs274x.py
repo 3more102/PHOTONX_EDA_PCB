@@ -36,6 +36,7 @@ from ..ids import stable_id
 from ..models import CopperRegion, OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
 from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
+from .common.limits import ParseLimits
 from .gerber_parts.region_state import RegionState
 from .gerber_parts.step_repeat import parse_step_repeat
 from .gerber_parts.tokenizer import iter_gerber_statements
@@ -166,9 +167,16 @@ class GerberRS274XParser:
     Unsupported constructs are never silently discarded in strict mode.
     """
 
-    def __init__(self, layer: str, strict: bool = True):
+    def __init__(
+        self,
+        layer: str,
+        strict: bool = True,
+        limits: ParseLimits | None = None,
+    ):
         self.layer = layer
         self.strict = strict
+        self.limits = limits or ParseLimits()
+        self._declared_aperture_codes: set[int] = set()
         self.units = "mm"
         self.units_declared = False
         self.xfmt = CoordinateFormat(2, 4, "L")
@@ -223,6 +231,42 @@ class GerberRS274XParser:
         self.aperture_rotation_source: SourceRef | None = None
         self.aperture_scale_source: SourceRef | None = None
         self.image_body_started = False
+
+    def _read_limited_text(self, path: Path) -> str:
+        chunks: list[str] = []
+        with path.open(encoding="utf-8-sig", errors="strict") as stream:
+            for line_no, raw in enumerate(stream, 1):
+                try:
+                    self.limits.check_line(raw.rstrip("\r\n"), line_no)
+                except ValueError as exc:
+                    raise ParseError(f"{path}:{line_no}: {exc}") from exc
+                chunks.append(raw)
+        return "".join(chunks)
+
+    def _check_object_count(self, count: int) -> None:
+        try:
+            self.limits.check_objects(count)
+        except ValueError as exc:
+            raise ParseError(f"Gerber {exc}") from exc
+
+    def _reserve_output_object(self, out: GerberLayerResult) -> None:
+        self._check_object_count(
+            len(out.tracks) + len(out.pads) + len(out.regions) + len(out.outline) + 1
+        )
+
+    def _reserve_aperture_code(
+        self,
+        code: int,
+        path: Path,
+        line_no: int,
+    ) -> None:
+        if code in self._declared_aperture_codes:
+            return
+        try:
+            self.limits.check_apertures(len(self._declared_aperture_codes) + 1)
+        except ValueError as exc:
+            raise ParseError(f"{path}:{line_no}: {exc}") from exc
+        self._declared_aperture_codes.add(code)
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -1353,6 +1397,11 @@ class GerberRS274XParser:
                 out,
             )
             return
+        if name not in self.aperture_macros:
+            try:
+                self.limits.check_aperture_macros(len(self.aperture_macros) + 1)
+            except ValueError as exc:
+                raise ParseError(f"{path}:{line_no}: {exc}") from exc
         self.aperture_macros[name] = body
 
     @staticmethod
@@ -3339,6 +3388,7 @@ class GerberRS274XParser:
                     provenance=prov,
                     holes=transformed_holes,
                 )
+                self._reserve_output_object(out)
                 out.regions.append(region)
                 self.material_image_operations.append(self.layer_polarity, region)
 
@@ -3736,6 +3786,7 @@ class GerberRS274XParser:
                 )
 
                 if self.layer == "Edge.Cuts":
+                    self._reserve_output_object(out)
                     out.outline.append(OutlineSegment(obj_id, start, end, prov))
                 else:
                     track = Track(
@@ -3746,6 +3797,7 @@ class GerberRS274XParser:
                         self.layer,
                         provenance=prov,
                     )
+                    self._reserve_output_object(out)
                     out.tracks.append(track)
                     self.material_image_operations.append(
                         self.layer_polarity,
@@ -4078,6 +4130,7 @@ class GerberRS274XParser:
                     composition_source,
                 )
             )
+            self._check_object_count(len(composed_regions) + 1)
             composed_regions.append(region)
 
         out.regions[:] = composed_regions
@@ -4088,7 +4141,8 @@ class GerberRS274XParser:
         p = Path(path)
         out = GerberLayerResult()
 
-        text = p.read_text(encoding="utf-8-sig", errors="strict")
+        text = self._read_limited_text(p)
+
         for line_no, line in iter_gerber_statements(text):
             if not line or line.startswith("G04"):
                 continue
@@ -4349,8 +4403,10 @@ class GerberRS274XParser:
                 if not self._require_units(p, line_no, line, out):
                     continue
                 code, shape, modifiers = m.groups()
+                aperture_code = int(code)
+                self._reserve_aperture_code(aperture_code, p, line_no)
                 self._instantiate_standard_aperture(
-                    int(code),
+                    aperture_code,
                     shape,
                     modifiers,
                     p,
@@ -4365,8 +4421,10 @@ class GerberRS274XParser:
                 if not self._require_units(p, line_no, line, out):
                     continue
                 code, name, modifiers = m.groups()
+                aperture_code = int(code)
+                self._reserve_aperture_code(aperture_code, p, line_no)
                 self._instantiate_macro_aperture(
-                    int(code),
+                    aperture_code,
                     name,
                     modifiers,
                     p,
@@ -4764,6 +4822,7 @@ class GerberRS274XParser:
                                 self.layer,
                                 provenance=prov,
                             )
+                            self._reserve_output_object(out)
                             out.regions.append(region)
                             self.material_image_operations.append(
                                 self.layer_polarity,
@@ -4817,6 +4876,7 @@ class GerberRS274XParser:
                             )
                             self._add_aperture_transform_provenance(prov)
                             if self.layer == "Edge.Cuts":
+                                self._reserve_output_object(out)
                                 out.outline.append(
                                     OutlineSegment(obj_id, start_point, end_point, prov)
                                 )
@@ -4829,6 +4889,7 @@ class GerberRS274XParser:
                                     self.layer,
                                     provenance=prov,
                                 )
+                                self._reserve_output_object(out)
                                 out.tracks.append(track)
                                 self.material_image_operations.append(
                                     self.layer_polarity,
@@ -4965,6 +5026,7 @@ class GerberRS274XParser:
                                 self.layer,
                                 provenance=prov,
                             )
+                            self._reserve_output_object(out)
                             out.regions.append(region)
                             self.material_image_operations.append(
                                 self.layer_polarity,
@@ -5096,6 +5158,7 @@ class GerberRS274XParser:
                                 self.layer,
                                 provenance=prov,
                             )
+                            self._reserve_output_object(out)
                             out.regions.append(region)
                             self.material_image_operations.append(
                                 self.layer_polarity,
@@ -5253,6 +5316,7 @@ class GerberRS274XParser:
                                 provenance=prov,
                                 holes=holes,
                             )
+                            self._reserve_output_object(out)
                             out.regions.append(region)
                             self.material_image_operations.append(
                                 self.layer_polarity,
@@ -5391,6 +5455,7 @@ class GerberRS274XParser:
                                 provenance=prov,
                                 holes=holes,
                             )
+                            self._reserve_output_object(out)
                             out.regions.append(region)
                             self.material_image_operations.append(
                                 self.layer_polarity,
@@ -5454,6 +5519,7 @@ class GerberRS274XParser:
                                 self.layer,
                                 provenance=prov,
                             )
+                            self._reserve_output_object(out)
                             out.pads.append(pad)
                             self.material_image_operations.append(
                                 self.layer_polarity,
@@ -5577,6 +5643,7 @@ class GerberRS274XParser:
                                 self.layer,
                                 provenance=prov,
                             )
+                            self._reserve_output_object(out)
                             out.regions.append(region)
                             self.material_image_operations.append(
                                 self.layer_polarity,
