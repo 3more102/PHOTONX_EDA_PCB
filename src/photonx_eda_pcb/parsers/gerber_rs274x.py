@@ -25,6 +25,7 @@ from ..gerber_image import (
     canonical_polygon_components,
     polygonize_aperture_track,
     polygonize_flash,
+    polygonize_holed_flash,
     polygonize_rotated_flash,
     polygonize_track,
     trace_polygon_operation_contributions,
@@ -105,6 +106,7 @@ class Aperture:
     shape: str
     x: float
     y: float
+    hole_diameter: float | None = None
 
 
 @dataclass(frozen=True)
@@ -1070,6 +1072,7 @@ class GerberRS274XParser:
             self.unsupported_apertures.add(code)
             return
 
+        hole_diameter = None
         if len(values) == solid_parameter_count + 1:
             hole_diameter = values[-1]
             if hole_diameter <= 0:
@@ -1081,24 +1084,32 @@ class GerberRS274XParser:
                     "standard aperture hole diameter must be positive",
                     out,
                 )
-            else:
-                self._fail_or_warn(
+                self.unsupported_apertures.add(code)
+                return
+            outer_limit = min(values[:solid_parameter_count])
+            if hole_diameter >= outer_limit:
+                self._parse_error_or_warn(
                     path,
                     line_no,
                     line,
-                    "UNSUPPORTED_GERBER_APERTURE_HOLE",
+                    "INVALID_GERBER_APERTURE_HOLE_FIT",
                     (
-                        f"{shape} standard aperture contains a {hole_diameter:.12g} "
-                        "hole; holed aperture image subtraction is not modeled safely"
+                        "standard aperture round hole must strictly fit within "
+                        f"the {shape} outer shape"
                     ),
                     out,
                 )
-            self.unsupported_apertures.add(code)
-            return
+                self.unsupported_apertures.add(code)
+                return
 
         ax = to_mm(values[0], self.units)
         ay = ax if shape == "C" else to_mm(values[1], self.units)
-        self.apertures[code] = Aperture(code, shape, ax, ay)
+        hole_mm = (
+            None
+            if hole_diameter is None
+            else to_mm(hole_diameter, self.units)
+        )
+        self.apertures[code] = Aperture(code, shape, ax, ay, hole_mm)
 
     def _register_aperture_macro(
         self,
