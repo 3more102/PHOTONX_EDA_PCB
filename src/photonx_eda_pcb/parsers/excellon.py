@@ -25,6 +25,7 @@ from ..excellon_routing.arc_commands import (
 )
 from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
+from .excellon_parts.commands import is_program_end
 from .excellon_parts.slots import parse_slot_command
 
 _TOOL_DEF = re.compile(
@@ -288,7 +289,9 @@ class ExcellonParser:
         p=Path(path);out=ExcellonResult()
         for line_no,raw in enumerate(p.read_text(encoding="utf-8-sig",errors="strict").splitlines(),1):
             line=raw.strip().upper()
-            if not line or line in {"M48","%","M30","M95"} or line.startswith(";"):continue
+            if not line or line in {"M48","%","M95"} or line.startswith(";"):continue
+            if is_program_end(line):
+                break
             if line.startswith("METRIC") or line == "M71":
                 self.units="mm";self.units_declared=True;self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(3,3,self.zero);continue
             if line.startswith("INCH") or line == "M72":
