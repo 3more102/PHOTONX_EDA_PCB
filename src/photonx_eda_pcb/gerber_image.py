@@ -52,11 +52,13 @@ class FlashPolygonization:
 
 @dataclass(frozen=True)
 class HoledFlashPolygonization:
-    """Polygonal standard aperture flash with one centered round hole."""
+    """Polygonal standard aperture flash with one centered transparent hole."""
 
     geometry: Polygon
     shape: str
-    hole_diameter: float
+    hole_diameter: float | None
+    rectangular_hole: tuple[float, float] | None
+    hole_rotation_deg: float
     outer_curved_segments: int
     hole_curved_segments: int
     max_chord_error_mm: float
@@ -65,7 +67,7 @@ class HoledFlashPolygonization:
 
 @dataclass(frozen=True)
 class RegularPolygonFlashPolygonization:
-    """Exact regular-polygon flash with optional bounded round hole."""
+    """Exact regular-polygon flash with an optional transparent hole."""
 
     geometry: Polygon
     vertices: int
@@ -74,6 +76,8 @@ class RegularPolygonFlashPolygonization:
     mirror: str
     object_rotation_deg: float
     hole_diameter: float | None
+    rectangular_hole: tuple[float, float] | None
+    hole_rotation_deg: float
     hole_curved_segments: int
     max_chord_error_mm: float
     approximated: bool
@@ -514,32 +518,196 @@ def polygonize_rotated_flash(
     )
 
 
+def _rectangular_hole_polygon(
+    center_x: float,
+    center_y: float,
+    size_x: float,
+    size_y: float,
+    *,
+    rotation_deg: float = 0.0,
+) -> Polygon:
+    """Return one exact centered rectangular-hole polygon."""
+
+    cx = float(center_x)
+    cy = float(center_y)
+    sx = float(size_x)
+    sy = float(size_y)
+    rotation = float(rotation_deg)
+    if not all(isfinite(value) for value in (cx, cy, sx, sy, rotation)):
+        raise ValueError("Gerber rectangular hole values must be finite")
+    if sx <= 0.0 or sy <= 0.0:
+        raise ValueError("Gerber rectangular hole dimensions must be positive")
+
+    half_x = sx / 2.0
+    half_y = sy / 2.0
+    hole = Polygon(
+        [
+            (cx - half_x, cy - half_y),
+            (cx + half_x, cy - half_y),
+            (cx + half_x, cy + half_y),
+            (cx - half_x, cy + half_y),
+        ]
+    )
+    rotation %= 360.0
+    if not isclose(rotation, 0.0, rel_tol=0.0, abs_tol=1e-15):
+        hole = rotate(
+            hole,
+            rotation,
+            origin=(cx, cy),
+            use_radians=False,
+        )
+    _validate_flash_polygon(hole)
+    return hole
+
+
+def rectangular_hole_fits_standard_flash(
+    size_x: float,
+    size_y: float,
+    shape: str,
+    hole_size_x: float,
+    hole_size_y: float,
+    *,
+    rotation_deg: float = 0.0,
+    hole_rotation_deg: float = 0.0,
+) -> bool:
+    """Return whether a centered rectangular hole strictly fits C/R/O geometry.
+
+    Deprecated Gerber rectangular holes do not rotate with the aperture. The
+    outer and hole rotations therefore remain separate so legacy semantics are
+    explicit and auditable.
+    """
+
+    sx = float(size_x)
+    sy = float(size_y)
+    hx = float(hole_size_x)
+    hy = float(hole_size_y)
+    outer_rotation = float(rotation_deg)
+    hole_rotation = float(hole_rotation_deg)
+    if not all(
+        isfinite(value)
+        for value in (sx, sy, hx, hy, outer_rotation, hole_rotation)
+    ):
+        return False
+    if sx <= 0.0 or sy <= 0.0 or hx <= 0.0 or hy <= 0.0:
+        return False
+
+    kind = str(shape).upper()
+    if kind == "C":
+        if not isclose(sx, sy, rel_tol=1e-12, abs_tol=1e-12):
+            return False
+        return hypot(hx, hy) < sx
+
+    relative = radians((hole_rotation - outer_rotation) % 360.0)
+    cosine = cos(relative)
+    sine = sin(relative)
+    corners = (
+        (-hx / 2.0, -hy / 2.0),
+        (hx / 2.0, -hy / 2.0),
+        (hx / 2.0, hy / 2.0),
+        (-hx / 2.0, hy / 2.0),
+    )
+    local_corners = tuple(
+        (
+            x * cosine - y * sine,
+            x * sine + y * cosine,
+        )
+        for x, y in corners
+    )
+
+    if kind == "R":
+        return all(
+            abs(x) < sx / 2.0 and abs(y) < sy / 2.0
+            for x, y in local_corners
+        )
+
+    if kind != "O":
+        return False
+
+    if sx >= sy:
+        radius = sy / 2.0
+        half_straight = (sx - sy) / 2.0
+        return all(
+            max(abs(x) - half_straight, 0.0) ** 2 + y * y
+            < radius * radius
+            for x, y in local_corners
+        )
+
+    radius = sx / 2.0
+    half_straight = (sy - sx) / 2.0
+    return all(
+        x * x + max(abs(y) - half_straight, 0.0) ** 2
+        < radius * radius
+        for x, y in local_corners
+    )
+
+
 def polygonize_holed_flash(
     center_x: float,
     center_y: float,
     size_x: float,
     size_y: float,
     shape: str,
-    hole_diameter: float,
+    hole_diameter: float | None = None,
     *,
+    rectangular_hole: tuple[float, float] | None = None,
     rotation_deg: float = 0.0,
+    hole_rotation_deg: float = 0.0,
     max_chord_error_mm: float = 0.005,
     max_arc_segments: int = 4096,
 ) -> HoledFlashPolygonization:
-    """Return the solid part of a standard C/R/O flash with a round hole.
+    """Return a standard C/R/O flash with one transparent centered hole.
 
-    Gerber aperture holes are transparent: the hole is excluded from this
-    operation geometry rather than emitted as a separate clear operation.
+    Modern round holes rotate trivially because they are circular. Deprecated
+    rectangular holes intentionally keep an orientation separate from the
+    aperture rotation, matching the historical Gerber semantics.
     """
 
     sx = float(size_x)
     sy = float(size_y)
-    hole = float(hole_diameter)
     kind = str(shape).upper()
-    if hole <= 0.0:
-        raise ValueError("Gerber aperture hole diameter must be positive")
-    if hole >= min(sx, sy):
-        raise ValueError("Gerber aperture hole must strictly fit within aperture")
+    has_round_hole = hole_diameter is not None
+    has_rectangular_hole = rectangular_hole is not None
+    if has_round_hole == has_rectangular_hole:
+        raise ValueError(
+            "Gerber holed flash requires exactly one round or rectangular hole"
+        )
+
+    outer_rotation = float(rotation_deg)
+    hole_rotation = float(hole_rotation_deg)
+    if not isfinite(outer_rotation) or not isfinite(hole_rotation):
+        raise ValueError("Gerber flash rotation must be finite")
+
+    hole = None if hole_diameter is None else float(hole_diameter)
+    rectangular_size: tuple[float, float] | None = None
+    if rectangular_hole is not None:
+        if len(rectangular_hole) != 2:
+            raise ValueError("Gerber rectangular hole requires X/Y dimensions")
+        rectangular_size = (
+            float(rectangular_hole[0]),
+            float(rectangular_hole[1]),
+        )
+
+    if hole is not None:
+        if not isfinite(hole) or hole <= 0.0:
+            raise ValueError("Gerber aperture hole diameter must be positive")
+        if hole >= min(sx, sy):
+            raise ValueError("Gerber aperture hole must strictly fit within aperture")
+    elif rectangular_size is not None:
+        hole_x, hole_y = rectangular_size
+        if not all(isfinite(value) and value > 0.0 for value in rectangular_size):
+            raise ValueError("Gerber rectangular hole dimensions must be positive")
+        if not rectangular_hole_fits_standard_flash(
+            sx,
+            sy,
+            kind,
+            hole_x,
+            hole_y,
+            rotation_deg=outer_rotation,
+            hole_rotation_deg=hole_rotation,
+        ):
+            raise ValueError(
+                "Gerber rectangular hole must strictly fit within aperture"
+            )
 
     outer = polygonize_rotated_flash(
         center_x,
@@ -547,20 +715,39 @@ def polygonize_holed_flash(
         sx,
         sy,
         kind,
-        rotation_deg=rotation_deg,
+        rotation_deg=outer_rotation,
         max_chord_error_mm=max_chord_error_mm,
         max_arc_segments=max_arc_segments,
     )
-    hole_poly = polygonize_flash(
-        center_x,
-        center_y,
-        hole,
-        hole,
-        "C",
-        max_chord_error_mm=max_chord_error_mm,
-        max_arc_segments=max_arc_segments,
-    )
-    geometry = outer.geometry.difference(hole_poly.geometry)
+
+    if hole is not None:
+        hole_poly = polygonize_flash(
+            center_x,
+            center_y,
+            hole,
+            hole,
+            "C",
+            max_chord_error_mm=max_chord_error_mm,
+            max_arc_segments=max_arc_segments,
+        )
+        hole_geometry = hole_poly.geometry
+        hole_segments = hole_poly.curved_segments
+        hole_error = hole_poly.max_chord_error_mm
+        hole_approximated = hole_poly.approximated
+    else:
+        assert rectangular_size is not None
+        hole_geometry = _rectangular_hole_polygon(
+            center_x,
+            center_y,
+            rectangular_size[0],
+            rectangular_size[1],
+            rotation_deg=hole_rotation,
+        )
+        hole_segments = 0
+        hole_error = 0.0
+        hole_approximated = False
+
+    geometry = outer.geometry.difference(hole_geometry)
     if not isinstance(geometry, Polygon):
         raise ValueError("Gerber holed flash produced non-polygonal geometry")
     if (
@@ -575,13 +762,15 @@ def polygonize_holed_flash(
         geometry=geometry,
         shape=kind,
         hole_diameter=hole,
+        rectangular_hole=rectangular_size,
+        hole_rotation_deg=hole_rotation % 360.0,
         outer_curved_segments=outer.curved_segments,
-        hole_curved_segments=hole_poly.curved_segments,
+        hole_curved_segments=hole_segments,
         max_chord_error_mm=max(
             outer.max_chord_error_mm,
-            hole_poly.max_chord_error_mm,
+            hole_error,
         ),
-        approximated=outer.approximated or hole_poly.approximated,
+        approximated=outer.approximated or hole_approximated,
     )
 
 
@@ -595,13 +784,16 @@ def polygonize_regular_polygon_flash(
     mirror: str = "N",
     object_rotation_deg: float = 0.0,
     hole_diameter: float | None = None,
+    rectangular_hole: tuple[float, float] | None = None,
+    hole_rotation_deg: float = 0.0,
     max_chord_error_mm: float = 0.005,
     max_arc_segments: int = 4096,
 ) -> RegularPolygonFlashPolygonization:
-    """Return exact regular-polygon D03 geometry with optional round hole.
+    """Return exact regular-polygon D03 geometry with an optional hole.
 
     The polygon template rotation belongs to the original aperture. LM mirroring
     is applied to that original shape before the modal LR/object rotation.
+    Deprecated rectangular holes retain their own image-level orientation.
     """
 
     cx = float(center_x)
@@ -617,7 +809,10 @@ def polygonize_regular_polygon_flash(
 
     base_rotation = float(base_rotation_deg)
     object_rotation = float(object_rotation_deg)
-    if not isfinite(base_rotation) or not isfinite(object_rotation):
+    hole_rotation = float(hole_rotation_deg)
+    if not all(
+        isfinite(value) for value in (base_rotation, object_rotation, hole_rotation)
+    ):
         raise ValueError("Gerber polygon rotation must be finite")
     mirror_mode = str(mirror).upper()
     if mirror_mode not in {"N", "X", "Y", "XY"}:
@@ -625,6 +820,7 @@ def polygonize_regular_polygon_flash(
 
     radius = diameter / 2.0
     points: list[tuple[float, float]] = []
+    rotation = radians(object_rotation)
     for index in range(vertex_count):
         angle = radians(base_rotation + index * 360.0 / vertex_count)
         dx = radius * cos(angle)
@@ -633,7 +829,6 @@ def polygonize_regular_polygon_flash(
             dx = -dx
         if "Y" in mirror_mode:
             dy = -dy
-        rotation = radians(object_rotation)
         rx = dx * cos(rotation) - dy * sin(rotation)
         ry = dx * sin(rotation) + dy * cos(rotation)
         points.append((cx + rx, cy + ry))
@@ -642,11 +837,19 @@ def polygonize_regular_polygon_flash(
     _validate_flash_polygon(outer)
 
     hole = None if hole_diameter is None else float(hole_diameter)
+    rectangular_size = (
+        None
+        if rectangular_hole is None
+        else (float(rectangular_hole[0]), float(rectangular_hole[1]))
+    )
+    if hole is not None and rectangular_size is not None:
+        raise ValueError("Gerber polygon aperture cannot have two hole definitions")
+
     hole_segments = 0
     approximated = False
     geometry = outer
     if hole is not None:
-        if hole <= 0.0:
+        if not isfinite(hole) or hole <= 0.0:
             raise ValueError("Gerber polygon hole diameter must be positive")
         max_hole = diameter * cos(pi / vertex_count)
         if hole >= max_hole:
@@ -665,11 +868,31 @@ def polygonize_regular_polygon_flash(
         geometry = outer.difference(hole_poly.geometry)
         hole_segments = hole_poly.curved_segments
         approximated = hole_poly.approximated
-        if not isinstance(geometry, Polygon) or len(geometry.interiors) != 1:
+    elif rectangular_size is not None:
+        if not all(isfinite(value) and value > 0.0 for value in rectangular_size):
+            raise ValueError("Gerber rectangular hole dimensions must be positive")
+        hole_geometry = _rectangular_hole_polygon(
+            cx,
+            cy,
+            rectangular_size[0],
+            rectangular_size[1],
+            rotation_deg=hole_rotation,
+        )
+        if not outer.contains(hole_geometry):
             raise ValueError(
-                "Gerber polygon holed flash did not preserve one centered hole"
+                "Gerber polygon rectangular hole must strictly fit within polygon"
             )
-        _validate_flash_polygon(geometry)
+        geometry = outer.difference(hole_geometry)
+
+    has_hole = hole is not None or rectangular_size is not None
+    if (
+        not isinstance(geometry, Polygon)
+        or (has_hole and len(geometry.interiors) != 1)
+    ):
+        raise ValueError(
+            "Gerber polygon holed flash did not preserve one centered hole"
+        )
+    _validate_flash_polygon(geometry)
 
     return RegularPolygonFlashPolygonization(
         geometry=geometry,
@@ -679,11 +902,12 @@ def polygonize_regular_polygon_flash(
         mirror=mirror_mode,
         object_rotation_deg=object_rotation % 360.0,
         hole_diameter=hole,
+        rectangular_hole=rectangular_size,
+        hole_rotation_deg=hole_rotation % 360.0,
         hole_curved_segments=hole_segments,
         max_chord_error_mm=(max_chord_error_mm if hole is not None else 0.0),
         approximated=approximated,
     )
-
 
 def polygonize_regular_polygon_track(
     start_x: float,
