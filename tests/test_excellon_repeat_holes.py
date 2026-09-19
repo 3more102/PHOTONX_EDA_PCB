@@ -70,6 +70,27 @@ M30
     assert [y for _, y in _coords(result)] == pytest.approx([2.0, 2.0, 2.0, 2.0])
 
 
+def test_repeat_hole_steps_use_active_units(tmp_path):
+    path = _write(
+        tmp_path,
+        """M48
+INCH
+T01C0.040
+%
+T01
+X1.0000Y2.0000
+R2X0.1000Y-0.0500
+M30
+""",
+    )
+
+    result = ExcellonParser(strict=True).parse(path)
+
+    assert [x for x, _ in _coords(result)] == pytest.approx([25.4, 27.94, 30.48])
+    assert [y for _, y in _coords(result)] == pytest.approx([50.8, 49.53, 48.26])
+    assert [drill.diameter for drill in result.drills] == pytest.approx([1.016] * 3)
+
+
 def test_repeat_hole_without_xy_repeats_same_location(tmp_path):
     path = _write(
         tmp_path,
