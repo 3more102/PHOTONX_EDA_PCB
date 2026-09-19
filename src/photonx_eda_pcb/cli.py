@@ -58,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument(
         "--kicad",
         action="store_true",
-        help="also emit reconstructed.kicad_pcb",
+        help="also emit reconstructed.kicad_pcb plus KiCad audit and validation artifacts",
     )
     r.add_argument(
         "--review-artifacts",
