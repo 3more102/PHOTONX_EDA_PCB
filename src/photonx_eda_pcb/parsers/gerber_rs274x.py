@@ -1435,6 +1435,56 @@ class GerberRS274XParser:
 
         return tuple(points)
 
+    def _outline_macro_sweep_geometry(
+        self,
+        aperture: Aperture,
+        start: Point,
+        end: Point,
+    ) -> Polygon:
+        """Return the exact translational sweep of one valid Code-4 outline."""
+
+        start_points = self._outline_macro_flash_points(aperture, start)
+        end_points = self._outline_macro_flash_points(aperture, end)
+        if len(start_points) < 3 or len(end_points) != len(start_points):
+            raise ValueError("outline aperture sweep requires matching polygon vertices")
+
+        start_coords = [(point.x, point.y) for point in start_points]
+        end_coords = [(point.x, point.y) for point in end_points]
+        start_polygon = Polygon(start_coords)
+        end_polygon = Polygon(end_coords)
+        for label, polygon in (("start", start_polygon), ("end", end_polygon)):
+            if polygon.is_empty or not polygon.is_valid or float(polygon.area) <= 0.0:
+                raise ValueError(f"outline aperture {label} polygon is invalid")
+
+        if hypot(end.x - start.x, end.y - start.y) <= 1e-15:
+            return start_polygon
+
+        pieces = [start_polygon, end_polygon]
+        for index in range(len(start_coords)):
+            next_index = (index + 1) % len(start_coords)
+            side = Polygon(
+                (
+                    start_coords[index],
+                    start_coords[next_index],
+                    end_coords[next_index],
+                    end_coords[index],
+                )
+            )
+            if side.is_empty or float(side.area) <= 1e-18:
+                continue
+            if not side.is_valid:
+                raise ValueError("outline aperture sweep side face is invalid")
+            pieces.append(side)
+
+        geometry = unary_union(pieces)
+        if not isinstance(geometry, Polygon):
+            raise ValueError(
+                "outline aperture sweep did not produce one connected polygon"
+            )
+        if geometry.is_empty or not geometry.is_valid or float(geometry.area) <= 0.0:
+            raise ValueError("outline aperture sweep produced invalid geometry")
+        return geometry
+
     def _instantiate_macro_aperture(
         self,
         code: int,
@@ -4604,18 +4654,145 @@ class GerberRS274XParser:
 
                 if operation == "1":
                     if ap.shape == "AM4":
-                        self._fail_or_warn(
-                            p,
-                            line_no,
-                            line,
-                            "UNSUPPORTED_GERBER_OUTLINE_MACRO_DRAW",
-                            (
-                                "general Code-4 outline macro apertures are supported "
-                                "as exact D03 flashes only; D01 sweeps of arbitrary "
-                                "outline geometry remain fail-closed"
-                            ),
-                            out,
-                        )
+                        if self.layer == "Edge.Cuts":
+                            self._fail_or_warn(
+                                p,
+                                line_no,
+                                line,
+                                "UNSUPPORTED_GERBER_OUTLINE_MACRO_DRAW_EDGE",
+                                (
+                                    "general Code-4 outline macro D01 sweeps are "
+                                    "supported only on material layers"
+                                ),
+                                out,
+                            )
+                            self.current = nxt
+                            continue
+                        if not ap.outline_vertices:
+                            self._parse_error_or_warn(
+                                p,
+                                line_no,
+                                line,
+                                "GERBER_OUTLINE_MACRO_DRAW_INVALID",
+                                "Code-4 outline aperture is missing its vertices",
+                                out,
+                            )
+                            self.current = nxt
+                            continue
+
+                        output_rotation = (
+                            self.aperture_rotation_deg + self.image_rotation_deg
+                        ) % 360.0
+                        for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
+                            start_point = self._transform_output_point(
+                                self.current, dx_mm, dy_mm
+                            )
+                            end_point = self._transform_output_point(
+                                nxt, dx_mm, dy_mm
+                            )
+                            try:
+                                geometry = self._outline_macro_sweep_geometry(
+                                    ap, start_point, end_point
+                                )
+                                components = canonical_polygon_components(geometry)
+                            except (TypeError, ValueError) as exc:
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "GERBER_OUTLINE_MACRO_DRAW_INVALID",
+                                    (
+                                        "Code-4 outline linear-sweep materialization "
+                                        f"failed: {exc}"
+                                    ),
+                                    out,
+                                )
+                                continue
+
+                            if len(components) != 1:
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "GERBER_OUTLINE_MACRO_DRAW_INVALID",
+                                    (
+                                        "Code-4 outline linear sweep did not produce "
+                                        "one connected polygon"
+                                    ),
+                                    out,
+                                )
+                                continue
+
+                            component = components[0]
+                            shell = tuple(Point(x, y) for x, y in component.shell)
+                            holes = tuple(
+                                tuple(Point(x, y) for x, y in ring)
+                                for ring in component.holes
+                            )
+                            id_parts = [
+                                p.name,
+                                line_no,
+                                "outline_macro_linear_sweep",
+                                self.current.x,
+                                self.current.y,
+                                nxt.x,
+                                nxt.y,
+                                ap.code,
+                                len(ap.outline_vertices),
+                                ap.outline_rotation_deg,
+                                self.aperture_mirror,
+                                self.aperture_scale,
+                                output_rotation,
+                                self.layer,
+                            ]
+                            id_parts.extend(
+                                coordinate
+                                for vertex in ap.outline_vertices
+                                for coordinate in vertex
+                            )
+                            id_parts.extend(self._image_transform_id_parts())
+                            id_parts.extend(self._aperture_transform_id_parts())
+                            if self.step_repeat is not None:
+                                id_parts.extend(["sr", x_index, y_index])
+                            obj_id = stable_id("reg", *id_parts)
+
+                            prov = self._step_repeat_provenance(
+                                src, x_index or 0, y_index or 0, dx_mm, dy_mm
+                            )
+                            self._add_aperture_transform_provenance(prov)
+                            prov.add_evidence(
+                                Evidence(
+                                    "gerber_outline_macro_track",
+                                    (
+                                        f"vertices={len(ap.outline_vertices)}; "
+                                        f"primitive_rotation_deg_ccw="
+                                        f"{ap.outline_rotation_deg:.12g}; "
+                                        f"mirror={self.aperture_mirror}; "
+                                        f"aperture_scale={self.aperture_scale:.12g}; "
+                                        f"object_rotation_deg_ccw="
+                                        f"{output_rotation:.12g}; "
+                                        f"length_mm="
+                                        f"{hypot(end_point.x - start_point.x, end_point.y - start_point.y):.12g}; "
+                                        "method=exact_linear_polygon_sweep; "
+                                        "approximated=false"
+                                    ),
+                                    1.0,
+                                    src,
+                                )
+                            )
+                            region = CopperRegion(
+                                obj_id,
+                                shell,
+                                self.layer,
+                                holes=holes,
+                                provenance=prov,
+                            )
+                            out.regions.append(region)
+                            self.material_image_operations.append(
+                                self.layer_polarity,
+                                region,
+                            )
+
                         self.current = nxt
                         continue
 
