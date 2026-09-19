@@ -2194,6 +2194,14 @@ class GerberRS274XParser:
             )
             or self.layer_polarity != "dark"
             or self.step_repeat is not None
+            or self.region_state.active
+            or self.mirror_a
+            or self.mirror_b
+            or not isclose(self.scale_a, 1.0, rel_tol=0.0, abs_tol=1e-12)
+            or not isclose(self.scale_b, 1.0, rel_tol=0.0, abs_tol=1e-12)
+            or not isclose(self.offset_a_mm, 0.0, rel_tol=0.0, abs_tol=1e-12)
+            or not isclose(self.offset_b_mm, 0.0, rel_tol=0.0, abs_tol=1e-12)
+            or self.image_rotation_deg != 0
         ):
             self._aperture_block_fail(
                 path,
@@ -2201,7 +2209,8 @@ class GerberRS274XParser:
                 line,
                 (
                     "the supported aperture-block reduction requires identity "
-                    "LM/LR/LS state, dark layer polarity, and no active step-repeat"
+                    "LM/LR/LS and MI/SF/OF/IR state, dark layer polarity, no active "
+                    "step-repeat, and no active G36 region"
                 ),
                 out,
             )
