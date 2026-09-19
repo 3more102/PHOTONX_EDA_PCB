@@ -15,4 +15,15 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[test]"
-      - run: pytest -q
+      - name: Build native C++ spatial backend
+        run: |
+          cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/native --config Release --parallel 2
+      - name: Verify native library load
+        env:
+          PHOTONX_NATIVE_LIBRARY: ${{ github.workspace }}/build/native/lib/libphotonx_native.so
+        run: python -c "from photonx_eda_pcb.spatial_connectivity.native_backend import native_available; assert native_available()"
+      - name: Run regression suite with native backend enabled
+        env:
+          PHOTONX_NATIVE_LIBRARY: ${{ github.workspace }}/build/native/lib/libphotonx_native.so
+        run: pytest -q

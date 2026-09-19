@@ -2,7 +2,7 @@ from __future__ import annotations
 from math import hypot
 from ..models import BoardModel
 from ..provenance import Evidence
-from ..spatial_connectivity.points import build_point_index,radius_query
+from ..spatial_connectivity.points import build_point_index,radius_queries
 
 def _attach(pad,drill):
     pad.drill=drill.diameter
@@ -24,8 +24,8 @@ def attach_drills(board:BoardModel,tolerance_mm:float=0.15,*,use_spatial_index:b
     if not board.drills or not board.pads:return 0
     idx=build_point_index(((d.id,d) for d in board.drills),lambda d:(d.center.x,d.center.y),float(cell_size_mm or max(1.0,tolerance_mm*8)))
     by_id={d.id:d for d in board.drills};attached=0
-    for pad in board.pads:
-        candidates=radius_query(idx,pad.center.x,pad.center.y,tolerance_mm)
+    all_candidates=radius_queries(idx,((p.center.x,p.center.y,tolerance_mm) for p in board.pads))
+    for pad,candidates in zip(board.pads,all_candidates):
         if not candidates:continue
         _,did=candidates[0];_attach(pad,by_id[did]);attached+=1
     return attached
