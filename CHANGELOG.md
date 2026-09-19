@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added exact reduction of single positive origin-centered, zero-rotation Code-21 center-line Gerber macros to rectangular apertures, with active-unit conversion and fail-closed boundaries.
 - Hardened Gerber unit semantics: dimensional data now requires explicit `MO` or supported legacy `G70/G71`, and conflicting unit switches fail closed with permissive file-geometry suppression instead of defaulting to millimeters or mixing unit systems.
 - Verified merged commit `c13f44d` on Python 3.11, 3.12, and 3.13 with 816 passing tests and 2 existing collection warnings (GitHub Actions run `35426569801`).
 - Hardened Gerber step-and-repeat state handling so malformed, non-positive, or over-limit `%SR...%` commands suppress permissive file geometry instead of falling back to a single un-repeated copy.
