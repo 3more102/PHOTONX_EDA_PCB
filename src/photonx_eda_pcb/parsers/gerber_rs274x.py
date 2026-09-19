@@ -411,7 +411,7 @@ class GerberRS274XParser:
                     "GERBER_CLEAR_POLARITY_REGION_COMPOSITION",
                     (
                         "clear layer polarity is enabled for ordered polygon "
-                        "composition of supported G36/G37 regions, solid C/R/O D03 "
+                        "composition of supported G36/G37 regions, C/R/O/P D03 "
                         "flashes, linear C/R/O D01 aperture sweeps, and bounded "
                         "circular-aperture G02/G03 tessellation; curved boundaries use evidenced chord-"
                         "error bounds while outlines remain fail-closed"
@@ -3367,8 +3367,9 @@ class GerberRS274XParser:
     ) -> None:
         """Materialize the bounded polygonal LPC image subset.
 
-        Supported G36/G37 regions, rectangular D03 flashes, and rectangular
-        linear-aperture D01 sweeps are exact. Circular/obround D03 flashes plus
+        Supported G36/G37 regions, rectangular and regular-polygon D03 flashes,
+        and rectangular linear-aperture D01 sweeps are exact. Circular/obround
+        D03 flashes plus
         circular/obround linear-aperture D01 sweeps use deterministic
         inscribed-chord polygonization. Curved linear sweeps have a 0.005 mm
         boundary target. Tessellated G02/G03 circular-aperture arc tracks combine the
@@ -3398,8 +3399,8 @@ class GerberRS274XParser:
                 source_raw or "%LPC*%",
                 "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY",
                 (
-                    "clear Gerber layer polarity supports G36/G37 regions, solid "
-                    "C/R/O D03 flashes, linear C/R/O D01 aperture sweeps, and "
+                    "clear Gerber layer polarity supports G36/G37 regions, "
+                    "C/R/O/P D03 flashes, linear C/R/O D01 aperture sweeps, and "
                     "circular-aperture G02/G03 tessellation; unsupported track forms or outline "
                     "geometry remain outside the bounded polygon-composition subset"
                 ),
@@ -3419,8 +3420,9 @@ class GerberRS274XParser:
                 source_raw or "%LPC*%",
                 "UNSUPPORTED_GERBER_CLEAR_POLARITY_FLASH_SHAPE",
                 (
-                    "clear Gerber layer polarity supports only solid C/R/O D03 "
-                    "flashes in the bounded polygon-composition subset"
+                    "clear Gerber layer polarity supports C/R/O PadCandidate flashes "
+                    "plus polygon-materialized P and transformed/holed flashes "
+                    "in the bounded polygon-composition subset"
                 ),
                 out,
             )
