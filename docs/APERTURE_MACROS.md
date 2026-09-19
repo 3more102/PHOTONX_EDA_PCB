@@ -2,6 +2,8 @@
 
 Macro primitives and arithmetic expressions are parsed conservatively. Unsupported primitive types must remain explicit diagnostics rather than being approximated silently.
 
+Macro lexical handling is fail-closed: Code-0 comments are recognized only with the specification-defined `0 ` prefix, physical newlines are normalized to whitespace instead of being deleted, and primitive-code tokens must use a canonical positive decimal form. This prevents malformed statements or line breaks from silently fusing tokens into different valid macro syntax.
+
 ## Production reduction subset
 
 The high-level Gerber parser reduces an aperture macro to a standard aperture only when the macro contains exactly one additive primitive whose geometry is represented exactly by the current BoardModel:
