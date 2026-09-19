@@ -63,11 +63,29 @@ def test_gerber_legacy_units_and_absolute_mode(tmp_path: Path):
     assert ir.tracks[0].end.x == pytest.approx(25.4)
 
 
-def test_gerber_incremental_mode_remains_fail_closed(tmp_path: Path):
-    p = tmp_path / "bad.gtl"
-    p.write_text("%FSLAX24Y24*%\nG91*\nM02*\n", encoding="utf-8")
-    with pytest.raises(UnsupportedFeatureError):
-        GerberRS274XParser("F.Cu").parse(p)
+def test_gerber_incremental_mode_is_supported(tmp_path: Path):
+    p = tmp_path / "legacy_incremental.gtl"
+    p.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "G91*\n"
+        "X010000Y000000D02*\n"
+        "X010000Y000000D01*\n"
+        "M02*\n",
+        encoding="utf-8",
+    )
+
+    result = GerberRS274XParser("F.Cu").parse(p)
+
+    assert len(result.tracks) == 1
+    assert (result.tracks[0].start.x, result.tracks[0].start.y) == pytest.approx(
+        (1.0, 0.0)
+    )
+    assert (result.tracks[0].end.x, result.tracks[0].end.y) == pytest.approx(
+        (2.0, 0.0)
+    )
 
 
 def test_gerber_utf8_bom_is_accepted(tmp_path: Path):

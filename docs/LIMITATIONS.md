@@ -14,6 +14,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - Gerber `%LPD*%` dark layer polarity is accepted as the supported positive-object state;
 - identity Gerber aperture transforms (`%LMN*%`, zero/full-turn `LR`, and `%LS1*%`) are accepted;
 - metric/inch units and coordinate formats for the supported subset;
+- legacy Gerber absolute (`G90` / FS `A`) and incremental (`G91` / FS `I`) X/Y coordinate notation, with I/J retained as arc-center offsets;
 - point Excellon drill hits in absolute or incremental (`G91` / `ICI,ON`) coordinate mode;
 - Excellon G85 straight slots in absolute or incremental mode, with the incremental start relative to the preceding coordinate and the incremental end relative to the slot start;
 - Excellon linear-route and supported routed-arc endpoints in absolute or incremental coordinate mode, while I/J remain arc-center offsets;
@@ -36,7 +37,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - non-identity Gerber aperture mirroring/rotation/scaling (`LM/LR/LS`): strict mode rejects them, while permissive mode suppresses file geometry because these graphics-state transforms alter flashes, draws, and arcs;
 - non-default legacy Gerber `AS/IP/MI/OF` transforms: strict mode rejects them and permissive mode suppresses file geometry rather than emitting untransformed coordinates/image semantics;
 - Gerber dimensional data before an explicit `MO/G70/G71` unit declaration, or a later conflicting unit switch: strict mode rejects it and permissive mode clears/suppresses file geometry rather than inheriting the parser's default millimeter state or mixing unit systems;
-- Gerber incremental coordinates, whether selected by `G91` or legacy FS `I` notation such as `%FSLIX...*%`: strict mode rejects them, permissive mode suppresses file geometry, and preflight marks them as blockers rather than interpreting increments as absolute;
+
 - invalid Gerber step-and-repeat state (malformed syntax, non-positive counts, or expansion beyond the configured safety limit): strict mode rejects it and permissive mode clears/suppresses file geometry rather than silently treating repeated content as a single instance;
 - Excellon tool definitions before explicit `METRIC/INCH/M71/M72` units: strict mode rejects them and permissive mode suppresses file geometry instead of assuming the parser's default millimeter state;
 - zero-diameter Excellon tools: strict mode rejects them and permissive mode clears/suppresses file geometry instead of producing zero-width drills, slots, or routes;

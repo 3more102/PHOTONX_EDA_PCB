@@ -132,6 +132,7 @@ class GerberRS274XParser:
         self.file_polarity: str | None = None
         self.layer_polarity = "dark"
         self.image_geometry_enabled = True
+        self.incremental = False
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -386,6 +387,19 @@ class GerberRS274XParser:
         fmt = self.xfmt if axis == "x" else self.yfmt
         value = float(raw) if "." in raw else fmt.decode(raw)
         return to_mm(value, self.units)
+
+    def _coordinate_point(self, x_raw, y_raw) -> Point:
+        x = self._decode(x_raw, "x")
+        y = self._decode(y_raw, "y")
+        if self.incremental:
+            return Point(
+                self.current.x + (0.0 if x is None else x),
+                self.current.y + (0.0 if y is None else y),
+            )
+        return Point(
+            self.current.x if x is None else x,
+            self.current.y if y is None else y,
+        )
 
     def _instantiate_standard_aperture(
         self,
@@ -1180,19 +1194,9 @@ class GerberRS274XParser:
                 self.xfmt = CoordinateFormat(int(xi), int(xd), zs)
                 self.yfmt = CoordinateFormat(int(yi), int(yd), zs)
                 if notation == "I":
-                    self._fail_or_warn(
-                        p,
-                        line_no,
-                        line,
-                        "GERBER_INCREMENTAL_COORDINATES_UNSUPPORTED",
-                        (
-                            "FS incremental coordinate notation is not implemented; "
-                            "interpreting subsequent coordinates as absolute would corrupt geometry"
-                        ),
-                        out,
-                    )
-                    if not self.strict:
-                        self._disable_image_geometry(out)
+                    self.incremental = True
+                elif notation == "A":
+                    self.incremental = False
                 continue
 
             m = _MO.match(line)
@@ -1210,24 +1214,13 @@ class GerberRS274XParser:
                 self._declare_units("mm", p, line_no, line, out)
                 continue
 
-            # PHOTONX models absolute coordinates. Explicit absolute mode is
-            # therefore a safe no-op; incremental mode is rejected visibly.
+            # Legacy G90/G91 coordinate notation is modal and equivalent to
+            # the absolute/incremental notation state carried by FS.
             if line in {"G90*", "G090*"}:
+                self.incremental = False
                 continue
             if line in {"G91*", "G091*"}:
-                self._fail_or_warn(
-                    p,
-                    line_no,
-                    line,
-                    "GERBER_INCREMENTAL_COORDINATES_UNSUPPORTED",
-                    (
-                        "G91 incremental coordinate mode is not implemented; "
-                        "interpreting subsequent coordinates as absolute would corrupt geometry"
-                    ),
-                    out,
-                )
-                if not self.strict:
-                    self._disable_image_geometry(out)
+                self.incremental = True
                 continue
 
             # Older generators may emit explicit default transform statements.
@@ -1366,12 +1359,7 @@ class GerberRS274XParser:
                     elif gcode in {"G03", "G3"}:
                         self.interpolation = "ccw_arc"
 
-                    x = self._decode(x_raw, "x")
-                    y = self._decode(y_raw, "y")
-                    nxt = Point(
-                        self.current.x if x is None else x,
-                        self.current.y if y is None else y,
-                    )
+                    nxt = self._coordinate_point(x_raw, y_raw)
 
                     if not self.image_geometry_enabled:
                         self.current = nxt
@@ -1441,12 +1429,7 @@ class GerberRS274XParser:
                 operation = op or self.current_operation
                 if op is not None:
                     self.current_operation = op
-                x = self._decode(x_raw, "x")
-                y = self._decode(y_raw, "y")
-                nxt = Point(
-                    self.current.x if x is None else x,
-                    self.current.y if y is None else y,
-                )
+                nxt = self._coordinate_point(x_raw, y_raw)
 
                 if not self.image_geometry_enabled:
                     self.current = nxt
