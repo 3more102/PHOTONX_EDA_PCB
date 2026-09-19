@@ -6,6 +6,8 @@ from math import hypot
 from ctypes.util import find_library
 from functools import lru_cache
 from pathlib import Path
+from threading import RLock
+from weakref import WeakKeyDictionary
 
 
 _ABI_VERSION = 2
@@ -57,6 +59,82 @@ class _NativeQueryMatch(ctypes.Structure):
         ("query", ctypes.c_uint32),
         ("point", ctypes.c_uint32),
     ]
+
+
+class _NativeIndexSnapshot:
+    __slots__ = ("revision", "ids", "boxes", "centers")
+
+    def __init__(self, revision, ids, boxes, centers):
+        self.revision = revision
+        self.ids = ids
+        self.boxes = boxes
+        self.centers = centers
+
+
+_INDEX_SNAPSHOT_CACHE = WeakKeyDictionary()
+_INDEX_SNAPSHOT_LOCK = RLock()
+
+
+def _build_index_snapshot(index) -> _NativeIndexSnapshot:
+    try:
+        ids = tuple(index.ids())
+    except (TypeError, ValueError, AttributeError, OverflowError) as exc:
+        raise NativeBackendUnsupported("index is not native-compatible") from exc
+
+    if len(ids) > 0xFFFFFFFF:
+        raise NativeBackendUnsupported("native backend supports at most 2^32-1 boxes")
+
+    boxes = []
+    centers = []
+    try:
+        for obj_id in ids:
+            box = index.box(obj_id)
+            min_x = float(box.min_x)
+            min_y = float(box.min_y)
+            max_x = float(box.max_x)
+            max_y = float(box.max_y)
+            boxes.append(_NativeAABB(min_x, min_y, max_x, max_y))
+            centers.append(((min_x + max_x) / 2.0, (min_y + max_y) / 2.0))
+    except (TypeError, ValueError, AttributeError, OverflowError) as exc:
+        raise NativeBackendUnsupported("index boxes are not native-compatible") from exc
+
+    box_array_type = _NativeAABB * len(ids)
+    native_boxes = box_array_type(*boxes)
+    return _NativeIndexSnapshot(
+        getattr(index, "revision", None),
+        ids,
+        native_boxes,
+        tuple(centers),
+    )
+
+
+def _native_index_snapshot(index) -> _NativeIndexSnapshot:
+    revision = getattr(index, "revision", None)
+    if revision is None:
+        return _build_index_snapshot(index)
+
+    try:
+        with _INDEX_SNAPSHOT_LOCK:
+            cached = _INDEX_SNAPSHOT_CACHE.get(index)
+    except TypeError:
+        return _build_index_snapshot(index)
+
+    if cached is not None and cached.revision == revision:
+        return cached
+
+    snapshot = _build_index_snapshot(index)
+    try:
+        if getattr(index, "revision", None) == snapshot.revision:
+            with _INDEX_SNAPSHOT_LOCK:
+                _INDEX_SNAPSHOT_CACHE[index] = snapshot
+    except TypeError:
+        pass
+    return snapshot
+
+
+def _clear_index_snapshot_cache() -> None:
+    with _INDEX_SNAPSHOT_LOCK:
+        _INDEX_SNAPSHOT_CACHE.clear()
 
 
 @lru_cache(maxsize=1)
@@ -142,6 +220,7 @@ def _load_library() -> ctypes.CDLL:
 
 def _clear_library_cache() -> None:
     _probe_library.cache_clear()
+    _clear_index_snapshot_cache()
     clear_candidates = getattr(_library_candidates, "cache_clear", None)
     if clear_candidates is not None:
         clear_candidates()
@@ -161,15 +240,11 @@ def native_available() -> bool:
 
 def native_candidate_pairs(index, tolerance: float = 0.0):
     library = _load_library()
-    ids = tuple(index.ids())
-
-    if len(ids) > 0xFFFFFFFF:
-        raise NativeBackendUnsupported("native backend supports at most 2^32-1 boxes")
 
     try:
         tolerance_value = float(tolerance)
         cell_size = float(index.cell_size)
-    except (TypeError, ValueError, AttributeError) as exc:
+    except (TypeError, ValueError, AttributeError, OverflowError) as exc:
         raise NativeBackendUnsupported("index/tolerance is not native-compatible") from exc
 
     if tolerance_value < 0.0:
@@ -177,18 +252,9 @@ def native_candidate_pairs(index, tolerance: float = 0.0):
             "negative tolerance keeps the Python reference semantics"
         )
 
-    box_array_type = _NativeAABB * len(ids)
-    native_boxes = box_array_type(
-        *(
-            _NativeAABB(
-                float(index.box(obj_id).min_x),
-                float(index.box(obj_id).min_y),
-                float(index.box(obj_id).max_x),
-                float(index.box(obj_id).max_y),
-            )
-            for obj_id in ids
-        )
-    )
+    snapshot = _native_index_snapshot(index)
+    ids = snapshot.ids
+    native_boxes = snapshot.boxes
 
     required = ctypes.c_uint32(0)
     status = int(
@@ -237,31 +303,22 @@ def native_candidate_pairs(index, tolerance: float = 0.0):
 
 def native_radius_queries(index, queries):
     library = _load_library()
-    ids = tuple(index.ids())
-    query_specs = tuple((float(x), float(y), float(radius)) for x, y, radius in queries)
-
-    if len(ids) > 0xFFFFFFFF or len(query_specs) > 0xFFFFFFFF:
-        raise NativeBackendUnsupported(
-            "native backend supports at most 2^32-1 boxes and queries"
-        )
-
     try:
-        cell_size = float(index.cell_size)
-    except (TypeError, ValueError, AttributeError) as exc:
-        raise NativeBackendUnsupported("index is not native-compatible") from exc
-
-    box_array_type = _NativeAABB * len(ids)
-    native_boxes = box_array_type(
-        *(
-            _NativeAABB(
-                float(index.box(obj_id).min_x),
-                float(index.box(obj_id).min_y),
-                float(index.box(obj_id).max_x),
-                float(index.box(obj_id).max_y),
-            )
-            for obj_id in ids
+        query_specs = tuple(
+            (float(x), float(y), float(radius)) for x, y, radius in queries
         )
-    )
+        cell_size = float(index.cell_size)
+    except (TypeError, ValueError, AttributeError, OverflowError) as exc:
+        raise NativeBackendUnsupported("index/queries are not native-compatible") from exc
+
+    if len(query_specs) > 0xFFFFFFFF:
+        raise NativeBackendUnsupported(
+            "native backend supports at most 2^32-1 queries"
+        )
+
+    snapshot = _native_index_snapshot(index)
+    ids = snapshot.ids
+    native_boxes = snapshot.boxes
 
     native_query_type = _NativePointQuery * len(query_specs)
     native_queries = native_query_type(
@@ -322,9 +379,7 @@ def native_radius_queries(index, queries):
             )
         x, y, radius = query_specs[query_index]
         obj_id = ids[point_index]
-        box = index.box(obj_id)
-        center_x = (float(box.min_x) + float(box.max_x)) / 2.0
-        center_y = (float(box.min_y) + float(box.max_y)) / 2.0
+        center_x, center_y = snapshot.centers[point_index]
         distance = hypot(x - center_x, y - center_y)
         if distance <= radius:
             results[query_index].append((distance, obj_id))
