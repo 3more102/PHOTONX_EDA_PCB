@@ -50,6 +50,27 @@ enum photonx_native_status {
 
 PHOTONX_NATIVE_API uint32_t photonx_native_abi_version(void);
 
+typedef void* photonx_aabb_index_handle;
+
+PHOTONX_NATIVE_API int photonx_aabb_index_create(
+    const photonx_aabb* boxes,
+    uint32_t box_count,
+    double cell_size,
+    photonx_aabb_index_handle* out_index
+);
+
+PHOTONX_NATIVE_API void photonx_aabb_index_destroy(
+    photonx_aabb_index_handle index
+);
+
+PHOTONX_NATIVE_API int photonx_aabb_index_candidate_pairs(
+    photonx_aabb_index_handle index,
+    double tolerance,
+    photonx_pair* out_pairs,
+    uint32_t out_capacity,
+    uint32_t* out_count
+);
+
 PHOTONX_NATIVE_API int photonx_candidate_pairs(
     const photonx_aabb* boxes,
     uint32_t box_count,
