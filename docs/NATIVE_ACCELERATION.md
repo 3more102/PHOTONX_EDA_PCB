@@ -39,6 +39,12 @@ The native ABI also supports batched point-radius candidate generation. PHOTONX 
 
 The batch path is used by drill association, footprint clustering and metrics, and component-pair inference and metrics. This reduces repeated Python-to-native transitions while preserving the previous Python result contract.
 
+## Stage 3: persistent point-index handles
+
+Repeated radius-query batches now reuse an opaque C++ point-index handle instead of rebuilding the native center-point hash on every ctypes call. `SpatialHashIndex` carries a monotonic mutation revision; the Python bridge caches the native handle weakly and rebuilds it automatically after an insertion. Cache reset destroys native handles before the shared-library probe is cleared.
+
+This stage changes only broad-phase reuse. Python still performs the authoritative Euclidean `distance <= radius` predicate and deterministic `(distance, id)` ordering.
+
 ## Safety contract
 
 The native backend:
@@ -55,7 +61,7 @@ Unsupported native inputs fall back to the Python reference path in `auto` mode.
 
 The next safe candidates are:
 
-1. persistent/batch AABB index handles to avoid rebuilding native grids across independent calls;
+1. persistent AABB candidate-index handles for repeated connectivity broad-phase calls;
 2. benchmark-gated connectivity candidate acceleration and crossover thresholds;
 3. cross-platform packaging of the optional native library;
 4. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
