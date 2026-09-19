@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added legacy Gerber `SF` coordinate scaling for the specification range 0.0001..999.99999. SF scales coordinate data only; apertures and step-repeat distances remain unchanged. Uniform scaling is supported for circular interpolation with output-space chord-error preservation, while anisotropic circular interpolation fails closed instead of being approximated as an ellipse.
+- Added `gerber_scale_factor` provenance and transform-aware stable-ID inputs for non-identity SF state.
 - Added legacy non-geometric Gerber compatibility: both AS axis-select forms are accepted without changing CAD-to-CAM geometry, IN/LN names are preserved as comment diagnostics, G55 and M01 are accepted as no-ops, and M00 now terminates parsing like M02.
 - Hardened Gerber end-of-file handling so M02 stops parsing immediately instead of allowing trailing statements to leak geometry after the formal program end.
 - Added exact deprecated Gerber `OF` image translation using active MO units, with deterministic composition after MI/SF and before IR regardless of command appearance; translations propagate through flashes, tracks, outlines, tessellated arcs, and step-repeat instances with provenance and transform-aware stable IDs.
