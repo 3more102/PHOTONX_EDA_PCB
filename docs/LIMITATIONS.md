@@ -18,7 +18,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - deprecated `MI` mirroring is supported exactly for A/B coordinate data, including flashes, linear draws, tessellated arcs, outlines, and incremental coordinates; apertures and step-repeat distances are intentionally not mirrored;
 - deprecated `SF` coordinate scaling is supported for flashes and linear geometry with independent A/B factors in the specification range; apertures and step-repeat distances remain unscaled, uniform SF supports circular arcs, and anisotropic SF arcs fail closed because they become non-circular;
 - deprecated `OF` translation is supported exactly in the active MO units, including flashes, linear draws, arcs, outlines, and step-repeat instances, and composes after MI/SF and before IR;
-- both legacy `ASAXBY` and `ASAYBX` are accepted as output-device-only metadata because AS does not affect CAD-to-CAM image geometry;
+- both legacy `ASAXBY` and `ASAYBX` are accepted as output-device-only metadata because AS does not affect CAD-to-CAM image geometry; AS/IN/MI/SF/OF/IR header commands must precede the first coordinate statement, including non-emitting D02 moves;
 - legacy `IN` and `LN` names are retained as comment diagnostics, `G55` and `M01` are accepted as no-ops, and `M00` terminates parsing with the same stop semantics as `M02`;
 - deprecated whole-image `IR` rotation is supported exactly for its specification-defined 0/90/180/270-degree values, including flashes, linear draws, tessellated arcs, outlines, and step-repeat instances;
 - metric/inch units and coordinate formats for the supported subset;
