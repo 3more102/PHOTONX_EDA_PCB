@@ -133,7 +133,8 @@ class GerberRS274XParser:
     Supported: FS, MO, ADD(C/R/O), Dnn selection, G01/D01/D02/D03,
     bounded G74 single-quadrant and G75 multi-quadrant G02/G03 circular
     interpolation with circular apertures, dark multi-contour linear/G75
-    G36/G37 regions, G04, M02, and standard linear step-and-repeat
+    G36/G37 regions with bounded simple cut-in holes, G04, M02, and standard
+    linear step-and-repeat
     (%SR...*% / %SR*%).
 
     Unsupported constructs are never silently discarded in strict mode.
@@ -159,10 +160,13 @@ class GerberRS274XParser:
         self.region_sources: list[SourceRef] = []
         self.region_arc_evidence: list[Evidence] = []
         self.region_contours: list[tuple[Point, ...]] = []
+        self.region_contour_holes: list[tuple[tuple[Point, ...], ...]] = []
         self.region_contour_sources: list[list[SourceRef]] = []
         self.region_contour_arc_evidence: list[list[Evidence]] = []
+        self.region_contour_cutin_evidence: list[list[Evidence]] = []
         self.region_current_sources: list[SourceRef] = []
         self.region_current_arc_evidence: list[Evidence] = []
+        self.region_current_edge_kinds: list[str] = []
         self.region_start_line: int | None = None
         self.file_polarity: str | None = None
         self.layer_polarity = "dark"
@@ -1569,10 +1573,13 @@ class GerberRS274XParser:
         self.region_sources.clear()
         self.region_arc_evidence.clear()
         self.region_contours.clear()
+        self.region_contour_holes.clear()
         self.region_contour_sources.clear()
         self.region_contour_arc_evidence.clear()
+        self.region_contour_cutin_evidence.clear()
         self.region_current_sources.clear()
         self.region_current_arc_evidence.clear()
+        self.region_current_edge_kinds.clear()
         self.region_start_line = None
 
     def _region_fail(
@@ -1640,10 +1647,13 @@ class GerberRS274XParser:
         self.region_sources = [SourceRef(str(path), line_no, line)]
         self.region_arc_evidence = []
         self.region_contours = []
+        self.region_contour_holes = []
         self.region_contour_sources = []
         self.region_contour_arc_evidence = []
+        self.region_contour_cutin_evidence = []
         self.region_current_sources = []
         self.region_current_arc_evidence = []
+        self.region_current_edge_kinds = []
         self.region_start_line = line_no
 
     def _finish_current_region_contour(
@@ -1827,6 +1837,7 @@ class GerberRS274XParser:
                     self.current = nxt
                     return
             self.region_state.add(nxt.x, nxt.y)
+            self.region_current_edge_kinds.append("linear")
             self.region_current_sources.append(src)
             self.region_sources.append(src)
             self.current = nxt
@@ -2019,6 +2030,7 @@ class GerberRS274XParser:
             return
         for vertex in arc_vertices[1:]:
             self.region_state.add(vertex.x, vertex.y)
+            self.region_current_edge_kinds.append("arc")
 
         src = SourceRef(str(path), line_no, line)
         self.region_current_sources.append(src)
