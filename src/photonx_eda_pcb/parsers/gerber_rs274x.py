@@ -1467,7 +1467,7 @@ class GerberRS274XParser:
             }
             primitives = parse_macro_body(body)
             evaluated = evaluate_macro(primitives, variables)
-        except (ValueError, SyntaxError, ZeroDivisionError) as exc:
+        except (ValueError, SyntaxError, ZeroDivisionError, OverflowError) as exc:
             self._fail_or_warn(
                 path,
                 line_no,
@@ -1495,20 +1495,35 @@ class GerberRS274XParser:
         values = primitive["values"]
 
         if primitive["kind"] == "circle":
-            if len(values) < 4:
+            if len(values) not in {4, 5}:
                 self._fail_or_warn(
                     path,
                     line_no,
                     line,
                     "INVALID_GERBER_APERTURE_MACRO",
-                    f"circle aperture macro {name!r} has too few modifiers",
+                    f"circle aperture macro {name!r} requires four or five modifiers",
                     out,
                 )
                 self.unsupported_apertures.add(code)
                 return
 
             exposure, diameter, center_x, center_y = values[:4]
-            rotation = values[4] if len(values) > 4 else 0.0
+            rotation = values[4] if len(values) == 5 else 0.0
+            if not all(
+                isfinite(float(value))
+                for value in (exposure, diameter, center_x, center_y, rotation)
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"circle aperture macro {name!r} requires finite modifiers",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
             if (
                 exposure != 1
                 or diameter <= 0
@@ -1531,6 +1546,18 @@ class GerberRS274XParser:
                 return
 
             diameter_mm = to_mm(float(diameter), self.units)
+            if not isfinite(diameter_mm):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"circle aperture macro {name!r} overflows after active-unit conversion",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
             self.apertures[code] = Aperture(code, "C", diameter_mm, diameter_mm)
             return
 

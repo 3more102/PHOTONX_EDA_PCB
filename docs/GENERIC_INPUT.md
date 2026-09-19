@@ -94,8 +94,12 @@ The generic input path also handles several common real-world variations:
 - headerless Excellon-like packages are detected, but PHOTONX will not silently
   guess their units;
 - simple parameterized Gerber aperture macros that resolve to one positive,
-  origin-centered circle are accepted as exact circular apertures; circle rotation
+  origin-centered circle are accepted as exact circular apertures; Code-1 requires exactly
+  four or five finite modifiers and finite active-unit conversion, while circle rotation
   is geometry-invariant when its center is the macro origin;
+- aperture-macro `$n=expression` definitions are evaluated in source order from AD-supplied
+  variables; undefined variables evaluate to zero, exact variable-token substitution prevents
+  `$1` from aliasing `$10`, and any variable redefinition is rejected as invalid;
 - single positive Gerber Code-20 vector-line macros (plus deprecated Code-2)
   are accepted when the segment is non-zero and midpoint-centered on the macro origin;
   arbitrary segment orientation and finite primitive rotation are preserved exactly;
