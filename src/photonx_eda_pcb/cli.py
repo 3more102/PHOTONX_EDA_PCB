@@ -11,6 +11,7 @@ from .io import write_reconstruction_bundle
 from .pipeline import reconstruct
 from .preflight import preflight as inspect_input
 from .reporting import summary
+from .roundtrip import board_fingerprint_manifest
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,6 +28,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pf.add_argument("input", type=Path)
     pf.add_argument("--output", type=Path)
+
+    f = sub.add_parser(
+        "fingerprint",
+        help="reconstruct input and emit a deterministic canonical model fingerprint",
+    )
+    f.add_argument("input", type=Path)
+    f.add_argument("--output", type=Path)
+    f.add_argument(
+        "--permissive",
+        action="store_true",
+        help="record unsupported syntax as diagnostics instead of failing",
+    )
 
     g = sub.add_parser("gui")
     g.add_argument("input", type=Path)
@@ -59,6 +72,15 @@ def _write_json(path: Path, payload: dict) -> None:
     )
 
 
+def _preflight_reconstruction(input_path: Path, permissive: bool) -> tuple[dict, int | None]:
+    report = inspect_input(input_path).to_dict()
+    if not report["discovered_files"]:
+        return report, 2
+    if not permissive and not report["ready_for_strict_reconstruction"]:
+        return report, 3
+    return report, None
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -73,22 +95,33 @@ def main(argv=None) -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0 if report["discovered_files"] else 2
 
+    if args.command == "fingerprint":
+        report, exit_code = _preflight_reconstruction(args.input, args.permissive)
+        if exit_code is not None:
+            print(json.dumps(report, indent=2, sort_keys=True))
+            return exit_code
+
+        cfg = ReconstructionConfig(strict_parsing=not args.permissive)
+        result = reconstruct(args.input, cfg)
+        payload = board_fingerprint_manifest(result.board)
+        payload["summary"] = summary(result.board, result.validation)
+        if args.output:
+            _write_json(args.output, payload)
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0 if result.validation.ok else 2
+
     if args.command == "gui":
         from .gui import launch
         launch(args.input)
         return 0
 
-    report = inspect_input(args.input).to_dict()
+    report, exit_code = _preflight_reconstruction(args.input, args.permissive)
     args.output.mkdir(parents=True, exist_ok=True)
     _write_json(args.output / "input_preflight.json", report)
 
-    if not report["discovered_files"]:
+    if exit_code is not None:
         print(json.dumps(report, indent=2, sort_keys=True))
-        return 2
-
-    if not args.permissive and not report["ready_for_strict_reconstruction"]:
-        print(json.dumps(report, indent=2, sort_keys=True))
-        return 3
+        return exit_code
 
     cfg = ReconstructionConfig(strict_parsing=not args.permissive)
     result = reconstruct(args.input, cfg)
