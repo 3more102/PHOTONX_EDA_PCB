@@ -287,23 +287,24 @@ def test_mi_is_preflight_ready(tmp_path: Path):
 
 
 def test_transform_changes_stable_object_id(tmp_path: Path):
-    plain = _write(
+    path = _write(
         tmp_path,
-        "plain.gtl",
+        "same_source.gtl",
         "%ADD10C,0.200*%\n"
         "D10*\n"
         "X010000Y020000D03*\n",
     )
-    mirrored = _write(
-        tmp_path,
-        "plain_mirror.gtl",
-        "%MIA1*%\n"
-        "%ADD10C,0.200*%\n"
-        "D10*\n"
-        "X010000Y020000D03*\n",
-    )
+    plain_pad = GerberRS274XParser("F.Cu", strict=True).parse(path).pads[0]
 
-    plain_pad = GerberRS274XParser("F.Cu", strict=True).parse(plain).pads[0]
-    mirrored_pad = GerberRS274XParser("F.Cu", strict=True).parse(mirrored).pads[0]
+    path.write_text(
+        BASE
+        + "%MIA1*%\n"
+        + "%ADD10C,0.200*%\n"
+        + "D10*\n"
+        + "X010000Y020000D03*\n"
+        + "M02*\n",
+        encoding="utf-8",
+    )
+    mirrored_pad = GerberRS274XParser("F.Cu", strict=True).parse(path).pads[0]
 
     assert plain_pad.id != mirrored_pad.id
