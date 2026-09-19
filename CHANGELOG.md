@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added exact deprecated Gerber whole-image `IR` rotation for 0/90/180/270 degrees, applied to flashes, linear draws, outlines, tessellated arcs, incremental-coordinate geometry, and step-repeat instances with explicit provenance evidence.
+- Recognized legacy Gerber `SF` scale-factor commands explicitly: identity scaling is accepted, while non-identity or malformed scaling fails closed and suppresses permissive geometry instead of being ignored as an unknown statement.
 - Verified PR #54 change set (merged as `8ba238d`) on Python 3.11, 3.12, and 3.13 with 855 passing tests and 2 existing collection warnings (GitHub Actions run `35431302455`).
 - Added exact deprecated Code-22 lower-left Gerber macro reduction for positive-size rectangles centered on the macro origin, including 0/90/180/270-degree rotations; non-centered, non-orthogonal, zero-size, and exposure-off cases remain fail-closed.
 - Expanded exact rectangular macro normalization so centered Code-20/Code-2 vector-line and Code-21 center-line primitives accept 90-degree-step rotations, and origin-centered circles accept rotation as a geometry-invariant parameter.
