@@ -359,6 +359,42 @@ def test_multicontour_region_is_fail_closed(tmp_path: Path):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
+def test_region_contour_must_begin_with_d02(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "missing_start_move.gtl",
+        _region_file(
+            "G36*\n"
+            "X010000Y000000D01*\n"
+            "X000000Y010000D01*\n"
+            "X000000Y000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    with pytest.raises(ParseError, match="must begin with D02"):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
+def test_standalone_d03_is_rejected_inside_region(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "region_d03.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "D03*\n"
+            "G37*"
+        ),
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="D03 is not allowed inside",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
 def test_g74_region_arc_remains_fail_closed(tmp_path: Path):
     path = _write(
         tmp_path,
