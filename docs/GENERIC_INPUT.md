@@ -75,7 +75,8 @@ The generic input path also handles several common real-world variations:
 - Gerber UTF-8 BOMs;
 - modal/omitted D01/D02/D03 operation codes after an operation is established;
 - standalone D01/D02/D03 modal operation selection;
-- legacy G70/G71 unit selection and explicit G90 absolute mode;
+- legacy G70/G71 unit selection plus modal G90/G91 absolute/incremental coordinate notation;
+- deprecated FS `A`/`I` absolute/incremental notation, with X/Y deltas accumulated safely and arc I/J retained as center offsets;
 - identity legacy Gerber transform statements;
 - Excellon M71/M72 metric/inch selection;
 - Excellon tool definitions with feed/spindle suffixes;
@@ -98,8 +99,7 @@ sniff window are ignored by content detection.
 ### Fail-closed boundaries
 
 PHOTONX still rejects or explicitly diagnoses semantics that would be unsafe to
-guess, including Gerber G91 incremental coordinates, non-identity legacy
-transforms, Gerber regions/complex aperture macros not supported by the production
+guess, including non-identity legacy Gerber transforms, Gerber regions/complex aperture macros not supported by the production
 geometry path, aperture blocks, and Excellon routed-arc dialects outside the bounded G02/G03 I/J or standard XNC X/Y/A-radius subsets. An input being discovered does not mean
 every construct inside it is automatically accepted.
 
