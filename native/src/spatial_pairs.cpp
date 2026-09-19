@@ -356,6 +356,136 @@ int compute_point_radius_candidates(
     return PHOTONX_NATIVE_OK;
 }
 
+int compute_aabb_query_candidates(
+    const photonx_aabb* boxes,
+    uint32_t box_count,
+    const photonx_aabb* queries,
+    uint32_t query_count,
+    double cell_size,
+    std::vector<photonx_query_match>& matches
+) {
+    if ((box_count != 0U && boxes == nullptr) ||
+        (query_count != 0U && queries == nullptr) ||
+        !std::isfinite(cell_size) || cell_size <= 0.0) {
+        return PHOTONX_NATIVE_INVALID_ARGUMENT;
+    }
+
+    using Grid =
+        std::unordered_map<Cell, std::vector<uint32_t>, CellHash>;
+    Grid grid;
+    long double total_inserted_cells = 0.0L;
+
+    for (uint32_t i = 0; i < box_count; ++i) {
+        if (!finite_box(boxes[i])) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        int64_t min_x = 0;
+        int64_t min_y = 0;
+        int64_t max_x = 0;
+        int64_t max_y = 0;
+        long double cell_count = 0.0L;
+        if (!cell_bounds(
+                boxes[i],
+                cell_size,
+                min_x,
+                min_y,
+                max_x,
+                max_y,
+                cell_count)) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        total_inserted_cells += cell_count;
+        if (total_inserted_cells > kMaxTotalInsertedCells) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        for (int64_t cell_x = min_x;; ++cell_x) {
+            for (int64_t cell_y = min_y;; ++cell_y) {
+                grid[Cell{cell_x, cell_y}].push_back(i);
+                if (cell_y == max_y) {
+                    break;
+                }
+            }
+            if (cell_x == max_x) {
+                break;
+            }
+        }
+    }
+
+    std::vector<uint32_t> visited(box_count, 0U);
+    uint32_t generation = 0U;
+    long double total_query_cells = 0.0L;
+
+    for (uint32_t q = 0; q < query_count; ++q) {
+        if (!finite_box(queries[q])) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        int64_t min_x = 0;
+        int64_t min_y = 0;
+        int64_t max_x = 0;
+        int64_t max_y = 0;
+        long double cell_count = 0.0L;
+        if (!cell_bounds(
+                queries[q],
+                cell_size,
+                min_x,
+                min_y,
+                max_x,
+                max_y,
+                cell_count)) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        total_query_cells += cell_count;
+        if (total_query_cells > kMaxTotalInsertedCells) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        ++generation;
+        if (generation == 0U) {
+            std::fill(visited.begin(), visited.end(), 0U);
+            generation = 1U;
+        }
+
+        for (int64_t cell_x = min_x;; ++cell_x) {
+            for (int64_t cell_y = min_y;; ++cell_y) {
+                const auto it = grid.find(Cell{cell_x, cell_y});
+                if (it != grid.end()) {
+                    for (const uint32_t candidate : it->second) {
+                        if (visited[candidate] == generation) {
+                            continue;
+                        }
+                        visited[candidate] = generation;
+                        if (intersects(boxes[candidate], queries[q])) {
+                            matches.push_back(photonx_query_match{q, candidate});
+                        }
+                    }
+                }
+                if (cell_y == max_y) {
+                    break;
+                }
+            }
+            if (cell_x == max_x) {
+                break;
+            }
+        }
+    }
+
+    std::sort(
+        matches.begin(),
+        matches.end(),
+        [](const photonx_query_match& a, const photonx_query_match& b) {
+            return a.query < b.query ||
+                   (a.query == b.query && a.point < b.point);
+        }
+    );
+
+    return PHOTONX_NATIVE_OK;
+}
+
 }  // namespace
 
 extern "C" uint32_t photonx_native_abi_version(void) {
@@ -427,6 +557,59 @@ extern "C" int photonx_point_radius_candidates(
     try {
         std::vector<photonx_query_match> matches;
         const int status = compute_point_radius_candidates(
+            boxes,
+            box_count,
+            queries,
+            query_count,
+            cell_size,
+            matches
+        );
+        if (status != PHOTONX_NATIVE_OK) {
+            return status;
+        }
+
+        if (matches.size() >
+            static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        const uint32_t required = static_cast<uint32_t>(matches.size());
+        *out_count = required;
+
+        if (required == 0U) {
+            return PHOTONX_NATIVE_OK;
+        }
+
+        if (out_matches == nullptr || out_capacity < required) {
+            return PHOTONX_NATIVE_BUFFER_TOO_SMALL;
+        }
+
+        std::copy(matches.begin(), matches.end(), out_matches);
+        return PHOTONX_NATIVE_OK;
+    } catch (...) {
+        return PHOTONX_NATIVE_INTERNAL_ERROR;
+    }
+}
+
+extern "C" int photonx_aabb_query_candidates(
+    const photonx_aabb* boxes,
+    uint32_t box_count,
+    const photonx_aabb* queries,
+    uint32_t query_count,
+    double cell_size,
+    photonx_query_match* out_matches,
+    uint32_t out_capacity,
+    uint32_t* out_count
+) {
+    if (out_count == nullptr) {
+        return PHOTONX_NATIVE_INVALID_ARGUMENT;
+    }
+
+    *out_count = 0U;
+
+    try {
+        std::vector<photonx_query_match> matches;
+        const int status = compute_aabb_query_candidates(
             boxes,
             box_count,
             queries,

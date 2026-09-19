@@ -111,6 +111,20 @@ def _configure_library(library: ctypes.CDLL) -> ctypes.CDLL:
         ctypes.POINTER(ctypes.c_uint32),
     ]
     library.photonx_point_radius_candidates.restype = ctypes.c_int
+
+    aabb_query = getattr(library, "photonx_aabb_query_candidates", None)
+    if aabb_query is not None:
+        aabb_query.argtypes = [
+            ctypes.POINTER(_NativeAABB),
+            ctypes.c_uint32,
+            ctypes.POINTER(_NativeAABB),
+            ctypes.c_uint32,
+            ctypes.c_double,
+            ctypes.POINTER(_NativeQueryMatch),
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint32),
+        ]
+        aabb_query.restype = ctypes.c_int
     return library
 
 
@@ -331,6 +345,108 @@ def native_radius_queries(index, queries):
 
     for result in results:
         result.sort(key=lambda item: (item[0], item[1]))
+    return results
+
+
+def native_aabb_queries(index, queries):
+    library = _load_library()
+    query_function = getattr(library, "photonx_aabb_query_candidates", None)
+    if query_function is None:
+        raise NativeBackendUnavailable(
+            "native library does not expose batch AABB queries"
+        )
+
+    ids = tuple(index.ids())
+    query_boxes = tuple(queries)
+
+    if len(ids) > 0xFFFFFFFF or len(query_boxes) > 0xFFFFFFFF:
+        raise NativeBackendUnsupported(
+            "native backend supports at most 2^32-1 boxes and queries"
+        )
+
+    try:
+        cell_size = float(index.cell_size)
+        box_specs = tuple(
+            (
+                float(index.box(obj_id).min_x),
+                float(index.box(obj_id).min_y),
+                float(index.box(obj_id).max_x),
+                float(index.box(obj_id).max_y),
+            )
+            for obj_id in ids
+        )
+        query_specs = tuple(
+            (
+                float(box.min_x),
+                float(box.min_y),
+                float(box.max_x),
+                float(box.max_y),
+            )
+            for box in query_boxes
+        )
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise NativeBackendUnsupported(
+            "index/query boxes are not native-compatible"
+        ) from exc
+
+    box_array_type = _NativeAABB * len(box_specs)
+    native_boxes = box_array_type(*(_NativeAABB(*spec) for spec in box_specs))
+    query_array_type = _NativeAABB * len(query_specs)
+    native_queries = query_array_type(
+        *(_NativeAABB(*spec) for spec in query_specs)
+    )
+
+    required = ctypes.c_uint32(0)
+    status = int(
+        query_function(
+            native_boxes,
+            ctypes.c_uint32(len(ids)),
+            native_queries,
+            ctypes.c_uint32(len(query_specs)),
+            ctypes.c_double(cell_size),
+            None,
+            ctypes.c_uint32(0),
+            ctypes.byref(required),
+        )
+    )
+
+    if status == _OK and required.value == 0:
+        return [[] for _ in query_specs]
+    if status not in (_OK, _BUFFER_TOO_SMALL):
+        _raise_status(status)
+
+    out_type = _NativeQueryMatch * required.value
+    out = out_type()
+    written = ctypes.c_uint32(0)
+    status = int(
+        query_function(
+            native_boxes,
+            ctypes.c_uint32(len(ids)),
+            native_queries,
+            ctypes.c_uint32(len(query_specs)),
+            ctypes.c_double(cell_size),
+            out,
+            ctypes.c_uint32(required.value),
+            ctypes.byref(written),
+        )
+    )
+    if status != _OK:
+        _raise_status(status)
+    if written.value != required.value:
+        raise NativeBackendUnavailable(
+            "native backend changed AABB-query match count between sizing and fill calls"
+        )
+
+    results = [[] for _ in query_specs]
+    for i in range(written.value):
+        query_index = int(out[i].query)
+        point_index = int(out[i].point)
+        if query_index >= len(results) or point_index >= len(ids):
+            raise NativeBackendUnavailable(
+                "native backend returned an out-of-range AABB query candidate"
+            )
+        results[query_index].append(ids[point_index])
+
     return results
 
 

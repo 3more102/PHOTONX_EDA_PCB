@@ -71,6 +71,17 @@ PHOTONX_NATIVE_API int photonx_point_radius_candidates(
     uint32_t* out_count
 );
 
+PHOTONX_NATIVE_API int photonx_aabb_query_candidates(
+    const photonx_aabb* boxes,
+    uint32_t box_count,
+    const photonx_aabb* queries,
+    uint32_t query_count,
+    double cell_size,
+    photonx_query_match* out_matches,
+    uint32_t out_capacity,
+    uint32_t* out_count
+);
+
 #ifdef __cplusplus
 }
 #endif
