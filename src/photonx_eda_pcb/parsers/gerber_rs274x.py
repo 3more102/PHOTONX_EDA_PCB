@@ -24,6 +24,7 @@ from ..gerber_image import (
     ImageCompositionStream,
     canonical_polygon_components,
     polygonize_flash,
+    polygonize_track,
     trace_polygon_operation_contributions,
 )
 from ..ids import stable_id
@@ -376,9 +377,10 @@ class GerberRS274XParser:
                     "GERBER_CLEAR_POLARITY_REGION_COMPOSITION",
                     (
                         "clear layer polarity is enabled for ordered polygon "
-                        "composition of supported G36/G37 regions and solid C/R/O D03 "
-                        "flashes; C/O boundaries use bounded inscribed-chord "
-                        "polygonization while tracks and outlines remain fail-closed"
+                        "composition of supported G36/G37 regions, solid C/R/O D03 "
+                        "flashes, and linear circular-aperture D01 tracks; curved flash "
+                        "and track-cap boundaries use bounded inscribed-chord "
+                        "polygonization while arc tracks and outlines remain fail-closed"
                     ),
                     str(path),
                     line_no,
@@ -3064,8 +3066,19 @@ class GerberRS274XParser:
                 max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
                 max_arc_segments=_MAX_ARC_SEGMENTS,
             ).geometry
+        if isinstance(geometry, Track):
+            return polygonize_track(
+                geometry.start.x,
+                geometry.start.y,
+                geometry.end.x,
+                geometry.end.y,
+                geometry.width,
+                max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+                max_arc_segments=_MAX_ARC_SEGMENTS,
+            ).geometry
         raise TypeError(
-            "LPC composition supports CopperRegion and solid C/R/O PadCandidate geometry"
+            "LPC composition supports CopperRegion, solid C/R/O PadCandidate, "
+            "and linear circular-aperture Track geometry"
         )
 
     def _composition_polygonization_evidence(
@@ -3073,32 +3086,53 @@ class GerberRS274XParser:
         geometry,
     ) -> Evidence | None:
         """Describe bounded curved-flash polygonization when a component uses it."""
-        if not isinstance(geometry, PadCandidate):
-            return None
-        if geometry.shape.upper() not in {"C", "O"}:
-            return None
-
-        polygonization = polygonize_flash(
-            geometry.center.x,
-            geometry.center.y,
-            geometry.size_x,
-            geometry.size_y,
-            geometry.shape,
-            max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
-            max_arc_segments=_MAX_ARC_SEGMENTS,
-        )
         source = geometry.provenance.sources[0] if geometry.provenance.sources else None
-        return Evidence(
-            "gerber_flash_polygonization",
-            (
-                f"shape={geometry.shape.upper()}; "
-                f"method=inscribed_chords; "
-                f"curved_segments={polygonization.curved_segments}; "
-                f"max_chord_error_mm={polygonization.max_chord_error_mm:.12g}"
-            ),
-            1.0,
-            source,
-        )
+        if isinstance(geometry, PadCandidate):
+            if geometry.shape.upper() not in {"C", "O"}:
+                return None
+            polygonization = polygonize_flash(
+                geometry.center.x,
+                geometry.center.y,
+                geometry.size_x,
+                geometry.size_y,
+                geometry.shape,
+                max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+                max_arc_segments=_MAX_ARC_SEGMENTS,
+            )
+            return Evidence(
+                "gerber_flash_polygonization",
+                (
+                    f"shape={geometry.shape.upper()}; "
+                    f"method=inscribed_chords; "
+                    f"curved_segments={polygonization.curved_segments}; "
+                    f"max_chord_error_mm={polygonization.max_chord_error_mm:.12g}"
+                ),
+                1.0,
+                source,
+            )
+        if isinstance(geometry, Track):
+            polygonization = polygonize_track(
+                geometry.start.x,
+                geometry.start.y,
+                geometry.end.x,
+                geometry.end.y,
+                geometry.width,
+                max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+                max_arc_segments=_MAX_ARC_SEGMENTS,
+            )
+            return Evidence(
+                "gerber_track_polygonization",
+                (
+                    "aperture_shape=C; method=capsule_inscribed_chords; "
+                    f"length_mm={polygonization.length_mm:.12g}; "
+                    f"width_mm={geometry.width:.12g}; "
+                    f"curved_segments={polygonization.curved_segments}; "
+                    f"max_chord_error_mm={polygonization.max_chord_error_mm:.12g}"
+                ),
+                1.0,
+                source,
+            )
+        return None
 
     def _composition_contribution_affects_component(
         self,
@@ -3149,9 +3183,10 @@ class GerberRS274XParser:
         """Materialize the bounded polygonal LPC image subset.
 
         Supported G36/G37 regions and rectangular D03 flashes are exact.
-        Circular and obround D03 flashes use deterministic inscribed-chord
-        polygonization with the same 0.005 mm maximum chord-error policy used
-        for Gerber arcs. Tracks and outline segments remain fail-closed.
+        Circular/obround D03 flashes and linear circular-aperture D01 tracks use
+        deterministic inscribed-chord polygonization with the same 0.005 mm
+        maximum chord-error policy used for Gerber arcs. Tessellated arc tracks
+        and outline segments remain fail-closed.
         """
         if not self.clear_polarity_seen:
             return
@@ -3160,16 +3195,25 @@ class GerberRS274XParser:
         source_line = clear_source.line if clear_source is not None else None
         source_raw = clear_source.raw if clear_source is not None else "%LPC*%"
 
-        if out.tracks or out.outline:
+        material_track_ids = {
+            operation.geometry.id
+            for operation in self.material_image_operations.operations
+            if isinstance(operation.geometry, Track)
+        }
+        unsupported_tracks = [
+            track for track in out.tracks if track.id not in material_track_ids
+        ]
+        if unsupported_tracks or out.outline:
             self._fail_or_warn(
                 path,
                 source_line or 0,
                 source_raw or "%LPC*%",
                 "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY",
                 (
-                    "clear Gerber layer polarity supports G36/G37 regions and "
-                    "solid C/R/O D03 flashes; tracks or outline geometry are present "
-                    "and remain outside the bounded polygon-composition subset"
+                    "clear Gerber layer polarity supports G36/G37 regions, solid "
+                    "C/R/O D03 flashes, and linear circular-aperture D01 tracks; "
+                    "tessellated arc tracks or outline geometry remain outside the "
+                    "bounded polygon-composition subset"
                 ),
                 out,
             )
@@ -3318,6 +3362,7 @@ class GerberRS274XParser:
 
         out.regions[:] = composed_regions
         out.pads.clear()
+        out.tracks.clear()
 
     def parse(self, path: str | Path) -> GerberLayerResult:
         p = Path(path)
@@ -3883,15 +3928,18 @@ class GerberRS274XParser:
                                 OutlineSegment(obj_id, start, end, prov)
                             )
                         else:
-                            out.tracks.append(
-                                Track(
-                                    obj_id,
-                                    start,
-                                    end,
-                                    width,
-                                    self.layer,
-                                    provenance=prov,
-                                )
+                            track = Track(
+                                obj_id,
+                                start,
+                                end,
+                                width,
+                                self.layer,
+                                provenance=prov,
+                            )
+                            out.tracks.append(track)
+                            self.material_image_operations.append(
+                                self.layer_polarity,
+                                track,
                             )
 
                 elif operation == "3":
