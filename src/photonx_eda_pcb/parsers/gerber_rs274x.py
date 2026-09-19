@@ -151,7 +151,7 @@ class GerberRS274XParser:
     """Strict, auditable RS-274X subset parser.
 
     Supported: FS, MO, ADD(C/R/O/P), Dnn selection, G01/D01/D02/D03,
-    linear C/R/O aperture draws plus standard P D03 flashes on material layers,
+    linear C/R/O/P aperture draws plus standard P D03 flashes on material layers,
     bounded G74 single-quadrant
     and G75 multi-quadrant G02/G03 circular
     interpolation with circular apertures, dark multi-contour linear/G74/G75
@@ -413,7 +413,7 @@ class GerberRS274XParser:
                     (
                         "clear layer polarity is enabled for ordered polygon "
                         "composition of supported G36/G37 regions, C/R/O/P D03 "
-                        "flashes, linear C/R/O D01 aperture sweeps, and bounded "
+                        "flashes, linear C/R/O/P D01 aperture sweeps, and bounded "
                         "circular-aperture G02/G03 tessellation; curved boundaries use evidenced chord-"
                         "error bounds while outlines remain fail-closed"
                     ),
@@ -3369,7 +3369,8 @@ class GerberRS274XParser:
         """Materialize the bounded polygonal LPC image subset.
 
         Supported G36/G37 regions, rectangular and regular-polygon D03 flashes,
-        and rectangular linear-aperture D01 sweeps are exact. Circular/obround
+        rectangular linear-aperture D01 sweeps, and solid regular-polygon D01
+        sweeps are exact. Circular/obround
         D03 flashes plus
         circular/obround linear-aperture D01 sweeps use deterministic
         inscribed-chord polygonization. Curved linear sweeps have a 0.005 mm
@@ -3401,7 +3402,7 @@ class GerberRS274XParser:
                 "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY",
                 (
                     "clear Gerber layer polarity supports G36/G37 regions, "
-                    "C/R/O/P D03 flashes, linear C/R/O D01 aperture sweeps, and "
+                    "C/R/O/P D03 flashes, linear C/R/O/P D01 aperture sweeps, and "
                     "circular-aperture G02/G03 tessellation; unsupported track forms or outline "
                     "geometry remain outside the bounded polygon-composition subset"
                 ),
