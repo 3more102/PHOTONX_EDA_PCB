@@ -47,6 +47,12 @@ Both helpers refuse to emit timing evidence until the native result exactly matc
 
 This evidence is intended to support a later benchmark-gated `auto` backend policy. Thresholds must be based on identified hardware, Python version, fixture size, spatial density, cell size, tolerance, radius distribution, and query batch size rather than inferred from implementation language.
 
+A deterministic command-line workload is also available once the native library is built and configured:
+
+    photonx native-benchmark --objects 1000 --iterations 3
+
+Add `--output build/native-benchmark.json` to preserve the report. The command returns a non-zero exit status if native loading, supported-range checks, or parity fails, so a Python fallback cannot be mistaken for native benchmark evidence.
+
 ## Safety contract
 
 The native backend:
