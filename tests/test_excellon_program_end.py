@@ -11,10 +11,7 @@ from photonx_eda_pcb.parsers.excellon_parts.commands import (
 HEADER = "M48\nMETRIC\nT01C0.800\n%\nT01\n"
 
 
-@pytest.mark.parametrize(
-    "terminator",
-    ["M30", "M00", "M30X10.000Y20.000", "M00X10.000Y20.000", "M30Y20.000"],
-)
+@pytest.mark.parametrize("terminator", ["M30", "M00"])
 def test_program_end_ignores_trailing_geometry(tmp_path, terminator):
     path = tmp_path / "terminated.drl"
     path.write_text(
@@ -33,22 +30,29 @@ def test_program_end_ignores_trailing_geometry(tmp_path, terminator):
     assert result.drills[0].center.y == pytest.approx(1.0)
 
 
-@pytest.mark.parametrize(
-    "terminator",
-    ["M30", "M00", "M30X10.000Y20.000", "M00X10.000Y20.000", "M30Y20.000"],
-)
+@pytest.mark.parametrize("terminator", ["M30", "M00"])
 def test_command_classifier_recognizes_program_end_forms(terminator):
     assert is_program_end(terminator)
     assert classify_excellon_command(terminator) == "eof"
 
 
-@pytest.mark.parametrize("terminator", ["M30X.", "M00Y+", "M30X1..2", "M00X1Y2.3.4"])
-def test_malformed_program_end_coordinates_are_not_accepted(terminator):
-    assert not is_program_end(terminator)
-    assert classify_excellon_command(terminator) == "unknown"
+@pytest.mark.parametrize(
+    "not_terminator",
+    [
+        "M30X10Y20",
+        "M00X10Y20",
+        "M30X.",
+        "M00Y+",
+        "M30X1..2",
+        "M00X1Y2.3.4",
+    ],
+)
+def test_extended_program_end_dialects_are_not_accepted(not_terminator):
+    assert not is_program_end(not_terminator)
+    assert classify_excellon_command(not_terminator) == "unknown"
 
 
-@pytest.mark.parametrize("terminator", ["M30", "M00", "M30X10Y20"])
+@pytest.mark.parametrize("terminator", ["M30", "M00"])
 def test_program_end_with_route_tool_down_remains_fail_closed(tmp_path, terminator):
     path = tmp_path / "unterminated_route.drl"
     path.write_text(
@@ -72,6 +76,15 @@ def test_program_end_with_route_tool_down_remains_fail_closed(tmp_path, terminat
         diagnostic.code == "EXCELLON_ROUTE_UNTERMINATED"
         for diagnostic in permissive.diagnostics
     )
+
+
+@pytest.mark.parametrize("statement", ["M30X10Y20", "M00X10Y20"])
+def test_extended_stop_statement_fails_closed_in_strict_parser(tmp_path, statement):
+    path = tmp_path / "extended-stop.drl"
+    path.write_text(HEADER + "X1Y1\n" + statement + "\n", encoding="utf-8")
+
+    with pytest.raises(ParseError, match="unrecognized Excellon statement"):
+        ExcellonParser(strict=True).parse(path)
 
 
 def test_trailing_unit_or_tool_records_after_program_end_are_ignored(tmp_path):
