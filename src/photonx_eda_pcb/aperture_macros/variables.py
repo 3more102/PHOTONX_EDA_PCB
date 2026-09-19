@@ -1,7 +1,7 @@
 import re
 
 
-_VARIABLE = re.compile(r"\\$(\\d+)")
+_VARIABLE = re.compile(r"\$(\d+)")
 
 
 def substitute(expr, variables, undefined=0.0):
