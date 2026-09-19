@@ -10,6 +10,7 @@ PHOTONX keeps reconstructed geometry explicit when the current KiCad exporter ca
 - `skipped_regions`
 - `exported_tracks`
 - `skipped_tracks`
+- `exported_routes`
 - `omitted_routes`
 
 Every skipped or omitted object must have a matching exporter issue with an approved reason code for that geometry family. `validate_omission_manifest()` checks this invariant, duplicate IDs, and exported/skipped overlap for object families that can be represented conditionally.
@@ -19,6 +20,7 @@ Current conservative policies include:
 - unknown-plating or unsupported plated slots are skipped;
 - valid copper-region shells and holes are exported as editable zone contours; hole-bearing zones omit cached fill and require an explicit KiCad repour, while invalid topology, unsupported layers, and unresolved-net regions are skipped;
 - tracks with a non-empty unresolved `net_id` are skipped instead of being relabelled net 0;
-- arbitrary Excellon routed paths remain preserved in PHOTONX/JSON but omitted from KiCad.
+- exact straight non-plated Excellon routes (two finite distinct endpoints with positive finite width) are exported as NPTH oval slots because that geometry is equivalent;
+- plated, unknown-plating, multi-segment, non-finite, or otherwise non-exact routed paths remain preserved in PHOTONX/JSON and omitted from KiCad.
 
 Older manifests remain readable: missing newer list keys are interpreted as empty lists.
