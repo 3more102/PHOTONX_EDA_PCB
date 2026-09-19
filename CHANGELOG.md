@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Hardened Gerber X2 attribute ingestion: TF/TA/TO/TD command grammar and standard-name domains are validated before metadata is preserved, while attribute fields safely decode 4- and 8-digit Unicode escapes after comma splitting. Malformed escapes, invalid Unicode scalars, raw reserved characters, invalid names/domain use, value-bearing TD commands, and malformed TO.C fail closed.
+- Hardened the evidence-driven review queue against repeated identical validation findings and parser diagnostics: duplicate facts collapse to one deterministic review item, while conflicting payloads that somehow share a stable ID still fail visibly.\n\n- Hardened Gerber X2 attribute ingestion: TF/TA/TO/TD command grammar and standard-name domains are validated before metadata is preserved, while attribute fields safely decode 4- and 8-digit Unicode escapes after comma splitting. Malformed escapes, invalid Unicode scalars, raw reserved characters, invalid names/domain use, value-bearing TD commands, and malformed TO.C fail closed.
 
 
 - Added an optional C++17 native spatial-acceleration backend behind a versioned C ABI. The backend provides deterministic AABB candidate-pair generation plus batched point-radius broad-phase queries used by drill association, footprint clustering/metrics, and component inference/metrics; Python remains the correctness reference and automatic fallback, exact Euclidean/connectivity predicates stay authoritative, native discovery is cached, ABI/range failures are explicit, and CI builds/loads the shared library on Python 3.11/3.12/3.13 before running the full regression suite.

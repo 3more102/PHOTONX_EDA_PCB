@@ -118,3 +118,17 @@ def test_confidence_review_thresholds_are_explicit_and_opt_in():
 def test_review_thresholds_reject_invalid_values(value):
     with pytest.raises(ValueError):
         build_board_review_queue(_board(), net_confidence_below=value)
+
+
+def test_duplicate_findings_collapse_without_crashing_review_queue():
+    board = _board()
+    board.diagnostics.append(board.diagnostics[0])
+    issue = ValidationIssue("error", "TEST_ERROR", "test issue", ("D1",))
+    report = ValidationReport([issue, issue])
+
+    queue = build_board_review_queue(board, validation=report)
+
+    validation_items = [item for item in queue.all() if item.kind == "validation"]
+    diagnostic_items = [item for item in queue.all() if item.kind == "diagnostic"]
+    assert len(validation_items) == 1
+    assert len(diagnostic_items) == 1
