@@ -6,6 +6,7 @@ from shapely.ops import unary_union
 from photonx_eda_pcb.connectivity import build_physical_graph, assign_physical_nets
 from photonx_eda_pcb.errors import ParseError, UnsupportedFeatureError
 from photonx_eda_pcb.exporters.kicad import export_kicad_with_report
+from photonx_eda_pcb.geometry_kernel import region_shape
 from photonx_eda_pcb.models import BoardModel, CopperRegion, PadCandidate, Point
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 from photonx_eda_pcb.preflight import preflight
