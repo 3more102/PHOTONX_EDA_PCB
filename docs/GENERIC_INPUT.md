@@ -78,7 +78,7 @@ The generic input path also handles several common real-world variations:
 - legacy G70/G71 unit selection plus modal G90/G91 absolute/incremental coordinate notation;
 - deprecated FS `A`/`I` absolute/incremental notation, with X/Y deltas accumulated safely and arc I/J retained as center offsets;
 - deprecated Gerber MI mirroring, applied exactly to coordinate data while deliberately leaving apertures and step-repeat distances unmirrored as required by the specification;
-- modern Gerber LM/LR/LS aperture graphics-state transforms for the exact representable subset: mirror-symmetric C/R/O shapes, arbitrary circle rotation, orthogonal R/O flash and linear-sweep rotation, and positive aperture scaling;
+- modern Gerber LM/LR/LS aperture graphics-state transforms for the representable subset: mirror-symmetric C/R/O shapes, arbitrary circle rotation, arbitrary finite R/O linear-sweep rotation, orthogonal-only R/O flash rotation, and positive aperture scaling;
 - deprecated Gerber SF coordinate scaling within the specification range; apertures and step-repeat distances remain unscaled, uniform SF composes with circular arcs, and anisotropic SF arcs fail closed;
 - deprecated Gerber OF image translation in the active MO units, applied after MI/SF and before IR regardless of command appearance;
 - legacy AS axis-select forms are accepted as output-device-only metadata because they do not alter CAD-to-CAM image geometry; AS/IN/MI/SF/OF/IR header state must appear before the first coordinate statement, including D02 moves;
