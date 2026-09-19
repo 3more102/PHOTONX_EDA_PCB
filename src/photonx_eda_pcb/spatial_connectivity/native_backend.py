@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import ctypes
 import os
+import weakref
 from math import hypot
 from ctypes.util import find_library
 from functools import lru_cache
 from pathlib import Path
 
 
-_ABI_VERSION = 2
+_ABI_VERSION = 3
 _OK = 0
 _BUFFER_TOO_SMALL = 1
 _INVALID_ARGUMENT = 2
@@ -59,6 +60,31 @@ class _NativeQueryMatch(ctypes.Structure):
     ]
 
 
+class _PersistentPointIndex:
+    def __init__(self, library, handle, ids, revision):
+        self.library = library
+        self.handle = handle
+        self.ids = ids
+        self.revision = revision
+
+    def close(self) -> None:
+        handle = self.handle
+        if handle is None:
+            return
+        self.handle = None
+        if handle.value:
+            self.library.photonx_point_index_destroy(handle)
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
+_POINT_INDEX_CACHE = weakref.WeakKeyDictionary()
+
+
 @lru_cache(maxsize=1)
 def _library_candidates() -> tuple[str, ...]:
     candidates: list[str] = []
@@ -99,6 +125,27 @@ def _configure_library(library: ctypes.CDLL) -> ctypes.CDLL:
         ctypes.POINTER(ctypes.c_uint32),
     ]
     library.photonx_candidate_pairs.restype = ctypes.c_int
+
+    library.photonx_point_index_create.argtypes = [
+        ctypes.POINTER(_NativeAABB),
+        ctypes.c_uint32,
+        ctypes.c_double,
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    library.photonx_point_index_create.restype = ctypes.c_int
+
+    library.photonx_point_index_destroy.argtypes = [ctypes.c_void_p]
+    library.photonx_point_index_destroy.restype = None
+
+    library.photonx_point_index_radius_candidates.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(_NativePointQuery),
+        ctypes.c_uint32,
+        ctypes.POINTER(_NativeQueryMatch),
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    library.photonx_point_index_radius_candidates.restype = ctypes.c_int
 
     library.photonx_point_radius_candidates.argtypes = [
         ctypes.POINTER(_NativeAABB),
@@ -141,6 +188,9 @@ def _load_library() -> ctypes.CDLL:
 
 
 def _clear_library_cache() -> None:
+    for cached in list(_POINT_INDEX_CACHE.values()):
+        cached.close()
+    _POINT_INDEX_CACHE.clear()
     _probe_library.cache_clear()
     clear_candidates = getattr(_library_candidates, "cache_clear", None)
     if clear_candidates is not None:
@@ -235,15 +285,18 @@ def native_candidate_pairs(index, tolerance: float = 0.0):
     ]
 
 
-def native_radius_queries(index, queries):
-    library = _load_library()
-    ids = tuple(index.ids())
-    query_specs = tuple((float(x), float(y), float(radius)) for x, y, radius in queries)
+def _native_point_index(index, library, ids):
+    revision = getattr(index, "_revision", None)
+    cached = _POINT_INDEX_CACHE.get(index)
+    if (
+        cached is not None
+        and cached.revision == revision
+        and cached.ids == ids
+    ):
+        return cached
 
-    if len(ids) > 0xFFFFFFFF or len(query_specs) > 0xFFFFFFFF:
-        raise NativeBackendUnsupported(
-            "native backend supports at most 2^32-1 boxes and queries"
-        )
+    if cached is not None:
+        cached.close()
 
     try:
         cell_size = float(index.cell_size)
@@ -263,6 +316,37 @@ def native_radius_queries(index, queries):
         )
     )
 
+    handle = ctypes.c_void_p()
+    status = int(
+        library.photonx_point_index_create(
+            native_boxes,
+            ctypes.c_uint32(len(ids)),
+            ctypes.c_double(cell_size),
+            ctypes.byref(handle),
+        )
+    )
+    if status != _OK:
+        _raise_status(status)
+    if not handle.value:
+        raise NativeBackendUnavailable("native backend returned a null point-index handle")
+
+    cached = _PersistentPointIndex(library, handle, ids, revision)
+    _POINT_INDEX_CACHE[index] = cached
+    return cached
+
+
+def native_radius_queries(index, queries):
+    library = _load_library()
+    ids = tuple(index.ids())
+    query_specs = tuple((float(x), float(y), float(radius)) for x, y, radius in queries)
+
+    if len(ids) > 0xFFFFFFFF or len(query_specs) > 0xFFFFFFFF:
+        raise NativeBackendUnsupported(
+            "native backend supports at most 2^32-1 boxes and queries"
+        )
+
+    point_index = _native_point_index(index, library, ids)
+
     native_query_type = _NativePointQuery * len(query_specs)
     native_queries = native_query_type(
         *(
@@ -273,12 +357,10 @@ def native_radius_queries(index, queries):
 
     required = ctypes.c_uint32(0)
     status = int(
-        library.photonx_point_radius_candidates(
-            native_boxes,
-            ctypes.c_uint32(len(ids)),
+        library.photonx_point_index_radius_candidates(
+            point_index.handle,
             native_queries,
             ctypes.c_uint32(len(query_specs)),
-            ctypes.c_double(cell_size),
             None,
             ctypes.c_uint32(0),
             ctypes.byref(required),
@@ -294,12 +376,10 @@ def native_radius_queries(index, queries):
     out = out_type()
     written = ctypes.c_uint32(0)
     status = int(
-        library.photonx_point_radius_candidates(
-            native_boxes,
-            ctypes.c_uint32(len(ids)),
+        library.photonx_point_index_radius_candidates(
+            point_index.handle,
             native_queries,
             ctypes.c_uint32(len(query_specs)),
-            ctypes.c_double(cell_size),
             out,
             ctypes.c_uint32(required.value),
             ctypes.byref(written),
@@ -315,13 +395,13 @@ def native_radius_queries(index, queries):
     results = [[] for _ in query_specs]
     for i in range(written.value):
         query_index = int(out[i].query)
-        point_index = int(out[i].point)
-        if query_index >= len(query_specs) or point_index >= len(ids):
+        point_id = int(out[i].point)
+        if query_index >= len(query_specs) or point_id >= len(ids):
             raise NativeBackendUnavailable(
                 "native backend returned an out-of-range radius candidate"
             )
         x, y, radius = query_specs[query_index]
-        obj_id = ids[point_index]
+        obj_id = ids[point_id]
         box = index.box(obj_id)
         center_x = (float(box.min_x) + float(box.max_x)) / 2.0
         center_y = (float(box.min_y) + float(box.max_y)) / 2.0
