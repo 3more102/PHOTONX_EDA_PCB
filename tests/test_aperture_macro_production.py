@@ -92,6 +92,26 @@ def test_centered_horizontal_vector_line_macro_flash_is_supported(tmp_path: Path
     assert pad.size_y == pytest.approx(0.4)
 
 
+def test_legacy_code2_vector_line_alias_is_supported(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMVLINE*2,1,0.2,-1,0,1,0,0*%\n"
+        "%ADD10VLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    pad = result.pads[0]
+    assert pad.shape == "R"
+    assert pad.size_x == pytest.approx(2.0)
+    assert pad.size_y == pytest.approx(0.2)
+
+
 def test_centered_vertical_vector_line_macro_respects_active_inch_units(
     tmp_path: Path,
 ):
