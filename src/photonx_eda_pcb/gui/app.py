@@ -66,5 +66,6 @@ def launch(input_dir: str | Path) -> None:
     ttk.Label(frame, text=status).grid(row=1, column=1, sticky="ew")
 
     root.geometry("1100x700")
-    root.after_idle(canvas.fit_to_board)
+    root.update_idletasks()
+    canvas.fit_to_board()
     root.mainloop()
