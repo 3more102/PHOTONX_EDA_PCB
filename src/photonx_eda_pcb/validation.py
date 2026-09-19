@@ -2,6 +2,8 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass,field
 from math import isfinite
+from shapely.geometry import LineString
+from shapely.strtree import STRtree
 from .models import BoardModel
 from .excellon_routing.validation import validate_route
 from .geometry_kernel import region_shape
@@ -88,7 +90,7 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
         if shape.is_empty or float(shape.area)<=0 or not shape.is_valid:
             r.issues.append(ValidationIssue("error","REGION_GEOMETRY_INVALID","copper region polygon with holes is empty, zero-area, or invalid",(region.id,)))
     if board.outline:
-        degree={};invalid_outline=False
+        degree={};invalid_outline=False;valid_outline_segments=[]
         def key_xy(x,y):return (round(x/outline_tolerance)*outline_tolerance,round(y/outline_tolerance)*outline_tolerance)
         for seg in board.outline:
             try:coords=tuple(float(v) for v in (seg.start.x,seg.start.y,seg.end.x,seg.end.y))
@@ -104,9 +106,33 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
                 continue
             start_key=key_xy(sx,sy);end_key=key_xy(ex,ey)
             degree[start_key]=degree.get(start_key,0)+1;degree[end_key]=degree.get(end_key,0)+1
+            valid_outline_segments.append((seg,sx,sy,ex,ey,start_key,end_key))
         if not invalid_outline:
             bad=[p for p,d in degree.items() if d!=2]
             if bad:r.issues.append(ValidationIssue("warning","OUTLINE_NOT_CLOSED",f"outline has {len(bad)} non-degree-2 endpoints"))
+            outline_lines=[LineString(((sx,sy),(ex,ey))) for _,sx,sy,ex,ey,_,_ in valid_outline_segments]
+            if outline_lines:
+                outline_tree=STRtree(outline_lines)
+                for i,line in enumerate(outline_lines):
+                    seg,*_,start_key,end_key=valid_outline_segments[i]
+                    for raw_j in outline_tree.query(line,predicate="intersects"):
+                        j=int(raw_j)
+                        if j<=i:continue
+                        other,*_,other_start_key,other_end_key=valid_outline_segments[j]
+                        intersection=line.intersection(outline_lines[j])
+                        shared_keys={start_key,end_key}&{other_start_key,other_end_key}
+                        allowed_joint=(
+                            intersection.geom_type=="Point"
+                            and len(shared_keys)==1
+                            and key_xy(float(intersection.x),float(intersection.y)) in shared_keys
+                        )
+                        if allowed_joint:continue
+                        r.issues.append(ValidationIssue(
+                            "error",
+                            "OUTLINE_SELF_INTERSECTION",
+                            f"outline segments {seg.id} and {other.id} intersect away from a single shared endpoint",
+                            (seg.id,other.id),
+                        ))
     else:r.issues.append(ValidationIssue("warning","NO_BOARD_OUTLINE","no board outline was reconstructed"))
     if not board.nets and (board.pads or board.tracks or getattr(board,"regions",())):r.issues.append(ValidationIssue("error","NO_CONNECTIVITY","copper objects exist but no connectivity groups were generated"))
     return r
