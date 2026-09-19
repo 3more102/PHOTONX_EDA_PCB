@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 from .capabilities import CAPABILITIES
@@ -13,6 +14,34 @@ from .preflight import preflight as inspect_input
 from .reporting import summary
 
 
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be positive")
+    return parsed
+
+
+def _nonnegative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be non-negative")
+    return parsed
+
+
+def _nonnegative_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed < 0.0:
+        raise argparse.ArgumentTypeError("value must be finite and non-negative")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0.0:
+        raise argparse.ArgumentTypeError("value must be positive and finite")
+    return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="photonx",
@@ -20,6 +49,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("capabilities")
+
+    nb = sub.add_parser(
+        "native-benchmark",
+        help="compare native and Python spatial backends on a deterministic workload",
+    )
+    nb.add_argument("--objects", type=_positive_int, default=1000)
+    nb.add_argument("--iterations", type=_positive_int, default=3)
+    nb.add_argument("--warmup", type=_nonnegative_int, default=1)
+    nb.add_argument("--tolerance", type=_nonnegative_float, default=0.30)
+    nb.add_argument("--radius", type=_nonnegative_float, default=1.0)
+    nb.add_argument("--cell-size", type=_positive_float, default=1.0)
+    nb.add_argument("--output", type=Path)
 
     pf = sub.add_parser(
         "preflight",
@@ -66,6 +107,43 @@ def main(argv=None) -> int:
         print(json.dumps([c.__dict__ for c in CAPABILITIES], indent=2))
         return 0
 
+    if args.command == "native-benchmark":
+        from .benchmark_comparisons import native_spatial_benchmark_report
+        from .spatial_connectivity.native_backend import (
+            NativeBackendLoadError,
+            NativeBackendUnavailable,
+            NativeBackendUnsupported,
+        )
+
+        try:
+            report = native_spatial_benchmark_report(
+                args.objects,
+                iterations=args.iterations,
+                warmup=args.warmup,
+                tolerance=args.tolerance,
+                radius=args.radius,
+                cell_size=args.cell_size,
+            )
+        except (
+            NativeBackendUnavailable,
+            NativeBackendLoadError,
+            NativeBackendUnsupported,
+        ) as exc:
+            report = {
+                "native_available": False,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            }
+            if args.output:
+                _write_json(args.output, report)
+            print(json.dumps(report, indent=2, sort_keys=True))
+            return 2
+
+        if args.output:
+            _write_json(args.output, report)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0
+
     if args.command == "preflight":
         report = inspect_input(args.input).to_dict()
         if args.output:
@@ -75,6 +153,7 @@ def main(argv=None) -> int:
 
     if args.command == "gui":
         from .gui import launch
+
         launch(args.input)
         return 0
 
