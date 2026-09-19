@@ -113,7 +113,7 @@ sniff window are ignored by content detection.
 ### Fail-closed boundaries
 
 PHOTONX still rejects or explicitly diagnoses semantics that would be unsafe to
-guess, including unsupported legacy Gerber IP semantics and anisotropic-SF circular interpolation, unsupported region forms such as disjoint or mixed-axis/invalid cut-in or Edge.Cuts regions, and LPC files that mix clear polarity with tessellated arc tracks or outline material geometry (solid C/R/O D03 flashes and linear circular-aperture D01 tracks are supported; curved flash boundaries and track end-caps use explicitly evidenced 0.005 mm chord-error-bounded polygonization), complex aperture macros, aperture blocks, and Excellon routed-arc dialects outside the bounded G02/G03 I/J or standard XNC X/Y/A-radius subsets. An input being discovered does not mean
+guess, including unsupported legacy Gerber IP semantics and anisotropic-SF circular interpolation, unsupported region forms such as disjoint or mixed-axis/invalid cut-in or Edge.Cuts regions, and LPC files that mix clear polarity with outline material geometry (solid C/R/O D03 flashes and linear circular-aperture D01 tracks are supported; curved flash boundaries and track end-caps use explicitly evidenced 0.005 mm chord-error-bounded polygonization), complex aperture macros, aperture blocks, and Excellon routed-arc dialects outside the bounded G02/G03 I/J or standard XNC X/Y/A-radius subsets. An input being discovered does not mean
 every construct inside it is automatically accepted.
 
 

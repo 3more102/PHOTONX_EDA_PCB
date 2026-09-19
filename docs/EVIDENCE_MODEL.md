@@ -6,4 +6,5 @@ For composed manufacturing geometry, provenance is **component-local and order-a
 
 Curved Gerber flashes used by LPC image composition carry `gerber_flash_polygonization` evidence on each final component they actually influence. The evidence records the original C/O shape, deterministic inscribed-chord method, curved segment count, and maximum chord-error target; rectangular flash composition does not receive approximation evidence because it is polygon-exact.
 Linear circular-aperture D01 tracks used by LPC image composition carry `gerber_track_polygonization` evidence on each final component they actually influence. The evidence records capsule construction, centerline length, width, curved segment count, and maximum chord-error target; straight capsule sides are exact and only the round end-caps are polygonized.
+When a G02/G03 arc track participates in LPC composition, its original `gerber_arc_tessellation` evidence is retained and `gerber_track_polygonization` additionally records the 0.005 mm centerline chord target plus a conservative combined boundary-error budget of <=0.010 mm after capsule-cap polygonization.
 

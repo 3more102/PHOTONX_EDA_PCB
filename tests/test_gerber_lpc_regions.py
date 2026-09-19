@@ -245,7 +245,7 @@ def test_lpc_mixed_dark_track_and_clear_region_preserves_track_material(tmp_path
     assert not report.strict_blockers
 
 
-def test_lpc_tessellated_arc_track_remains_fail_closed(tmp_path: Path):
+def test_lpc_tessellated_arc_track_composes_with_combined_error_evidence(tmp_path: Path):
     path = _write(
         tmp_path,
         "lpc_arc_track.gtl",
@@ -261,15 +261,20 @@ def test_lpc_tessellated_arc_track_remains_fail_closed(tmp_path: Path):
         "G03X050000Y060000I-010000J000000D01*\n",
     )
 
-    with pytest.raises(
-        UnsupportedFeatureError,
-        match="tessellated arc tracks or outline geometry",
-    ):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    assert len(result.regions[0].holes) == 1
+    evidence = result.regions[0].provenance.evidence
+    assert any(item.kind == "gerber_arc_tessellation" for item in evidence)
+    assert any(
+        item.kind == "gerber_track_polygonization"
+        and "centerline_chord_error_mm=0.005" in item.detail
+        and "combined_boundary_error_mm<=0.01" in item.detail
+        for item in evidence
+    )
 
     report = preflight(path)
-    assert not report.ready_for_strict_reconstruction
-    assert any(
-        "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY" in blocker
-        for blocker in report.strict_blockers
-    )
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers

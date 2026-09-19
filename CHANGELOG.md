@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extended bounded Gerber `%LPC*%` composition to tessellated G02/G03 circular-aperture tracks. Existing 0.005 mm centerline chord-error tessellation is composed with 0.005 mm capsule-cap polygonization and recorded with a conservative <=0.010 mm combined boundary-error budget; arc and track evidence remain component-local and source-ordered. Outline geometry remains fail-closed.
+
 - Extended bounded Gerber `%LPC*%` composition to linear D01 tracks drawn with circular apertures. Linear strokes are materialized as deterministic capsule polygons with exact straight sides and 0.005 mm chord-error-bounded round end-caps, with `gerber_track_polygonization` evidence on affected output components. Source-order dark/clear semantics, step-repeat, transforms, and causal provenance are preserved; tessellated G02/G03 arc tracks and outlines remain fail-closed.
 
 - Hardened LPC composition provenance and stable IDs with ordered effective-contribution tracing. Dark operations now contribute only newly added material that survives later clears; clear operations contribute only newly created boundary that survives on a final component. Redundant dark operations, clear-before-dark no-ops, duplicate clears, and fully erased material no longer contaminate component provenance or rename unchanged composed regions.
