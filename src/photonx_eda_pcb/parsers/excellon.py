@@ -1,9 +1,10 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from math import hypot, pi, sqrt
+from math import hypot, isfinite, pi, sqrt
 import re
 from pathlib import Path
 from ..errors import ParseError, UnsupportedFeatureError
+from ..excellon_numeric import SIGNED_DECIMAL_PATTERN, UNSIGNED_DECIMAL_PATTERN
 from ..gerber_geometry.arc import (
     ArcSpec,
     arc_points,
@@ -26,9 +27,14 @@ from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
 from .excellon_parts.slots import parse_slot_command
 
-_TOOL_DEF = re.compile(r"^T(\d+)C([0-9.]+)(?:F[0-9.]+)?(?:S[0-9.]+)?$")
+_TOOL_DEF = re.compile(
+    rf"^T(\d+)C({UNSIGNED_DECIMAL_PATTERN})"
+    rf"(?:F{UNSIGNED_DECIMAL_PATTERN})?(?:S{UNSIGNED_DECIMAL_PATTERN})?$"
+)
 _TOOL_SEL = re.compile(r"^T(\d+)$")
-_HIT = re.compile(r"^(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?$")
+_HIT = re.compile(
+    rf"^(?:X({SIGNED_DECIMAL_PATTERN}))?(?:Y({SIGNED_DECIMAL_PATTERN}))?$"
+)
 
 _ROUTE_ARC_MAX_CHORD_ERROR_MM = 0.005
 _ROUTE_ARC_MAX_SEGMENTS = 4096
@@ -60,9 +66,13 @@ class ExcellonParser:
         self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
 
     def _decode(self, raw):
-        if raw is None:return None
-        value=float(raw) if "." in raw else self.fmt.decode(raw)
-        return to_mm(value,self.units)
+        if raw is None:
+            return None
+        value = float(raw) if "." in raw else self.fmt.decode(raw)
+        value_mm = to_mm(value, self.units)
+        if not isfinite(value_mm):
+            raise ValueError("non-finite Excellon numeric value")
+        return value_mm
 
     def _route_xy(self,xraw,yraw):
         x=self._decode(xraw);y=self._decode(yraw)
@@ -179,10 +189,10 @@ class ExcellonParser:
         if self.tool is None or self.tool not in self.tools:
             raise ParseError(f"{p}:{line_no}: routed arc before valid tool selection")
 
-        x,y=self._route_xy(xraw,yraw)
         tolerance=self._route_arc_tolerance_mm()
 
         try:
+            x,y=self._route_xy(xraw,yraw)
             if encoding=="ij":
                 if iraw is None and jraw is None:
                     message="G02/G03 I/J routed arc requires center offsets"
@@ -318,7 +328,14 @@ class ExcellonParser:
                     self._disable_geometry(out)
                     continue
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: slot before valid tool selection")
-                x1v,y1v,x2v,y2v=(self._decode(v) for v in (x1r,y1r,x2r,y2r))
+                try:
+                    x1v,y1v,x2v,y2v=(self._decode(v) for v in (x1r,y1r,x2r,y2r))
+                except ValueError as exc:
+                    message=f"invalid Excellon G85 numeric value ({exc})"
+                    if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
+                    out.diagnostics.append(ParseDiagnostic("warning","INVALID_EXCELLON_NUMERIC",message,str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
                 evidence=[]
                 if self.incremental:
                     x1=self.current.x+x1v;y1=self.current.y+y1v
@@ -349,7 +366,15 @@ class ExcellonParser:
                     out.diagnostics.append(ParseDiagnostic("warning","MALFORMED_EXCELLON_ROUTE",line,str(p),line_no))
                     self._disable_geometry(out)
                     continue
-                x,y=self._route_xy(xraw,yraw);src=SourceRef(str(p),line_no,line)
+                try:
+                    x,y=self._route_xy(xraw,yraw)
+                except ValueError as exc:
+                    message=f"invalid Excellon route numeric value ({exc})"
+                    if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
+                    out.diagnostics.append(ParseDiagnostic("warning","INVALID_EXCELLON_NUMERIC",message,str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
+                src=SourceRef(str(p),line_no,line)
                 if cmd=="G00":
                     try:self.route.position(x,y)
                     except RuntimeError as exc:
@@ -409,7 +434,7 @@ class ExcellonParser:
                     continue
                 tool,diameter=m.groups()
                 diameter_value=float(diameter)
-                if diameter_value <= 0:
+                if not isfinite(diameter_value) or diameter_value <= 0:
                     message="Excellon tool diameter must be positive"
                     if self.strict:
                         raise ParseError(f"{p}:{line_no}: {message}: {line}")
@@ -425,6 +450,21 @@ class ExcellonParser:
                     self._disable_geometry(out)
                     continue
                 self.tools[tool]=to_mm(diameter_value,self.units);continue
+            if line.startswith("T") and "C" in line:
+                message = f"malformed Excellon tool definition: {line}"
+                if self.strict:
+                    raise ParseError(f"{p}:{line_no}: {message}")
+                out.diagnostics.append(
+                    ParseDiagnostic(
+                        "warning",
+                        "INVALID_EXCELLON_TOOL_DEFINITION",
+                        message,
+                        str(p),
+                        line_no,
+                    )
+                )
+                self._disable_geometry(out)
+                continue
             m=_TOOL_SEL.match(line)
             if m:
                 if self.route.tool_down:
@@ -441,9 +481,32 @@ class ExcellonParser:
                     self._disable_geometry(out)
                     continue
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: drill hit before valid tool selection")
-                x,y=self._route_xy(m.group(1),m.group(2));pt=Point(x,y)
+                try:
+                    x,y=self._route_xy(m.group(1),m.group(2))
+                except ValueError as exc:
+                    message=f"invalid Excellon coordinate numeric value ({exc})"
+                    if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
+                    out.diagnostics.append(ParseDiagnostic("warning","INVALID_EXCELLON_NUMERIC",message,str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
+                pt=Point(x,y)
                 src=SourceRef(str(p),line_no,line);obj_id=stable_id("drill",p.name,line_no,pt.x,pt.y,self.tool)
                 out.drills.append(DrillHit(obj_id,pt,self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],[])));self.current=pt;continue
+            if line.startswith(("X", "Y")):
+                message = f"malformed Excellon coordinate statement: {line}"
+                if self.strict:
+                    raise ParseError(f"{p}:{line_no}: {message}")
+                out.diagnostics.append(
+                    ParseDiagnostic(
+                        "warning",
+                        "INVALID_EXCELLON_COORDINATE",
+                        message,
+                        str(p),
+                        line_no,
+                    )
+                )
+                self._disable_geometry(out)
+                continue
             if self.strict:raise ParseError(f"{p}:{line_no}: unrecognized Excellon statement: {line}")
             out.diagnostics.append(ParseDiagnostic("warning","UNKNOWN_EXCELLON_STATEMENT",line,str(p),line_no))
         if self.route.tool_down:

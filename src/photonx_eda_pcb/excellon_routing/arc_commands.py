@@ -2,20 +2,22 @@ from __future__ import annotations
 
 import re
 
+from ..excellon_numeric import SIGNED_DECIMAL_PATTERN, UNSIGNED_DECIMAL_PATTERN
+
 
 _ARC_ROUTE = re.compile(
-    r"^(G02|G03)"
-    r"(?:X([+-]?[0-9.]+))?"
-    r"(?:Y([+-]?[0-9.]+))?"
-    r"(?:I([+-]?[0-9.]+))?"
-    r"(?:J([+-]?[0-9.]+))?$"
+    rf"^(G02|G03)"
+    rf"(?:X({SIGNED_DECIMAL_PATTERN}))?"
+    rf"(?:Y({SIGNED_DECIMAL_PATTERN}))?"
+    rf"(?:I({SIGNED_DECIMAL_PATTERN}))?"
+    rf"(?:J({SIGNED_DECIMAL_PATTERN}))?$"
 )
 
 _RADIUS_ARC_ROUTE = re.compile(
-    r"^(G02|G03)"
-    r"X([+-]?[0-9.]+)"
-    r"Y([+-]?[0-9.]+)"
-    r"A([0-9.]+)$"
+    rf"^(G02|G03)"
+    rf"X({SIGNED_DECIMAL_PATTERN})"
+    rf"Y({SIGNED_DECIMAL_PATTERN})"
+    rf"A({UNSIGNED_DECIMAL_PATTERN})$"
 )
 
 
