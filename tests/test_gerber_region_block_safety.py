@@ -51,7 +51,7 @@ def test_aperture_block_fails_closed_in_strict_mode(tmp_path: Path):
 
     with pytest.raises(
         UnsupportedFeatureError,
-        match="aperture blocks are not implemented safely",
+        match="supported aperture-block subset accepts only one",
     ):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
@@ -75,7 +75,7 @@ def test_aperture_block_body_does_not_leak_geometry_in_permissive_mode(
     assert result.regions == []
     assert result.outline == []
     assert any(
-        diagnostic.code == "UNSUPPORTED_GERBER_CONSTRUCT"
+        diagnostic.code == "UNSUPPORTED_GERBER_APERTURE_BLOCK"
         for diagnostic in result.diagnostics
     )
 
@@ -128,6 +128,6 @@ def test_preflight_still_blocks_aperture_blocks(tmp_path: Path):
     assert report.discovered_files == 1
     assert not report.ready_for_strict_reconstruction
     assert any(
-        "UNSUPPORTED_GERBER_CONSTRUCT" in blocker
+        "UNSUPPORTED_GERBER_APERTURE_BLOCK" in blocker
         for blocker in report.strict_blockers
     )
