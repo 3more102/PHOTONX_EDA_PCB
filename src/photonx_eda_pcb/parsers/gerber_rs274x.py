@@ -2149,6 +2149,34 @@ class GerberRS274XParser:
                             source,
                         )
                     )
+            if name == ".P" and len(values) in {2, 3}:
+                refdes, pin_number = values[:2]
+                pin_function = values[2] if len(values) == 3 else None
+                prov.add_evidence(
+                    Evidence(
+                        "gerber_x2_component_refdes",
+                        refdes,
+                        1.0,
+                        source,
+                    )
+                )
+                prov.add_evidence(
+                    Evidence(
+                        "gerber_x2_pin_number",
+                        pin_number,
+                        1.0,
+                        source,
+                    )
+                )
+                if pin_function is not None:
+                    prov.add_evidence(
+                        Evidence(
+                            "gerber_x2_pin_function",
+                            pin_function,
+                            1.0,
+                            source,
+                        )
+                    )
 
     def _step_repeat_provenance(
         self,
