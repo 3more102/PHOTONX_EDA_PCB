@@ -3,6 +3,7 @@ project(photonx_native LANGUAGES CXX)
 
 add_library(photonx_native SHARED
     src/spatial_pairs.cpp
+    src/point_index.cpp
 )
 
 target_compile_features(photonx_native PRIVATE cxx_std_17)
