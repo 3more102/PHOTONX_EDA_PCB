@@ -268,7 +268,10 @@ int compute_point_radius_candidates(
 
     for (uint32_t i = 0; i < box_count; ++i) {
         if (!box_center(boxes[i], center_x[i], center_y[i])) {
-            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+            // Python computes the same center as +/-inf and its exact
+            // distance predicate can never accept the point for a finite
+            // query.  Skip it rather than changing that reference result.
+            continue;
         }
 
         int64_t cell_x = 0;
