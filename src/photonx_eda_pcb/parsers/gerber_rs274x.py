@@ -946,19 +946,27 @@ class GerberRS274XParser:
     ) -> Provenance:
         prov = Provenance([src], [])
         if self.step_repeat is not None:
+            output_offset = self._rotate_image_point(Point(dx_mm, dy_mm))
+            detail = (
+                f"instance=({x_index + 1},{y_index + 1})/"
+                f"({self.step_repeat.x_count},{self.step_repeat.y_count});"
+                f" source_offset_mm=({dx_mm:.12g},{dy_mm:.12g})"
+            )
+            if self.image_rotation_deg:
+                detail += (
+                    f"; output_offset_mm=({output_offset.x:.12g},"
+                    f"{output_offset.y:.12g})"
+                )
             prov.add_evidence(
                 Evidence(
                     "gerber_step_repeat",
-                    (
-                        f"instance=({x_index + 1},{y_index + 1})/"
-                        f"({self.step_repeat.x_count},{self.step_repeat.y_count});"
-                        f" offset_mm=({dx_mm:.12g},{dy_mm:.12g})"
-                    ),
+                    detail,
                     1.0,
                     src,
                 )
             )
         if self.image_rotation_source is not None and self.image_rotation_deg:
+            prov.add_source(self.image_rotation_source)
             prov.add_evidence(
                 Evidence(
                     "gerber_image_rotation",
