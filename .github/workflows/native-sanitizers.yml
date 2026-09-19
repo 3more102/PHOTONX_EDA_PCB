@@ -1,0 +1,30 @@
+name: native sanitizers
+
+on:
+  push:
+    paths:
+      - "native/**"
+      - ".github/workflows/native-sanitizers.yml"
+  pull_request:
+    paths:
+      - "native/**"
+      - ".github/workflows/native-sanitizers.yml"
+
+jobs:
+  native-sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure native contract tests with ASan and UBSan
+        run: >
+          cmake -S native -B build/native-sanitize
+          -DCMAKE_BUILD_TYPE=Debug
+          -DPHOTONX_NATIVE_BUILD_TESTS=ON
+          -DPHOTONX_NATIVE_ENABLE_SANITIZERS=ON
+      - name: Build native sanitizer targets
+        run: cmake --build build/native-sanitize --config Debug --parallel 2
+      - name: Run native C ABI contract tests
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build/native-sanitize --output-on-failure
