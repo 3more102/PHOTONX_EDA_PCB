@@ -2307,7 +2307,22 @@ class GerberRS274XParser:
             if not line or line.startswith("G04"):
                 continue
             if line in {"M02*", "M00*"}:
+                if self.region_active or self.region_discard_until_g37:
+                    self._fail_or_warn(
+                        p,
+                        line_no,
+                        line,
+                        "INVALID_GERBER_REGION_UNTERMINATED",
+                        "end-of-file encountered before closing an active G36 region with G37",
+                        out,
+                    )
+                    if not self.strict:
+                        self._disable_image_geometry(out)
+                        self._reset_region()
+                        self.region_discard_until_g37 = False
                 break
+            if self._consume_region_statement(p, line_no, line, out):
+                continue
             if line == "M01*":
                 out.diagnostics.append(
                     ParseDiagnostic(
@@ -2611,14 +2626,14 @@ class GerberRS274XParser:
                     )
                     continue
 
-            if line.startswith(("G36", "G37")) or line.startswith("%AB"):
+            if line.startswith("%AB"):
                 self._fail_or_warn(
                     p,
                     line_no,
                     line,
                     "UNSUPPORTED_GERBER_CONSTRUCT",
                     (
-                        "Gerber regions/aperture blocks are not implemented safely; "
+                        "Gerber aperture blocks are not implemented safely; "
                         "interpreting their body as ordinary draws/flashes would corrupt geometry"
                     ),
                     out,
