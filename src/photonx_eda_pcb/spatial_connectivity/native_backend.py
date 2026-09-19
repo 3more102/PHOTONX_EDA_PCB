@@ -178,6 +178,109 @@ def native_candidate_pairs(index, tolerance: float = 0.0):
     ]
 
 
+def native_radius_queries(index, queries, radius: float):
+    library = _load_library()
+    radius_neighbors = getattr(library, "photonx_radius_neighbors", None)
+    if radius_neighbors is None:
+        raise NativeBackendUnavailable(
+            "native library does not expose radius-neighbor queries"
+        )
+
+    ids = tuple(index.ids())
+    prepared_queries = tuple(queries)
+
+    if len(ids) > 0xFFFFFFFF or len(prepared_queries) > 0xFFFFFFFF:
+        raise NativeBackendUnsupported(
+            "native backend supports at most 2^32-1 points and queries"
+        )
+
+    try:
+        radius_value = float(radius)
+        cell_size = float(index.cell_size)
+        native_point_values = []
+        for obj_id in ids:
+            box = index.box(obj_id)
+            native_point_values.append(
+                _NativePoint(
+                    (float(box.min_x) + float(box.max_x)) / 2.0,
+                    (float(box.min_y) + float(box.max_y)) / 2.0,
+                )
+            )
+        native_query_values = [
+            _NativePoint(float(x), float(y))
+            for x, y in prepared_queries
+        ]
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise NativeBackendUnsupported(
+            "index/query/radius is not native-compatible"
+        ) from exc
+
+    if radius_value < 0.0:
+        raise NativeBackendUnsupported(
+            "negative radius keeps the Python reference semantics"
+        )
+
+    point_array_type = _NativePoint * len(native_point_values)
+    native_points = point_array_type(*native_point_values)
+    query_array_type = _NativePoint * len(native_query_values)
+    native_queries = query_array_type(*native_query_values)
+
+    required = ctypes.c_uint32(0)
+    status = int(
+        radius_neighbors(
+            native_points,
+            ctypes.c_uint32(len(native_point_values)),
+            native_queries,
+            ctypes.c_uint32(len(native_query_values)),
+            ctypes.c_double(radius_value),
+            ctypes.c_double(cell_size),
+            None,
+            ctypes.c_uint32(0),
+            ctypes.byref(required),
+        )
+    )
+
+    if status == _OK and required.value == 0:
+        return [[] for _ in native_query_values]
+    if status not in (_OK, _BUFFER_TOO_SMALL):
+        _raise_status(status)
+
+    out_type = _NativeNeighbor * required.value
+    out = out_type()
+    written = ctypes.c_uint32(0)
+    status = int(
+        radius_neighbors(
+            native_points,
+            ctypes.c_uint32(len(native_point_values)),
+            native_queries,
+            ctypes.c_uint32(len(native_query_values)),
+            ctypes.c_double(radius_value),
+            ctypes.c_double(cell_size),
+            out,
+            ctypes.c_uint32(required.value),
+            ctypes.byref(written),
+        )
+    )
+    if status != _OK:
+        _raise_status(status)
+    if written.value != required.value:
+        raise NativeBackendUnavailable(
+            "native backend changed neighbor count between sizing and fill calls"
+        )
+
+    result = [[] for _ in native_query_values]
+    for i in range(written.value):
+        query_index = int(out[i].query)
+        point_index = int(out[i].point)
+        if query_index >= len(result) or point_index >= len(ids):
+            raise NativeBackendUnavailable(
+                "native backend returned an out-of-range neighbor index"
+            )
+        result[query_index].append((float(out[i].distance), ids[point_index]))
+
+    return result
+
+
 def _raise_status(status: int) -> None:
     if status in (_INVALID_ARGUMENT, _UNSUPPORTED_RANGE):
         raise NativeBackendUnsupported(f"native backend rejected input (status={status})")
