@@ -47,7 +47,7 @@ jobs:
           cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
           cmake --build build/native --config Release --parallel 2
       - name: Locate native library
-        run: python -c "import os,platform; from pathlib import Path; names={'Windows':'photonx_native.dll','Darwin':'libphotonx_native.dylib','Linux':'libphotonx_native.so'}; matches=list(Path('build/native').rglob(names[platform.system()])); assert matches, 'native library not found'; open(os.environ['GITHUB_ENV'],'a',encoding='utf-8').write('PHOTONX_NATIVE_LIBRARY='+str(matches[0].resolve())+'\\n')"
+        run: python -c "import os,platform; from pathlib import Path; names={'Windows':'photonx_native.dll','Darwin':'libphotonx_native.dylib','Linux':'libphotonx_native.so'}; matches=list(Path('build/native').rglob(names[platform.system()])); assert matches, 'native library not found'; open(os.environ['GITHUB_ENV'],'a',encoding='utf-8').write('PHOTONX_NATIVE_LIBRARY='+str(matches[0].resolve())+chr(10))"
       - name: Verify native library load
         run: python -c "from photonx_eda_pcb.spatial_connectivity.native_backend import native_available; assert native_available()"
       - name: Run native parity and persistent-index smoke tests
