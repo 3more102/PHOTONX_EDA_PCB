@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened legacy Gerber header placement: AS/IN/MI/SF/OF/IR commands are now considered late after the first coordinate statement, including non-emitting D02 moves, rather than only after physical geometry has already been emitted.
+- Preflight now classifies LATE_GERBER_* and DUPLICATE_GERBER_* diagnostics as strict blockers so parser-invalid header state cannot be reported as ready for strict reconstruction.
 - Expanded production Gerber aperture-transform support from identity-only to an exact modal LM/LR/LS subset: mirror-symmetric C/R/O apertures accept all LM states, circles accept arbitrary finite LR, rectangular/obround flashes accept 90-degree-step LR, and positive LS scales flash dimensions plus circular draw/arc widths. Non-orthogonal R/O flashes remain fail-closed.
 - Aperture transform state is applied to the original aperture at object creation (not cumulatively), recorded as provenance, and included in deterministic IDs.
 - Corrected Gerber arc provenance under legacy image transforms: reflecting exactly one MI axis now reports the transformed output arc direction as the opposite of the source CW/CCW command, while two-axis mirroring, positive SF, OF translation, and IR rotation preserve orientation. Arc evidence now records both source and output directions.
