@@ -4,7 +4,11 @@ from math import hypot, isfinite, pi, sqrt
 import re
 from pathlib import Path
 from ..errors import ParseError, UnsupportedFeatureError
-from ..excellon_numeric import SIGNED_DECIMAL_PATTERN, UNSIGNED_DECIMAL_PATTERN
+from ..excellon_numeric import (
+    SIGNED_DECIMAL_PATTERN,
+    TOOL_NUMBER_PATTERN,
+    UNSIGNED_DECIMAL_PATTERN,
+)
 from ..gerber_geometry.arc import (
     ArcSpec,
     arc_points,
@@ -511,6 +515,21 @@ class ExcellonParser:
                     self._disable_geometry(out)
                     continue
                 self.tool=tool;continue
+            if line.startswith("T"):
+                message = f"malformed Excellon tool selection: {line}"
+                if self.strict:
+                    raise ParseError(f"{p}:{line_no}: {message}")
+                out.diagnostics.append(
+                    ParseDiagnostic(
+                        "warning",
+                        "INVALID_EXCELLON_TOOL_SELECTION",
+                        message,
+                        str(p),
+                        line_no,
+                    )
+                )
+                self._disable_geometry(out)
+                continue
             m=_HIT.match(line)
             if m and (m.group(1) is not None or m.group(2) is not None):
                 if self.route.tool_down:
