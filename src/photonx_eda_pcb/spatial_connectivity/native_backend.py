@@ -115,19 +115,40 @@ def _configure_library(library: ctypes.CDLL) -> ctypes.CDLL:
 
 
 @lru_cache(maxsize=1)
-def _load_library() -> ctypes.CDLL:
+def _probe_library() -> tuple[ctypes.CDLL | None, type[RuntimeError] | None, str]:
+    """Probe once and cache both successful and failed native discovery."""
     candidates = _library_candidates()
     if not candidates:
-        raise NativeBackendUnavailable("no native library discovered")
+        return None, NativeBackendUnavailable, "no native library discovered"
 
     errors: list[str] = []
     for candidate in candidates:
         try:
-            return _configure_library(ctypes.CDLL(candidate))
+            return _configure_library(ctypes.CDLL(candidate)), None, ""
         except (OSError, AttributeError, NativeBackendLoadError) as exc:
             errors.append(f"{candidate}: {exc}")
 
-    raise NativeBackendLoadError("; ".join(errors))
+    return None, NativeBackendLoadError, "; ".join(errors)
+
+
+def _load_library() -> ctypes.CDLL:
+    library, error_type, detail = _probe_library()
+    if library is not None:
+        return library
+    if error_type is None:
+        raise NativeBackendLoadError("native backend probe returned no result")
+    raise error_type(detail)
+
+
+def _clear_library_cache() -> None:
+    _probe_library.cache_clear()
+    clear_candidates = getattr(_library_candidates, "cache_clear", None)
+    if clear_candidates is not None:
+        clear_candidates()
+
+
+# Keep the existing internal refresh hook used by tests and development tools.
+_load_library.cache_clear = _clear_library_cache  # type: ignore[attr-defined]
 
 
 def native_available() -> bool:
