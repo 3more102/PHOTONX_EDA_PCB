@@ -51,7 +51,8 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 
 - invalid Gerber step-and-repeat state (malformed syntax, non-positive counts, or expansion beyond the configured safety limit): strict mode rejects it and permissive mode clears/suppresses file geometry rather than silently treating repeated content as a single instance;
 - Excellon tool definitions before explicit `METRIC/INCH/M71/M72` units: strict mode rejects them and permissive mode suppresses file geometry instead of assuming the parser's default millimeter state;
-- zero-diameter Excellon tools: strict mode rejects them and permissive mode clears/suppresses file geometry instead of producing zero-width drills, slots, or routes;
+- zero, malformed, or non-finite Excellon tool diameters, duplicate tool definitions, and undefined tool selections: strict mode rejects them and permissive mode clears/suppresses file geometry instead of producing ambiguous or invalid drills, slots, or routes;
+- non-comment data after Excellon/XNC `M30`: strict mode rejects the file and permissive mode reports `INVALID_EXCELLON_DATA_AFTER_M30` while suppressing file geometry; comments and blank lines after `M30` remain non-geometric;
 - unsupported or geometrically invalid Excellon routed arcs: strict mode rejects them; permissive mode clears/suppresses file geometry so a route cannot be emitted with the failed arc segment silently omitted;
 - malformed Excellon linear routes, malformed G85 slots, or invalid route-state transitions (including tool changes, drill hits, G05, empty route termination, or EOF while the tool is down): strict mode rejects them and permissive mode suppresses file geometry rather than emitting partial manufacturing geometry;
 - Excellon routed-arc dialects outside the bounded I/J center-offset subset and the standard XNC X/Y/A radius form;
