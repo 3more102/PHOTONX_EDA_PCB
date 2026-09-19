@@ -32,7 +32,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - Excellon G85 straight slots in absolute or incremental mode, with the incremental start relative to the preceding coordinate and the incremental end relative to the slot start;
 - Excellon linear-route and supported routed-arc endpoints in absolute or incremental coordinate mode, while I/J remain arc-center offsets;
 - Excellon routed arcs using I/J center offsets and standard XNC X/Y/A radius form, tessellated with explicit approximation evidence;
-- Excellon `M30` end-of-file semantics: `M30` terminates the program; any later non-empty command is rejected in strict mode and suppresses all permissive file geometry instead of leaking post-EOF manufacturing data;
+- Excellon `M30` end-of-file semantics: `M30` terminates the program; any later non-comment command is rejected in strict mode and suppresses all permissive file geometry instead of leaking post-EOF manufacturing data, while blank lines/comments remain non-geometric;
 - deterministic source provenance;
 - geometry-based same-layer connectivity;
 - physical-net groups;
@@ -52,7 +52,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 
 - invalid Gerber step-and-repeat state (malformed syntax, non-positive counts, or expansion beyond the configured safety limit): strict mode rejects it and permissive mode clears/suppresses file geometry rather than silently treating repeated content as a single instance;
 - Excellon tool definitions before explicit `METRIC/INCH/M71/M72` units: strict mode rejects them and permissive mode suppresses file geometry instead of assuming the parser's default millimeter state;
-- zero-diameter Excellon tools: strict mode rejects them and permissive mode clears/suppresses file geometry instead of producing zero-width drills, slots, or routes;
+- zero, malformed, non-finite, or conversion-overflowing Excellon tool diameters, duplicate tool definitions, and undefined tool selections: strict mode rejects them and permissive mode clears/suppresses file geometry instead of producing ambiguous or invalid drills, slots, or routes;
 - unsupported or geometrically invalid Excellon routed arcs: strict mode rejects them; permissive mode clears/suppresses file geometry so a route cannot be emitted with the failed arc segment silently omitted;
 - malformed Excellon linear routes, malformed G85 slots, or invalid route-state transitions (including tool changes, drill hits, G05, empty route termination, or EOF while the tool is down): strict mode rejects them and permissive mode suppresses file geometry rather than emitting partial manufacturing geometry;
 - Excellon routed-arc dialects outside the bounded I/J center-offset subset and the standard XNC X/Y/A radius form;
