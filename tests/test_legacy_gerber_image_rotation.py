@@ -95,13 +95,22 @@ def test_ir90_rotates_step_repeat_offsets_after_repeat_expansion(tmp_path: Path)
 
     assert len(result.pads) == 2
     centers = [(p.center.x, p.center.y) for p in result.pads]
-    assert centers == pytest.approx([(0.0, 1.0), (0.0, 4.0)])
+    assert centers[0] == pytest.approx((0.0, 1.0))
+    assert centers[1] == pytest.approx((0.0, 4.0))
     assert all(
         any(e.kind == "gerber_step_repeat" for e in p.provenance.evidence)
         for p in result.pads
     )
     assert all(
         any(e.kind == "gerber_image_rotation" for e in p.provenance.evidence)
+        for p in result.pads
+    )
+    assert all(
+        any(
+            e.kind == "gerber_step_repeat"
+            and "output_offset_mm=" in e.detail
+            for e in p.provenance.evidence
+        )
         for p in result.pads
     )
 
