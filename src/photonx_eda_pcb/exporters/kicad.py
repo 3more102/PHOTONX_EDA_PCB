@@ -1,6 +1,7 @@
 from __future__ import annotations
 import shutil,subprocess,uuid
 from pathlib import Path
+from math import isfinite
 from ..models import BoardModel
 from .kicad_report import KicadExportReport,KicadExportIssue
 from .kicad_policy import pad_shape_name,slot_geometry,slot_export_status
@@ -86,8 +87,14 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
     for seg in board.outline:lines.append(f'  (gr_line (start {seg.start.x:.6f} {seg.start.y:.6f}) (end {seg.end.x:.6f} {seg.end.y:.6f}) (stroke (width 0.1) (type default)) (layer "Edge.Cuts") (uuid {_u("edge:"+seg.id)}))')
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
 def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]
-def validate_with_kicad_cli(path:str|Path)->tuple[bool|None,str]:
+def validate_with_kicad_cli(path:str|Path,*,timeout_s:float=30.0)->tuple[bool|None,str]:
+    try:timeout=float(timeout_s)
+    except (TypeError,ValueError) as exc:raise ValueError("timeout_s must be a positive finite number") from exc
+    if not isfinite(timeout) or timeout<=0:raise ValueError("timeout_s must be a positive finite number")
     exe=shutil.which("kicad-cli")
     if not exe:return None,"kicad-cli not found"
-    proc=subprocess.run([exe,"pcb","drc",str(path),"--exit-code-violations"],capture_output=True,text=True)
+    try:
+        proc=subprocess.run([exe,"pcb","drc",str(path),"--exit-code-violations"],capture_output=True,text=True,timeout=timeout)
+    except subprocess.TimeoutExpired:return None,f"kicad-cli validation timed out after {timeout:g}s"
+    except OSError as exc:return None,f"kicad-cli failed to start: {exc}"
     return proc.returncode==0,(proc.stdout+proc.stderr).strip()
