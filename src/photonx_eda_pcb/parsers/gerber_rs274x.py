@@ -1509,8 +1509,13 @@ class GerberRS274XParser:
 
             exposure, diameter, center_x, center_y = values[:4]
             rotation = values[4] if len(values) == 5 else 0.0
+            finite_values = all(
+                isfinite(float(value))
+                for value in (exposure, diameter, center_x, center_y, rotation)
+            )
             if (
-                exposure != 1
+                not finite_values
+                or exposure != 1
                 or diameter <= 0
                 or abs(center_x) > 1e-12
                 or abs(center_y) > 1e-12
@@ -1531,6 +1536,20 @@ class GerberRS274XParser:
                 return
 
             diameter_mm = to_mm(float(diameter), self.units)
+            if not isfinite(diameter_mm):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    (
+                        f"circle aperture macro {name!r} overflows after "
+                        "active-unit conversion"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
             self.apertures[code] = Aperture(code, "C", diameter_mm, diameter_mm)
             return
 
