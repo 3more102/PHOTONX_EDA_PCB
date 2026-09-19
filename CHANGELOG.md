@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added specification-faithful Gerber aperture-macro variable evaluation: calling AD parameters seed `$1..$n`, ordered `$n=expression` statements define new variables, undefined variables evaluate to zero without prefix aliasing, redefinition is rejected, and non-finite values fail closed. Circle primitive validation now accepts exactly the required four parameters plus optional rotation.
+
 - Extended Code-4 aperture-macro support beyond centered rectangle/regular-polygon reduction: any valid single-positive simple linear outline with 3–5000 vertices can now be retained exactly for D03 flashes on material layers, including irregular, concave, and off-center shapes. The production path rejects zero-length, self-touching, self-intersecting, open, non-finite, and zero-area contours; preserves primitive rotation before LM/LR/LS plus supported whole-image IR; and carries exact CopperRegion geometry through step-repeat, provenance, and ordered LPD/LPC composition. General Code-4 D01 sweeps and Edge.Cuts flashes remain fail-closed.
 
 - Added exact production reduction for single positive Gerber aperture-macro Outline primitives (Code 4) when the explicitly closed contour is exactly a centered rectangle or centered regular polygon. Rectangle edge orientation and primitive rotation reduce to exact `R` geometry; 3–12 vertex regular outlines reduce to exact `P` geometry. Open, irregular, off-exposure, malformed, and non-reducible outlines remain fail-closed with preflight coverage.
