@@ -10,6 +10,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 - G75 multi-quadrant G02/G03 circular arcs with signed I/J center offsets and circular draw apertures, tessellated with explicit approximation evidence;
 - bounded legacy G74 single-quadrant G02/G03 arcs using unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90 degrees;
 - single positive origin-centered circle aperture macros, including parameterized diameters, reduced exactly to circular apertures; centered-circle rotation is geometry-invariant;
+- aperture-macro local variable definitions are evaluated in source order with AD-supplied `$1..$n`, specification-defined zero values for undefined variables, exact numeric-token substitution, and fail-closed rejection of variable redefinition; Code-1 circle reduction additionally requires four/five finite modifiers;
 - exact rectangular reduction for centered non-zero Code-20 vector-line macros (plus deprecated Code-2 alias), including arbitrarily oriented segments and arbitrary finite primitive rotation;
 - single positive Code-21 center-line aperture macros reduced exactly to centered rectangular apertures with arbitrary finite primitive rotation;
 - deprecated Code-22 lower-left rectangle macros reduced exactly when their lower-left coordinates place the rectangle center at the macro origin, with arbitrary finite primitive rotation;
