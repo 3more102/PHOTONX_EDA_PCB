@@ -2,7 +2,7 @@ from .clearance import _shape
 from photonx_eda_pcb.spatial_connectivity import AABB,SpatialHashIndex,candidate_pairs
 
 def clearance_candidate_metrics(board,cfg,cell_size_mm=None):
-    objs=[*board.tracks,*board.pads];shapes={o.id:_shape(o) for o in objs};by={}
+    objs=[*board.tracks,*board.pads,*getattr(board,"regions",())];shapes={o.id:_shape(o) for o in objs};by={}
     for o in objs:by.setdefault(getattr(o,"layer",None),[]).append(o)
     total=0;candidates=0
     for items in by.values():
