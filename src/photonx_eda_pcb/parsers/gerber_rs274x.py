@@ -528,6 +528,25 @@ class GerberRS274XParser:
             return
         self.aperture_macros[name] = body
 
+    @staticmethod
+    def _orthogonal_rectangle_size(
+        width: float,
+        height: float,
+        rotation: float,
+    ) -> tuple[float, float] | None:
+        """Return exact axis-aligned dimensions for a 90-degree-step rotation."""
+        normalized = rotation % 360.0
+        angle = None
+        for candidate in (0.0, 90.0, 180.0, 270.0):
+            if isclose(normalized, candidate, rel_tol=0.0, abs_tol=1e-9):
+                angle = candidate
+                break
+        if angle is None:
+            return None
+        if angle in {90.0, 270.0}:
+            return height, width
+        return width, height
+
     def _instantiate_macro_aperture(
         self,
         code: int,
@@ -607,7 +626,6 @@ class GerberRS274XParser:
                 or diameter <= 0
                 or abs(center_x) > 1e-12
                 or abs(center_y) > 1e-12
-                or abs(rotation) > 1e-12
             ):
                 self._fail_or_warn(
                     path,
@@ -615,8 +633,9 @@ class GerberRS274XParser:
                     line,
                     "UNSUPPORTED_GERBER_APERTURE_MACRO",
                     (
-                        f"aperture macro {name!r} requires unsupported exposure, "
-                        "offset, rotation, or diameter semantics"
+                        f"aperture macro {name!r} requires positive exposure/diameter "
+                        "and origin-centered geometry; rotation is immaterial for a "
+                        "centered circle"
                     ),
                     out,
                 )
@@ -649,13 +668,24 @@ class GerberRS274XParser:
 
             horizontal = abs(dy) <= epsilon and abs(dx) > epsilon
             vertical = abs(dx) <= epsilon and abs(dy) > epsilon
+            base_size = None
+            if horizontal:
+                base_size = (abs(dx), width)
+            elif vertical:
+                base_size = (width, abs(dy))
+            rotated_size = (
+                None
+                if base_size is None
+                else self._orthogonal_rectangle_size(
+                    base_size[0], base_size[1], rotation
+                )
+            )
             if (
                 exposure != 1
                 or width <= 0
-                or abs(rotation) > epsilon
                 or abs(midpoint_x) > epsilon
                 or abs(midpoint_y) > epsilon
-                or not (horizontal or vertical)
+                or rotated_size is None
             ):
                 self._fail_or_warn(
                     path,
@@ -664,21 +694,15 @@ class GerberRS274XParser:
                     "UNSUPPORTED_GERBER_APERTURE_MACRO",
                     (
                         f"vector-line aperture macro {name!r} requires positive "
-                        "exposure/width, zero rotation, an origin-centered midpoint, "
-                        "and a non-zero axis-aligned segment"
+                        "exposure/width, an origin-centered midpoint, a non-zero "
+                        "axis-aligned segment, and rotation in 90-degree steps"
                     ),
                     out,
                 )
                 self.unsupported_apertures.add(code)
                 return
 
-            if horizontal:
-                size_x = abs(dx)
-                size_y = width
-            else:
-                size_x = width
-                size_y = abs(dy)
-
+            size_x, size_y = rotated_size
             self.apertures[code] = Aperture(
                 code,
                 "R",
@@ -701,13 +725,14 @@ class GerberRS274XParser:
                 return
 
             exposure, width, height, center_x, center_y, rotation = values
+            rotated_size = self._orthogonal_rectangle_size(width, height, rotation)
             if (
                 exposure != 1
                 or width <= 0
                 or height <= 0
                 or abs(center_x) > 1e-12
                 or abs(center_y) > 1e-12
-                or abs(rotation) > 1e-12
+                or rotated_size is None
             ):
                 self._fail_or_warn(
                     path,
@@ -716,17 +741,70 @@ class GerberRS274XParser:
                     "UNSUPPORTED_GERBER_APERTURE_MACRO",
                     (
                         f"center-line aperture macro {name!r} requires positive "
-                        "exposure, positive size, origin-centered geometry, and "
-                        "zero rotation"
+                        "exposure/size, origin-centered geometry, and rotation in "
+                        "90-degree steps"
                     ),
                     out,
                 )
                 self.unsupported_apertures.add(code)
                 return
 
-            width_mm = to_mm(float(width), self.units)
-            height_mm = to_mm(float(height), self.units)
-            self.apertures[code] = Aperture(code, "R", width_mm, height_mm)
+            size_x, size_y = rotated_size
+            self.apertures[code] = Aperture(
+                code,
+                "R",
+                to_mm(float(size_x), self.units),
+                to_mm(float(size_y), self.units),
+            )
+            return
+
+        if primitive["kind"] == "lower_left_line":
+            if len(values) != 6:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"lower-left aperture macro {name!r} requires six modifiers",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            exposure, width, height, lower_left_x, lower_left_y, rotation = values
+            center_x = lower_left_x + width / 2.0
+            center_y = lower_left_y + height / 2.0
+            rotated_size = self._orthogonal_rectangle_size(width, height, rotation)
+            if (
+                exposure != 1
+                or width <= 0
+                or height <= 0
+                or abs(center_x) > 1e-12
+                or abs(center_y) > 1e-12
+                or rotated_size is None
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    (
+                        f"lower-left aperture macro {name!r} requires positive "
+                        "exposure/size, a rectangle centered on the macro origin, "
+                        "and rotation in 90-degree steps"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            size_x, size_y = rotated_size
+            self.apertures[code] = Aperture(
+                code,
+                "R",
+                to_mm(float(size_x), self.units),
+                to_mm(float(size_y), self.units),
+            )
             return
 
         self._fail_or_warn(
