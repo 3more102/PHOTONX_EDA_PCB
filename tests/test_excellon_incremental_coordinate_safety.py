@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 
-from photonx_eda_pcb.errors import UnsupportedFeatureError
 from photonx_eda_pcb.parsers.excellon import ExcellonParser
 from photonx_eda_pcb.preflight import preflight
 
@@ -123,7 +122,44 @@ def test_incremental_excellon_routed_arc_accumulates_endpoint_but_keeps_ij_as_of
 
 
 @pytest.mark.parametrize("command", ["ICI,ON", "G91"])
-def test_incremental_g85_slots_remain_fail_closed_until_canned_slot_semantics_are_modeled(
+@pytest.mark.parametrize(
+    "slot_command",
+    [
+        "X1.000Y1.000G85X1.000Y0.000",
+        "G85X1.000Y1.000X1.000Y0.000",
+    ],
+)
+def test_incremental_g85_slots_accumulate_start_then_end_from_previous_coordinate(
+    tmp_path: Path,
+    command: str,
+    slot_command: str,
+):
+    path = _write(
+        tmp_path,
+        command + "\n"
+        "X5.000Y5.000\n"
+        + slot_command
+        + "\n"
+        "X0.500Y0.500\n",
+    )
+
+    result = ExcellonParser(strict=True).parse(path)
+
+    assert len(result.slots) == 1
+    assert result.slots[0].start == pytest.approx((6.0, 6.0))
+    assert result.slots[0].end == pytest.approx((7.0, 6.0))
+    assert any(
+        evidence.kind == "excellon_incremental_g85"
+        for evidence in result.slots[0].provenance.evidence
+    )
+    assert len(result.drills) == 2
+    assert (result.drills[-1].center.x, result.drills[-1].center.y) == pytest.approx(
+        (7.5, 6.5)
+    )
+
+
+@pytest.mark.parametrize("command", ["ICI,ON", "G91"])
+def test_preflight_accepts_incremental_g85_slots(
     tmp_path: Path,
     command: str,
 ):
@@ -133,20 +169,10 @@ def test_incremental_g85_slots_remain_fail_closed_until_canned_slot_semantics_ar
         "X1.000Y1.000G85X1.000Y0.000\n",
     )
 
-    with pytest.raises(
-        UnsupportedFeatureError,
-        match="incremental Excellon G85 slot coordinates are not yet modeled",
-    ):
-        ExcellonParser(strict=True).parse(path)
+    report = preflight(path)
 
-    result = ExcellonParser(strict=False).parse(path)
-    assert result.drills == []
-    assert result.slots == []
-    assert result.routes == []
-    assert any(
-        diagnostic.code == "UNSUPPORTED_EXCELLON_INCREMENTAL_SLOT"
-        for diagnostic in result.diagnostics
-    )
+    assert report.discovered_files == 1
+    assert report.ready_for_strict_reconstruction
 
 
 @pytest.mark.parametrize("command", ["ICI,ON", "G91"])
