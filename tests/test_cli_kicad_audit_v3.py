@@ -7,6 +7,8 @@ from photonx_eda_pcb.exporters.kicad_report import KicadExportIssue, KicadExport
 
 def _report():
     return KicadExportReport(
+        exported_pads=1,
+        skipped_pads=1,
         exported_slots=1,
         skipped_slots=1,
         exported_regions=1,
@@ -15,6 +17,12 @@ def _report():
         skipped_tracks=1,
         skipped_routes=1,
         issues=[
+            KicadExportIssue(
+                "warning",
+                "KICAD_PAD_LAYER_UNSUPPORTED",
+                "P_SKIP",
+                "pad layer is unsupported",
+            ),
             KicadExportIssue(
                 "warning",
                 "KICAD_SLOT_PLATING_UNKNOWN",
@@ -40,6 +48,8 @@ def _report():
                 "route omitted",
             ),
         ],
+        exported_pad_ids=["P_OK"],
+        skipped_pad_ids=["P_SKIP"],
         exported_slot_ids=["S_OK"],
         skipped_slot_ids=["S_SKIP"],
         exported_region_ids=["R_OK"],
@@ -60,6 +70,10 @@ def test_write_kicad_export_report_preserves_current_report_surface(tmp_path):
     payload = json.loads(path.read_text(encoding="utf-8"))
 
     assert payload["ok"] is True
+    assert payload["exported_pads"] == 1
+    assert payload["skipped_pads"] == 1
+    assert payload["exported_pad_ids"] == ["P_OK"]
+    assert payload["skipped_pad_ids"] == ["P_SKIP"]
     assert payload["exported_regions"] == 1
     assert payload["skipped_regions"] == 1
     assert payload["exported_tracks"] == 1
@@ -70,7 +84,7 @@ def test_write_kicad_export_report_preserves_current_report_surface(tmp_path):
     assert payload["exported_track_ids"] == ["T_OK"]
     assert payload["skipped_track_ids"] == ["T_SKIP"]
     assert payload["skipped_route_ids"] == ["Q_SKIP"]
-    assert payload["issues"][0]["code"] == "KICAD_SLOT_PLATING_UNKNOWN"
+    assert payload["issues"][0]["code"] == "KICAD_PAD_LAYER_UNSUPPORTED"
 
 
 def test_write_kicad_export_report_marks_errors_not_ok(tmp_path):
@@ -148,12 +162,15 @@ def test_reconstruct_kicad_emits_board_report_omissions_and_validation(
         (output / "kicad_export_report.json").read_text(encoding="utf-8")
     )
     assert audit["ok"] is True
+    assert audit["skipped_pads"] == 1
     assert audit["skipped_tracks"] == 1
     assert audit["skipped_routes"] == 1
 
     omissions = json.loads(
         (output / "kicad_omissions.json").read_text(encoding="utf-8")
     )
+    assert omissions["exported_pads"] == ["P_OK"]
+    assert omissions["skipped_pads"] == ["P_SKIP"]
     assert omissions["exported_slots"] == ["S_OK"]
     assert omissions["skipped_slots"] == ["S_SKIP"]
     assert omissions["exported_regions"] == ["R_OK"]
