@@ -37,6 +37,10 @@ bool finite_box(const photonx_aabb& box) noexcept {
            box.min_x <= box.max_x && box.min_y <= box.max_y;
 }
 
+bool finite_point(const photonx_point& point) noexcept {
+    return std::isfinite(point.x) && std::isfinite(point.y);
+}
+
 bool to_cell(double coordinate, double cell_size, int64_t& out) noexcept {
     const long double scaled =
         std::floor(static_cast<long double>(coordinate) /
@@ -212,6 +216,114 @@ int compute_pairs(
     return PHOTONX_NATIVE_OK;
 }
 
+int compute_radius_neighbors(
+    const photonx_point* points,
+    uint32_t point_count,
+    const photonx_point* queries,
+    uint32_t query_count,
+    double radius,
+    double cell_size,
+    std::vector<photonx_neighbor>& neighbors
+) {
+    if ((point_count != 0U && points == nullptr) ||
+        (query_count != 0U && queries == nullptr) ||
+        !std::isfinite(radius) || radius < 0.0 ||
+        !std::isfinite(cell_size) || cell_size <= 0.0) {
+        return PHOTONX_NATIVE_INVALID_ARGUMENT;
+    }
+
+    using Grid =
+        std::unordered_map<Cell, std::vector<uint32_t>, CellHash>;
+    Grid grid;
+
+    for (uint32_t i = 0; i < point_count; ++i) {
+        if (!finite_point(points[i])) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+        int64_t cell_x = 0;
+        int64_t cell_y = 0;
+        if (!to_cell(points[i].x, cell_size, cell_x) ||
+            !to_cell(points[i].y, cell_size, cell_y)) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+        grid[Cell{cell_x, cell_y}].push_back(i);
+    }
+
+    for (uint32_t query_index = 0; query_index < query_count; ++query_index) {
+        if (!finite_point(queries[query_index])) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        const photonx_aabb window{
+            queries[query_index].x - radius,
+            queries[query_index].y - radius,
+            queries[query_index].x + radius,
+            queries[query_index].y + radius,
+        };
+        if (!finite_box(window)) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        int64_t min_x = 0;
+        int64_t min_y = 0;
+        int64_t max_x = 0;
+        int64_t max_y = 0;
+        long double cell_count = 0.0L;
+        if (!cell_bounds(
+                window, cell_size, min_x, min_y, max_x, max_y, cell_count)) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        for (int64_t x = min_x;; ++x) {
+            for (int64_t y = min_y;; ++y) {
+                const auto it = grid.find(Cell{x, y});
+                if (it != grid.end()) {
+                    for (const uint32_t point_index : it->second) {
+                        const double distance = std::hypot(
+                            queries[query_index].x - points[point_index].x,
+                            queries[query_index].y - points[point_index].y
+                        );
+                        if (distance <= radius) {
+                            if (neighbors.size() >= kMaxNativeResults) {
+                                return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+                            }
+                            neighbors.push_back(
+                                photonx_neighbor{
+                                    query_index,
+                                    point_index,
+                                    distance,
+                                }
+                            );
+                        }
+                    }
+                }
+                if (y == max_y) {
+                    break;
+                }
+            }
+            if (x == max_x) {
+                break;
+            }
+        }
+    }
+
+    std::sort(
+        neighbors.begin(),
+        neighbors.end(),
+        [](const photonx_neighbor& a, const photonx_neighbor& b) {
+            if (a.query != b.query) {
+                return a.query < b.query;
+            }
+            if (a.distance != b.distance) {
+                return a.distance < b.distance;
+            }
+            return a.point < b.point;
+        }
+    );
+
+    return PHOTONX_NATIVE_OK;
+}
+
 }  // namespace
 
 extern "C" uint32_t photonx_native_abi_version(void) {
@@ -258,6 +370,62 @@ extern "C" int photonx_candidate_pairs(
         }
 
         std::copy(pairs.begin(), pairs.end(), out_pairs);
+        return PHOTONX_NATIVE_OK;
+    } catch (...) {
+        return PHOTONX_NATIVE_INTERNAL_ERROR;
+    }
+}
+
+
+extern "C" int photonx_radius_neighbors(
+    const photonx_point* points,
+    uint32_t point_count,
+    const photonx_point* queries,
+    uint32_t query_count,
+    double radius,
+    double cell_size,
+    photonx_neighbor* out_neighbors,
+    uint32_t out_capacity,
+    uint32_t* out_count
+) {
+    if (out_count == nullptr) {
+        return PHOTONX_NATIVE_INVALID_ARGUMENT;
+    }
+
+    *out_count = 0U;
+
+    try {
+        std::vector<photonx_neighbor> neighbors;
+        const int status = compute_radius_neighbors(
+            points,
+            point_count,
+            queries,
+            query_count,
+            radius,
+            cell_size,
+            neighbors
+        );
+        if (status != PHOTONX_NATIVE_OK) {
+            return status;
+        }
+
+        if (neighbors.size() >
+            static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
+            return PHOTONX_NATIVE_UNSUPPORTED_RANGE;
+        }
+
+        const uint32_t required = static_cast<uint32_t>(neighbors.size());
+        *out_count = required;
+
+        if (required == 0U) {
+            return PHOTONX_NATIVE_OK;
+        }
+
+        if (out_neighbors == nullptr || out_capacity < required) {
+            return PHOTONX_NATIVE_BUFFER_TOO_SMALL;
+        }
+
+        std::copy(neighbors.begin(), neighbors.end(), out_neighbors);
         return PHOTONX_NATIVE_OK;
     } catch (...) {
         return PHOTONX_NATIVE_INTERNAL_ERROR;
