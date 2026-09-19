@@ -7,12 +7,9 @@ DRILL_SUFFIXES = {".drl", ".xln", ".exc"}
 def discover_manufacturing_files(root: str | Path) -> dict[str, list[Path]]:
     root = Path(root)
     files = sorted(
-        (
-            p
-            for p in root.rglob("*")
-            if p.is_file() and not p.is_symlink()
-        ),
-        key=lambda p: (p.as_posix().lower(), p.as_posix()),
+        p
+        for p in root.rglob("*")
+        if p.is_file() and not p.is_symlink()
     )
     return {
         "gerber": [p for p in files if p.suffix.lower() in GERBER_SUFFIXES],
