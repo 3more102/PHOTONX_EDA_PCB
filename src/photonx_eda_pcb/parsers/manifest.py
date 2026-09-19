@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..format_detection import detect_format
+from ..io.walk import DEFAULT_MAX_RECURSIVE_ENTRIES, bounded_regular_files
 from .layer_map import infer_layer
 
 
@@ -24,7 +25,7 @@ class ManufacturingFile:
     detection_reasons: tuple[str, ...] = ()
 
 
-def _candidate_files(source: Path):
+def _candidate_files(source: Path, *, max_entries: int):
     if source.is_file():
         # An explicitly selected file is intentional, even when the path itself
         # is a symlink. Recursive directory discovery is the trust boundary.
@@ -32,11 +33,7 @@ def _candidate_files(source: Path):
         return
     if source.is_dir():
         yield from sorted(
-            (
-                p
-                for p in source.rglob("*")
-                if p.is_file() and not p.is_symlink()
-            ),
+            bounded_regular_files(source, max_entries=max_entries),
             key=lambda p: p.as_posix().lower(),
         )
         return
@@ -55,12 +52,16 @@ def _sniff_text(path: Path, limit: int = 256 * 1024) -> str:
         return ""
 
 
-def discover_manufacturing_files(source: str | Path) -> list[ManufacturingFile]:
+def discover_manufacturing_files(
+    source: str | Path,
+    *,
+    max_entries: int = DEFAULT_MAX_RECURSIVE_ENTRIES,
+) -> list[ManufacturingFile]:
     """Discover Gerber/Excellon files recursively using names and content."""
     root = Path(source)
     result: list[ManufacturingFile] = []
 
-    for p in _candidate_files(root):
+    for p in _candidate_files(root, max_entries=max_entries):
         text = _sniff_text(p)
         guess = detect_format(p.name, text)
         suffix = p.suffix.lower()

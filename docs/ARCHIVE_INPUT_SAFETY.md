@@ -23,6 +23,20 @@ The actual number of decompressed bytes is checked against the remaining global
 budget and against each member's declared size. This provides a second resource
 boundary instead of relying only on archive metadata.
 
+## Direct directory discovery
+
+Direct directory inputs use the same defensive principle before parser work
+starts. Recursive discovery, inventory, checksum generation, and legacy file
+classification are bounded to 20,000 encountered tree entries by default.
+Directories and symlinks count toward the budget, while recursive file symlinks
+remain excluded from the returned file set. The library entry points expose a
+`max_entries` keyword so controlled callers and tests can choose a smaller
+budget.
+
+An explicitly selected single file does not perform recursive traversal and is
+therefore not charged against this directory-entry budget.
+
 These checks protect the ingestion environment. They do not make arbitrary
-archives trustworthy, and they do not relax parser semantics: after extraction,
-the same strict/preflight Gerber and Excellon rules apply.
+archives or directory trees trustworthy, and they do not relax parser
+semantics: after preparation/discovery, the same strict/preflight Gerber and
+Excellon rules apply.
