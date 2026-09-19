@@ -76,6 +76,26 @@ def test_extended_statistics_validation_covers_new_counts_and_lengths():
     assert "STATS_NEGATIVE_ROUTE_LENGTH" in issues
 
 
+def test_statistics_validation_rejects_nonfinite_lengths_and_dimensions():
+    stats = compute_board_stats(_board_with_extended_physical_evidence())
+    invalid = replace(
+        stats,
+        total_track_length_mm=float("nan"),
+        route_length_mm=float("inf"),
+        outline_length_mm=float("-inf"),
+        board_width_mm=float("nan"),
+        board_height_mm=float("inf"),
+    )
+
+    issues = validate_stats(invalid)
+
+    assert "STATS_NONFINITE_TRACK_LENGTH" in issues
+    assert "STATS_NONFINITE_ROUTE_LENGTH" in issues
+    assert "STATS_NONFINITE_OUTLINE_LENGTH" in issues
+    assert "STATS_NONFINITE_BOARD_WIDTH" in issues
+    assert "STATS_NONFINITE_BOARD_HEIGHT" in issues
+
+
 def test_reporting_surfaces_routes_and_regions_consistently():
     board = _board_with_extended_physical_evidence()
 
