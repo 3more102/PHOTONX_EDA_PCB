@@ -180,7 +180,7 @@ def test_lpc_with_flash_remains_fail_closed(tmp_path: Path):
         "X050000Y050000D03*\n",
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="region-only files"):
+    with pytest.raises(UnsupportedFeatureError, match="rectangular D03 flashes|tracks or outline geometry"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
@@ -197,7 +197,7 @@ def test_lpc_mixed_dark_track_and_clear_region_fails_closed(tmp_path: Path):
         + _rectangle("030000", "030000", "070000", "070000"),
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="region-only files"):
+    with pytest.raises(UnsupportedFeatureError, match="rectangular D03 flashes|tracks or outline geometry"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     report = preflight(path)
