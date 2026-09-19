@@ -7,6 +7,7 @@ Macro primitives and arithmetic expressions are parsed conservatively. Unsupport
 The high-level Gerber parser reduces an aperture macro to a standard aperture only when the macro contains exactly one additive primitive whose geometry is represented exactly by the current BoardModel:
 
 - **Code 1 circle:** exposure on, positive diameter, and center at the macro origin. Rotation is geometry-invariant for an origin-centered circle, so it does not block exact reduction to a standard circular aperture.
+- **Code 5 polygon:** exposure on, integer vertex count 3–12, center at the macro origin, positive circumscribed diameter, and finite rotation. The primitive is reduced exactly to a standard `P` aperture, preserving the polygon rotation for D03 flashes and solid D01 convex sweeps.
 - **Code 20 vector line** (and deprecated **Code 2** alias): exposure on, positive width, origin-centered midpoint, and a non-zero axis-aligned segment. Rotations in 90-degree steps are normalized exactly to an axis-aligned standard rectangular aperture.
 - **Code 21 center line:** exposure on, positive width and height, center at the macro origin, and rotation in 90-degree steps. The result is an exact standard rectangular aperture, swapping X/Y dimensions for 90/270-degree rotation.
 - **Code 22 lower-left line:** exposure on, positive width and height, a lower-left point that places the rectangle center at the macro origin, and rotation in 90-degree steps. The deprecated primitive is reduced exactly to a standard rectangular aperture.
