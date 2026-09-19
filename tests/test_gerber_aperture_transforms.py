@@ -14,8 +14,8 @@ D10*
 """
 
 
-def _write(tmp_path: Path, body: str) -> Path:
-    path = tmp_path / "top.gtl"
+def _write(tmp_path: Path, body: str, name: str = "top.gtl") -> Path:
+    path = tmp_path / name
     path.write_text(BASE + body + "M02*\n", encoding="utf-8")
     return path
 
@@ -39,18 +39,10 @@ def test_identity_aperture_transforms_keep_supported_geometry(
     assert pad.size_y == pytest.approx(0.3)
 
 
-@pytest.mark.parametrize(
-    ("command", "label"),
-    [
-        ("%LMX*%", "mirroring"),
-        ("%LR90*%", "rotation"),
-        ("%LS2*%", "scaling"),
-    ],
-)
-def test_non_identity_aperture_transforms_fail_closed_in_strict_mode(
+@pytest.mark.parametrize("command", ["%LMX*%", "%LMY*%", "%LMXY*%"])
+def test_mirroring_is_exact_for_centered_symmetric_rectangle(
     tmp_path: Path,
     command: str,
-    label: str,
 ):
     path = _write(
         tmp_path,
@@ -58,18 +50,153 @@ def test_non_identity_aperture_transforms_fail_closed_in_strict_mode(
         "X010000Y020000D03*\n",
     )
 
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    pad = result.pads[0]
+    assert pad.size_x == pytest.approx(0.6)
+    assert pad.size_y == pytest.approx(0.3)
+    assert any(
+        evidence.kind == "gerber_aperture_mirror"
+        for evidence in pad.provenance.evidence
+    )
+
+
+@pytest.mark.parametrize(
+    ("rotation", "expected"),
+    [
+        (90, (0.3, 0.6)),
+        (180, (0.6, 0.3)),
+        (270, (0.3, 0.6)),
+        (450, (0.3, 0.6)),
+    ],
+)
+def test_orthogonal_rectangle_rotation_is_exact(
+    tmp_path: Path,
+    rotation: int,
+    expected: tuple[float, float],
+):
+    path = _write(
+        tmp_path,
+        f"%LR{rotation}*%\n"
+        "X010000Y020000D03*\n",
+    )
+
+    pad = GerberRS274XParser("F.Cu", strict=True).parse(path).pads[0]
+
+    assert (pad.size_x, pad.size_y) == pytest.approx(expected)
+    assert any(
+        evidence.kind == "gerber_aperture_rotation"
+        for evidence in pad.provenance.evidence
+    )
+
+
+def test_aperture_scaling_scales_flash_not_center(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%LS2*%\n"
+        "X010000Y020000D03*\n",
+    )
+
+    pad = GerberRS274XParser("F.Cu", strict=True).parse(path).pads[0]
+
+    assert (pad.center.x, pad.center.y) == pytest.approx((1.0, 2.0))
+    assert (pad.size_x, pad.size_y) == pytest.approx((1.2, 0.6))
+    assert any(
+        evidence.kind == "gerber_aperture_scale"
+        and "scale=2" in evidence.detail
+        for evidence in pad.provenance.evidence
+    )
+
+
+def test_combined_lm_lr_ls_applies_to_original_aperture(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%LMX*%\n"
+        "%LR90*%\n"
+        "%LS2*%\n"
+        "X010000Y020000D03*\n",
+    )
+
+    pad = GerberRS274XParser("F.Cu", strict=True).parse(path).pads[0]
+
+    assert (pad.size_x, pad.size_y) == pytest.approx((0.6, 1.2))
+    kinds = {e.kind for e in pad.provenance.evidence}
+    assert {
+        "gerber_aperture_mirror",
+        "gerber_aperture_rotation",
+        "gerber_aperture_scale",
+    }.issubset(kinds)
+
+
+def test_modal_scaling_replaces_previous_value_instead_of_accumulating(
+    tmp_path: Path,
+):
+    path = _write(
+        tmp_path,
+        "%LS2*%\n"
+        "X010000Y020000D03*\n"
+        "%LS0.5*%\n"
+        "X020000Y020000D03*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.pads) == 2
+    assert (result.pads[0].size_x, result.pads[0].size_y) == pytest.approx(
+        (1.2, 0.6)
+    )
+    assert (result.pads[1].size_x, result.pads[1].size_y) == pytest.approx(
+        (0.3, 0.15)
+    )
+
+
+def test_modal_rotation_reset_restores_original_rectangle_orientation(
+    tmp_path: Path,
+):
+    path = _write(
+        tmp_path,
+        "%LR90*%\n"
+        "X010000Y020000D03*\n"
+        "%LR0*%\n"
+        "X020000Y020000D03*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert (result.pads[0].size_x, result.pads[0].size_y) == pytest.approx(
+        (0.3, 0.6)
+    )
+    assert (result.pads[1].size_x, result.pads[1].size_y) == pytest.approx(
+        (0.6, 0.3)
+    )
+
+
+def test_nonorthogonal_rectangle_rotation_fails_closed_in_strict_mode(
+    tmp_path: Path,
+):
+    path = _write(
+        tmp_path,
+        "%LR45*%\n"
+        "X010000Y020000D03*\n",
+    )
+
     with pytest.raises(
         UnsupportedFeatureError,
-        match=rf"aperture {label}",
+        match="non-axis-aligned shape",
     ):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
-def test_non_identity_transform_suppresses_permissive_geometry(tmp_path: Path):
+def test_nonorthogonal_rectangle_rotation_suppresses_permissive_file_geometry(
+    tmp_path: Path,
+):
     path = _write(
         tmp_path,
-        "%LR90*%\n"
-        "X010000Y020000D03*\n",
+        "X000000Y000000D03*\n"
+        "%LR45*%\n"
+        "X010000Y020000D03*\n"
+        "%LR0*%\n"
+        "X020000Y020000D03*\n",
     )
 
     result = GerberRS274XParser("F.Cu", strict=False).parse(path)
@@ -83,23 +210,114 @@ def test_non_identity_transform_suppresses_permissive_geometry(tmp_path: Path):
     )
 
 
-def test_late_transform_clears_prior_geometry_and_identity_does_not_reenable(
-    tmp_path: Path,
-):
-    path = _write(
-        tmp_path,
+def test_arbitrary_rotation_is_geometry_invariant_for_circle_flash(tmp_path: Path):
+    path = tmp_path / "circle_flash.gtl"
+    path.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.400*%\n"
+        "D10*\n"
+        "%LR37.5*%\n"
+        "%LMXY*%\n"
         "X010000Y020000D03*\n"
-        "%LS2*%\n"
-        "X020000Y020000D03*\n"
-        "%LS1*%\n"
-        "X030000Y020000D03*\n",
+        "M02*\n",
+        encoding="utf-8",
     )
 
-    result = GerberRS274XParser("F.Cu", strict=False).parse(path)
+    pad = GerberRS274XParser("F.Cu", strict=True).parse(path).pads[0]
 
-    assert result.pads == []
-    assert result.tracks == []
-    assert result.outline == []
+    assert (pad.size_x, pad.size_y) == pytest.approx((0.4, 0.4))
+    kinds = {e.kind for e in pad.provenance.evidence}
+    assert "gerber_aperture_rotation" in kinds
+    assert "gerber_aperture_mirror" in kinds
+
+
+def test_aperture_scaling_scales_circular_draw_width(tmp_path: Path):
+    path = tmp_path / "circle_draw.gtl"
+    path.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "%LS2.5*%\n"
+        "X000000Y000000D02*\n"
+        "X010000Y000000D01*\n"
+        "M02*\n",
+        encoding="utf-8",
+    )
+
+    track = GerberRS274XParser("F.Cu", strict=True).parse(path).tracks[0]
+
+    assert track.width == pytest.approx(0.5)
+    assert any(
+        e.kind == "gerber_aperture_scale" for e in track.provenance.evidence
+    )
+
+
+def test_aperture_scaling_scales_circular_arc_width_not_path_radius(tmp_path: Path):
+    path = tmp_path / "circle_arc.gtl"
+    path.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "%LS3*%\n"
+        "%LR33*%\n"
+        "G75*\n"
+        "X010000Y000000D02*\n"
+        "G03X000000Y010000I-010000J000000D01*\n"
+        "M02*\n",
+        encoding="utf-8",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks
+    assert all(track.width == pytest.approx(0.6) for track in result.tracks)
+    assert all(
+        any(
+            e.kind == "gerber_arc_tessellation"
+            and "radius_mm=1" in e.detail
+            for e in track.provenance.evidence
+        )
+        for track in result.tracks
+    )
+
+
+def test_aperture_rotation_composes_with_whole_image_rotation(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%LR90*%\n"
+        "%LS2*%\n"
+        "%IR90*%\n"
+        "X010000Y020000D03*\n",
+    )
+
+    pad = GerberRS274XParser("F.Cu", strict=True).parse(path).pads[0]
+
+    # LR90 swaps 1.2x0.6 -> 0.6x1.2; IR90 rotates the whole image -> 1.2x0.6.
+    assert (pad.size_x, pad.size_y) == pytest.approx((1.2, 0.6))
+
+
+def test_exact_reduced_macro_composes_with_aperture_transform(tmp_path: Path):
+    path = tmp_path / "macro_transform.gtl"
+    path.write_text(
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMBOX*21,1,1.0,2.0,0,0,0*%\n"
+        "%ADD10BOX*%\n"
+        "D10*\n"
+        "%LR90*%\n"
+        "%LS2*%\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+        encoding="utf-8",
+    )
+
+    pad = GerberRS274XParser("F.Cu", strict=True).parse(path).pads[0]
+
+    assert pad.shape == "R"
+    assert (pad.size_x, pad.size_y) == pytest.approx((4.0, 2.0))
 
 
 def test_non_positive_scaling_is_invalid(tmp_path: Path):
@@ -129,10 +347,28 @@ def test_malformed_aperture_transform_is_invalid_and_suppressed(tmp_path: Path):
     )
 
 
-def test_preflight_blocks_non_identity_aperture_transform(tmp_path: Path):
+def test_preflight_accepts_supported_nonidentity_aperture_transforms(
+    tmp_path: Path,
+):
     path = _write(
         tmp_path,
         "%LMY*%\n"
+        "%LR90*%\n"
+        "%LS2*%\n"
+        "X010000Y020000D03*\n",
+    )
+
+    report = preflight(path)
+
+    assert report.discovered_files == 1
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_preflight_blocks_nonorthogonal_rectangle_rotation(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%LR45*%\n"
         "X010000Y020000D03*\n",
     )
 
@@ -144,3 +380,23 @@ def test_preflight_blocks_non_identity_aperture_transform(tmp_path: Path):
         "UNSUPPORTED_GERBER_APERTURE_TRANSFORM" in blocker
         for blocker in report.strict_blockers
     )
+
+
+def test_aperture_transform_changes_stable_id_on_same_source_path(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "X010000Y020000D03*\n",
+        name="same_transform_source.gtl",
+    )
+    plain = GerberRS274XParser("F.Cu", strict=True).parse(path).pads[0]
+
+    path.write_text(
+        BASE
+        + "%LS2*%\n"
+        + "X010000Y020000D03*\n"
+        + "M02*\n",
+        encoding="utf-8",
+    )
+    scaled = GerberRS274XParser("F.Cu", strict=True).parse(path).pads[0]
+
+    assert plain.id != scaled.id
