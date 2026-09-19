@@ -177,7 +177,29 @@ def test_production_parser_rejects_nonfinite_macro_values(
         "M02*\n",
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="could not be evaluated"):
+    with pytest.raises(UnsupportedFeatureError, match="aperture macro"):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+
+
+def test_circle_macro_unit_conversion_overflow_fails_closed(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOIN*%\n"
+        "%AMROUND*1,1,1e308,0,0*%\n"
+        "%ADD10ROUND*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="overflows after active-unit conversion",
+    ):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     report = preflight(path)
