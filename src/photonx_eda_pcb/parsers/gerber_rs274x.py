@@ -30,6 +30,7 @@ from ..gerber_image import (
     polygonize_regular_polygon_track,
     polygonize_rotated_flash,
     polygonize_track,
+    subtract_rectangular_aperture_hole,
     trace_polygon_operation_contributions,
 )
 from ..ids import stable_id
@@ -116,6 +117,16 @@ class Aperture:
     polygon_rotation_deg: float = 0.0
     outline_vertices: tuple[tuple[float, float], ...] | None = None
     outline_rotation_deg: float = 0.0
+    rect_hole_x: float | None = None
+    rect_hole_y: float | None = None
+
+    @property
+    def has_rectangular_hole(self) -> bool:
+        return self.rect_hole_x is not None and self.rect_hole_y is not None
+
+    @property
+    def has_hole(self) -> bool:
+        return self.hole_diameter is not None or self.has_rectangular_hole
 
 
 @dataclass(frozen=True)
@@ -1139,7 +1150,7 @@ class GerberRS274XParser:
             return
 
         if shape == "P":
-            if len(values) not in {2, 3, 4}:
+            if len(values) not in {2, 3, 4, 5}:
                 self._parse_error_or_warn(
                     path,
                     line_no,
@@ -1147,7 +1158,8 @@ class GerberRS274XParser:
                     "INVALID_GERBER_STANDARD_POLYGON_APERTURE",
                     (
                         "P standard aperture requires outer diameter and vertex "
-                        "count, with optional rotation and round-hole diameter"
+                        "count, with optional rotation plus either a round-hole "
+                        "diameter or legacy rectangular-hole X/Y sizes"
                     ),
                     out,
                 )
@@ -1158,6 +1170,9 @@ class GerberRS274XParser:
             vertices_value = values[1]
             rotation = values[2] if len(values) >= 3 else 0.0
             hole_diameter = values[3] if len(values) == 4 else None
+            rectangular_hole = (
+                (values[3], values[4]) if len(values) == 5 else None
+            )
 
             if outer_diameter <= 0:
                 self._parse_error_or_warn(
@@ -1232,6 +1247,56 @@ class GerberRS274XParser:
                 if hole_diameter is None
                 else to_mm(hole_diameter, self.units)
             )
+            rect_hole_x_mm = None
+            rect_hole_y_mm = None
+            if rectangular_hole is not None:
+                rect_x, rect_y = rectangular_hole
+                if rect_x <= 0 or rect_y <= 0:
+                    self._parse_error_or_warn(
+                        path,
+                        line_no,
+                        line,
+                        "INVALID_GERBER_APERTURE_HOLE",
+                        (
+                            "legacy rectangular aperture hole X/Y dimensions "
+                            "must both be positive"
+                        ),
+                        out,
+                    )
+                    self.unsupported_apertures.add(code)
+                    return
+                rect_hole_x_mm = to_mm(rect_x, self.units)
+                rect_hole_y_mm = to_mm(rect_y, self.units)
+                try:
+                    outer = polygonize_regular_polygon_flash(
+                        0.0,
+                        0.0,
+                        outer_mm,
+                        vertices,
+                        base_rotation_deg=rotation,
+                    )
+                    subtract_rectangular_aperture_hole(
+                        outer.geometry,
+                        0.0,
+                        0.0,
+                        rect_hole_x_mm,
+                        rect_hole_y_mm,
+                    )
+                except (TypeError, ValueError):
+                    self._parse_error_or_warn(
+                        path,
+                        line_no,
+                        line,
+                        "INVALID_GERBER_APERTURE_HOLE_FIT",
+                        (
+                            "P standard aperture legacy rectangular hole must "
+                            "strictly fit inside the regular polygon"
+                        ),
+                        out,
+                    )
+                    self.unsupported_apertures.add(code)
+                    return
+
             self.apertures[code] = Aperture(
                 code,
                 "P",
@@ -1240,11 +1305,18 @@ class GerberRS274XParser:
                 hole_mm,
                 polygon_vertices=vertices,
                 polygon_rotation_deg=rotation % 360.0,
+                rect_hole_x=rect_hole_x_mm,
+                rect_hole_y=rect_hole_y_mm,
             )
             return
 
         solid_parameter_count = 1 if shape == "C" else 2
-        if len(values) not in {solid_parameter_count, solid_parameter_count + 1}:
+        allowed_counts = {
+            solid_parameter_count,
+            solid_parameter_count + 1,
+            solid_parameter_count + 2,
+        }
+        if len(values) not in allowed_counts:
             self._parse_error_or_warn(
                 path,
                 line_no,
@@ -1252,8 +1324,8 @@ class GerberRS274XParser:
                 "INVALID_GERBER_STANDARD_APERTURE",
                 (
                     f"{shape} standard aperture requires "
-                    f"{solid_parameter_count} solid modifier(s)"
-                    " with at most one trailing round-hole modifier"
+                    f"{solid_parameter_count} solid modifier(s), with optional "
+                    "round-hole diameter or legacy rectangular-hole X/Y sizes"
                 ),
                 out,
             )
@@ -1285,6 +1357,7 @@ class GerberRS274XParser:
             return
 
         hole_diameter = None
+        rectangular_hole = None
         if len(values) == solid_parameter_count + 1:
             hole_diameter = values[-1]
             if hole_diameter <= 0:
@@ -1313,6 +1386,22 @@ class GerberRS274XParser:
                 )
                 self.unsupported_apertures.add(code)
                 return
+        elif len(values) == solid_parameter_count + 2:
+            rectangular_hole = (values[-2], values[-1])
+            if rectangular_hole[0] <= 0 or rectangular_hole[1] <= 0:
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_HOLE",
+                    (
+                        "legacy rectangular aperture hole X/Y dimensions "
+                        "must both be positive"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
 
         ax = to_mm(values[0], self.units)
         ay = ax if shape == "C" else to_mm(values[1], self.units)
@@ -1321,7 +1410,50 @@ class GerberRS274XParser:
             if hole_diameter is None
             else to_mm(hole_diameter, self.units)
         )
-        self.apertures[code] = Aperture(code, shape, ax, ay, hole_mm)
+        rect_hole_x_mm = None
+        rect_hole_y_mm = None
+        if rectangular_hole is not None:
+            rect_hole_x_mm = to_mm(rectangular_hole[0], self.units)
+            rect_hole_y_mm = to_mm(rectangular_hole[1], self.units)
+            try:
+                outer = polygonize_rotated_flash(
+                    0.0,
+                    0.0,
+                    ax,
+                    ay,
+                    shape,
+                )
+                subtract_rectangular_aperture_hole(
+                    outer.geometry,
+                    0.0,
+                    0.0,
+                    rect_hole_x_mm,
+                    rect_hole_y_mm,
+                )
+            except (TypeError, ValueError):
+                self._parse_error_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_HOLE_FIT",
+                    (
+                        "legacy rectangular aperture hole must strictly fit "
+                        f"within the {shape} outer shape"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+        self.apertures[code] = Aperture(
+            code,
+            shape,
+            ax,
+            ay,
+            hole_mm,
+            rect_hole_x=rect_hole_x_mm,
+            rect_hole_y=rect_hole_y_mm,
+        )
 
     def _register_aperture_macro(
         self,
@@ -3536,7 +3668,7 @@ class GerberRS274XParser:
             )
 
         aperture = self.apertures[self.current_aperture]
-        if aperture.hole_diameter is not None:
+        if aperture.has_hole:
             self._fail_or_warn(
                 path,
                 line_no,
@@ -4589,7 +4721,7 @@ class GerberRS274XParser:
                 if (
                     ap.shape == "C"
                     and isclose(ap.x, 0.0, rel_tol=0.0, abs_tol=0.0)
-                    and ap.hole_diameter is None
+                    and not ap.has_hole
                     and operation in {"1", "3"}
                 ):
                     self._record_zero_size_object(
@@ -4620,7 +4752,7 @@ class GerberRS274XParser:
                         continue
 
                     if ap.shape == "P":
-                        if ap.hole_diameter is not None:
+                        if ap.has_hole:
                             self._fail_or_warn(
                                 p,
                                 line_no,
@@ -4773,7 +4905,7 @@ class GerberRS274XParser:
                         self.current = nxt
                         continue
 
-                    if ap.hole_diameter is not None:
+                    if ap.has_hole:
                         self._fail_or_warn(
                             p,
                             line_no,
@@ -5138,6 +5270,16 @@ class GerberRS274XParser:
                             if ap.hole_diameter is None
                             else ap.hole_diameter * self.aperture_scale
                         )
+                        scaled_rect_hole_x = (
+                            None
+                            if ap.rect_hole_x is None
+                            else ap.rect_hole_x * self.aperture_scale
+                        )
+                        scaled_rect_hole_y = (
+                            None
+                            if ap.rect_hole_y is None
+                            else ap.rect_hole_y * self.aperture_scale
+                        )
                         output_rotation = (
                             self.aperture_rotation_deg + self.image_rotation_deg
                         ) % 360.0
@@ -5159,8 +5301,21 @@ class GerberRS274XParser:
                                     max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
                                     max_arc_segments=_MAX_ARC_SEGMENTS,
                                 )
+                                flash_geometry = polygonization.geometry
+                                if (
+                                    scaled_rect_hole_x is not None
+                                    and scaled_rect_hole_y is not None
+                                ):
+                                    flash_geometry = subtract_rectangular_aperture_hole(
+                                        flash_geometry,
+                                        center.x,
+                                        center.y,
+                                        scaled_rect_hole_x,
+                                        scaled_rect_hole_y,
+                                        hole_rotation_deg=self.image_rotation_deg,
+                                    ).geometry
                                 components = canonical_polygon_components(
-                                    polygonization.geometry
+                                    flash_geometry
                                 )
                             except (TypeError, ValueError) as exc:
                                 self._parse_error_or_warn(
@@ -5173,7 +5328,14 @@ class GerberRS274XParser:
                                 )
                                 continue
 
-                            expected_holes = 1 if scaled_hole is not None else 0
+                            expected_holes = (
+                                1
+                                if (
+                                    scaled_hole is not None
+                                    or scaled_rect_hole_x is not None
+                                )
+                                else 0
+                            )
                             if (
                                 len(components) != 1
                                 or len(components[0].holes) != expected_holes
@@ -5211,6 +5373,9 @@ class GerberRS274XParser:
                                 self.aperture_mirror,
                                 output_rotation,
                                 scaled_hole,
+                                scaled_rect_hole_x,
+                                scaled_rect_hole_y,
+                                self.image_rotation_deg,
                                 self.layer,
                             ]
                             id_parts.extend(self._image_transform_id_parts())
@@ -5235,6 +5400,12 @@ class GerberRS274XParser:
                                         f"{output_rotation:.12g}; "
                                         f"hole_diameter_mm="
                                         f"{'none' if scaled_hole is None else format(scaled_hole, '.12g')}; "
+                                        f"rect_hole_x_mm="
+                                        f"{'none' if scaled_rect_hole_x is None else format(scaled_rect_hole_x, '.12g')}; "
+                                        f"rect_hole_y_mm="
+                                        f"{'none' if scaled_rect_hole_y is None else format(scaled_rect_hole_y, '.12g')}; "
+                                        f"rect_hole_rotation_deg_ccw="
+                                        f"{self.image_rotation_deg:.12g}; "
                                         f"hole_curved_segments="
                                         f"{polygonization.hole_curved_segments}; "
                                         f"max_chord_error_mm="
@@ -5262,7 +5433,7 @@ class GerberRS274XParser:
                         self.current = nxt
                         continue
 
-                    if ap.hole_diameter is not None:
+                    if ap.has_hole:
                         if self.layer == "Edge.Cuts":
                             self._fail_or_warn(
                                 p,
@@ -5280,11 +5451,28 @@ class GerberRS274XParser:
 
                         scaled_x = ap.x * self.aperture_scale
                         scaled_y = ap.y * self.aperture_scale
-                        scaled_hole = ap.hole_diameter * self.aperture_scale
+                        scaled_hole = (
+                            None
+                            if ap.hole_diameter is None
+                            else ap.hole_diameter * self.aperture_scale
+                        )
+                        scaled_rect_hole_x = (
+                            None
+                            if ap.rect_hole_x is None
+                            else ap.rect_hole_x * self.aperture_scale
+                        )
+                        scaled_rect_hole_y = (
+                            None
+                            if ap.rect_hole_y is None
+                            else ap.rect_hole_y * self.aperture_scale
+                        )
                         output_aperture_rotation = (
                             self._effective_rectangular_aperture_rotation(ap)
                             if ap.shape in {"R", "O"}
-                            else (self.aperture_rotation_deg + self.image_rotation_deg) % 360.0
+                            else (
+                                self.aperture_rotation_deg
+                                + self.image_rotation_deg
+                            ) % 360.0
                         )
 
                         for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
@@ -5292,19 +5480,71 @@ class GerberRS274XParser:
                                 nxt, dx_mm, dy_mm
                             )
                             try:
-                                polygonization = polygonize_holed_flash(
-                                    center.x,
-                                    center.y,
-                                    scaled_x,
-                                    scaled_y,
-                                    ap.shape,
-                                    scaled_hole,
-                                    rotation_deg=output_aperture_rotation,
-                                    max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
-                                    max_arc_segments=_MAX_ARC_SEGMENTS,
-                                )
+                                if scaled_hole is not None:
+                                    polygonization = polygonize_holed_flash(
+                                        center.x,
+                                        center.y,
+                                        scaled_x,
+                                        scaled_y,
+                                        ap.shape,
+                                        scaled_hole,
+                                        rotation_deg=output_aperture_rotation,
+                                        max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+                                        max_arc_segments=_MAX_ARC_SEGMENTS,
+                                    )
+                                    flash_geometry = polygonization.geometry
+                                    outer_curved_segments = (
+                                        polygonization.outer_curved_segments
+                                    )
+                                    hole_curved_segments = (
+                                        polygonization.hole_curved_segments
+                                    )
+                                    max_chord_error_mm = (
+                                        polygonization.max_chord_error_mm
+                                    )
+                                    approximated = polygonization.approximated
+                                    hole_detail = (
+                                        f"hole_shape=round; "
+                                        f"hole_diameter_mm={scaled_hole:.12g}; "
+                                        f"hole_rotation_deg_ccw="
+                                        f"{output_aperture_rotation:.12g}; "
+                                    )
+                                else:
+                                    outer = polygonize_rotated_flash(
+                                        center.x,
+                                        center.y,
+                                        scaled_x,
+                                        scaled_y,
+                                        ap.shape,
+                                        rotation_deg=output_aperture_rotation,
+                                        max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+                                        max_arc_segments=_MAX_ARC_SEGMENTS,
+                                    )
+                                    rectangular_hole = (
+                                        subtract_rectangular_aperture_hole(
+                                            outer.geometry,
+                                            center.x,
+                                            center.y,
+                                            scaled_rect_hole_x,
+                                            scaled_rect_hole_y,
+                                            hole_rotation_deg=self.image_rotation_deg,
+                                        )
+                                    )
+                                    flash_geometry = rectangular_hole.geometry
+                                    outer_curved_segments = outer.curved_segments
+                                    hole_curved_segments = 0
+                                    max_chord_error_mm = outer.max_chord_error_mm
+                                    approximated = outer.approximated
+                                    hole_detail = (
+                                        "hole_shape=rectangular; "
+                                        f"hole_size_x_mm={scaled_rect_hole_x:.12g}; "
+                                        f"hole_size_y_mm={scaled_rect_hole_y:.12g}; "
+                                        f"hole_rotation_deg_ccw="
+                                        f"{self.image_rotation_deg:.12g}; "
+                                    )
+
                                 components = canonical_polygon_components(
-                                    polygonization.geometry
+                                    flash_geometry
                                 )
                             except (TypeError, ValueError) as exc:
                                 self._parse_error_or_warn(
@@ -5348,7 +5588,10 @@ class GerberRS274XParser:
                                 scaled_x,
                                 scaled_y,
                                 scaled_hole,
+                                scaled_rect_hole_x,
+                                scaled_rect_hole_y,
                                 output_aperture_rotation,
+                                self.image_rotation_deg,
                                 self.layer,
                             ]
                             id_parts.extend(self._image_transform_id_parts())
@@ -5367,18 +5610,16 @@ class GerberRS274XParser:
                                         f"outer_shape={ap.shape}; "
                                         f"size_x_mm={scaled_x:.12g}; "
                                         f"size_y_mm={scaled_y:.12g}; "
-                                        f"hole_diameter_mm={scaled_hole:.12g}; "
-                                        f"rotation_deg_ccw="
-                                        f"{output_aperture_rotation:.12g}; "
+                                        f"{hole_detail}"
                                         "hole_semantics=transparent; "
                                         f"outer_curved_segments="
-                                        f"{polygonization.outer_curved_segments}; "
+                                        f"{outer_curved_segments}; "
                                         f"hole_curved_segments="
-                                        f"{polygonization.hole_curved_segments}; "
+                                        f"{hole_curved_segments}; "
                                         f"max_chord_error_mm="
-                                        f"{polygonization.max_chord_error_mm:.12g}; "
+                                        f"{max_chord_error_mm:.12g}; "
                                         f"approximated="
-                                        f"{str(polygonization.approximated).lower()}"
+                                        f"{str(approximated).lower()}"
                                     ),
                                     1.0,
                                     src,
