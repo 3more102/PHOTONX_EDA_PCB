@@ -1,22 +1,65 @@
 from collections import deque
-from math import hypot
+from math import hypot,isfinite
 from photonx_eda_pcb.spatial_connectivity.points import build_point_index,radius_queries
 
-def cluster_pads_bruteforce(pads,max_gap_mm=5.0):
+def _distance(a,b):
+    return hypot(a.center.x-b.center.x,a.center.y-b.center.y)
+
+def _normalize_cluster_span(value):
+    if value is None:return None
+    span=float(value)
+    if not isfinite(span) or span<=0:raise ValueError("max_cluster_span_mm must be a positive finite value")
+    return span
+
+def _connected_components(group,max_gap_mm):
+    group=sorted(group,key=lambda p:p.id)
+    by={p.id:p for p in group};unvisited=set(by);components=[]
+    while unvisited:
+        seed=min(unvisited);queue=deque([seed]);unvisited.remove(seed);component=[]
+        while queue:
+            pid=queue.popleft();pad=by[pid];component.append(pad)
+            for nid in sorted(unvisited):
+                if _distance(pad,by[nid])<=max_gap_mm:
+                    unvisited.remove(nid);queue.append(nid)
+        components.append(sorted(component,key=lambda p:p.id))
+    return components
+
+def _split_group_by_span(group,max_cluster_span_mm,max_gap_mm):
+    group=sorted(group,key=lambda p:p.id)
+    if max_cluster_span_mm is None:return [group]
+    buckets=[]
+    for pad in group:
+        candidates=[]
+        for index,bucket in enumerate(buckets):
+            farthest=max((_distance(pad,other) for other in bucket),default=0.0)
+            if farthest<=max_cluster_span_mm:
+                candidates.append((farthest,tuple(other.id for other in bucket),index))
+        if candidates:
+            buckets[min(candidates)[2]].append(pad)
+        else:
+            buckets.append([pad])
+    groups=[]
+    for bucket in buckets:
+        groups.extend(_connected_components(bucket,max_gap_mm))
+    return groups
+
+def cluster_pads_bruteforce(pads,max_gap_mm=5.0,*,max_cluster_span_mm=None):
+    max_cluster_span_mm=_normalize_cluster_span(max_cluster_span_mm)
     remaining={p.id:p for p in pads};groups=[]
     while remaining:
         seed_id=sorted(remaining)[0];group=[remaining.pop(seed_id)];changed=True
         while changed:
             changed=False
             for pid,p in list(remaining.items()):
-                if any(hypot(p.center.x-q.center.x,p.center.y-q.center.y)<=max_gap_mm for q in group):
+                if any(_distance(p,q)<=max_gap_mm for q in group):
                     group.append(remaining.pop(pid));changed=True
-        groups.append(sorted(group,key=lambda p:p.id))
+        groups.extend(_split_group_by_span(group,max_cluster_span_mm,max_gap_mm))
     return groups
 
-def cluster_pads(pads,max_gap_mm=5.0,*,use_spatial_index=True,cell_size_mm=None,backend="auto"):
+def cluster_pads(pads,max_gap_mm=5.0,*,use_spatial_index=True,cell_size_mm=None,backend="auto",max_cluster_span_mm=None):
     pads=list(pads)
-    if not use_spatial_index:return cluster_pads_bruteforce(pads,max_gap_mm)
+    if not use_spatial_index:return cluster_pads_bruteforce(pads,max_gap_mm,max_cluster_span_mm=max_cluster_span_mm)
+    max_cluster_span_mm=_normalize_cluster_span(max_cluster_span_mm)
     if not pads:return []
     by={p.id:p for p in pads}
     idx=build_point_index(((p.id,p) for p in pads),lambda p:(p.center.x,p.center.y),float(cell_size_mm or max(1.0,max_gap_mm)))
@@ -30,5 +73,5 @@ def cluster_pads(pads,max_gap_mm=5.0,*,use_spatial_index=True,cell_size_mm=None,
             for _,nid in neighbors[pid]:
                 if nid in unvisited:
                     unvisited.remove(nid);queue.append(nid)
-        groups.append(sorted(group,key=lambda p:p.id))
+        groups.extend(_split_group_by_span(group,max_cluster_span_mm,max_gap_mm))
     return groups
