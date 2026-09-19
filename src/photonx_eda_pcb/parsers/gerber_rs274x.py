@@ -2243,9 +2243,13 @@ class GerberRS274XParser:
 
         self.region_state.end()
         contours = list(self.region_contours)
+        contour_holes = list(self.region_contour_holes)
         contour_sources = [list(items) for items in self.region_contour_sources]
         contour_arc_evidence = [
             list(items) for items in self.region_contour_arc_evidence
+        ]
+        contour_cutin_evidence = [
+            list(items) for items in self.region_contour_cutin_evidence
         ]
         statement_start_sources = self.region_sources[:1]
         start_line = self.region_start_line
@@ -2254,18 +2258,23 @@ class GerberRS274XParser:
         self.region_sources = []
         self.region_arc_evidence = []
         self.region_contours = []
+        self.region_contour_holes = []
         self.region_contour_sources = []
         self.region_contour_arc_evidence = []
+        self.region_contour_cutin_evidence = []
         self.region_current_sources = []
         self.region_current_arc_evidence = []
+        self.region_current_edge_kinds = []
         self.region_start_line = None
 
         contour_count = len(contours)
         for contour_index, points in enumerate(contours):
+            holes = contour_holes[contour_index]
             source_region = CopperRegion(
                 "validation",
                 points,
                 self.layer,
+                holes=holes,
             )
             source_shape = region_shape(source_region)
             if (
@@ -2287,6 +2296,10 @@ class GerberRS274XParser:
                 return
 
             coords = tuple((point.x, point.y) for point in points)
+            hole_coords = tuple(
+                tuple((point.x, point.y) for point in ring)
+                for ring in holes
+            )
             unique = {(point.x, point.y) for point in points[:-1]}
             sources = [
                 *statement_start_sources,
@@ -2294,21 +2307,37 @@ class GerberRS274XParser:
                 end_src,
             ]
             arc_evidence = contour_arc_evidence[contour_index]
-            region_kind = (
-                "linear_g75_multi_contour_dark"
-                if arc_evidence
-                else "linear_multi_contour_dark"
-            )
+            cutin_evidence = contour_cutin_evidence[contour_index]
+            if cutin_evidence:
+                region_kind = (
+                    "linear_g75_simple_cutin_dark"
+                    if arc_evidence
+                    else "linear_simple_cutin_dark"
+                )
+            else:
+                region_kind = (
+                    "linear_g75_multi_contour_dark"
+                    if arc_evidence
+                    else "linear_multi_contour_dark"
+                )
 
             for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
                 transformed = tuple(
                     self._transform_output_point(point, dx_mm, dy_mm)
                     for point in points
                 )
+                transformed_holes = tuple(
+                    tuple(
+                        self._transform_output_point(point, dx_mm, dy_mm)
+                        for point in ring
+                    )
+                    for ring in holes
+                )
                 transformed_region = CopperRegion(
                     "validation",
                     transformed,
                     self.layer,
+                    holes=transformed_holes,
                 )
                 transformed_shape = region_shape(transformed_region)
                 if (
@@ -2338,6 +2367,7 @@ class GerberRS274XParser:
                     contour_index,
                     contour_count,
                     coords,
+                    hole_coords,
                 ]
                 id_parts.extend(self._image_transform_id_parts())
                 if self.step_repeat is not None:
@@ -2354,6 +2384,8 @@ class GerberRS274XParser:
                     prov.add_source(source)
                 for evidence in arc_evidence:
                     prov.add_evidence(evidence)
+                for evidence in cutin_evidence:
+                    prov.add_evidence(evidence)
                 prov.add_evidence(
                     Evidence(
                         "gerber_region",
@@ -2362,6 +2394,8 @@ class GerberRS274XParser:
                             f"contour={contour_index + 1}/{contour_count}; "
                             f"statement_fill=union; "
                             f"vertices={len(unique)}; "
+                            f"holes={len(holes)}; "
+                            f"cut_ins={len(cutin_evidence)}; "
                             f"arc_commands={len(arc_evidence)}; "
                             f"source_area_mm2={float(source_shape.area):.12g}; "
                             f"output_area_mm2={float(transformed_shape.area):.12g}"
@@ -2376,6 +2410,7 @@ class GerberRS274XParser:
                         transformed,
                         self.layer,
                         provenance=prov,
+                        holes=transformed_holes,
                     )
                 )
 
