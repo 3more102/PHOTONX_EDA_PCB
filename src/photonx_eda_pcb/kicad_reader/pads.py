@@ -1,4 +1,5 @@
 from .query import children,child
+from .nets import read_net_reference
 
 def _read_drill(drill):
     if not drill:return {"drill":None,"drill_shape":None,"drill_size":None,"drill_offset":(0.0,0.0)}
@@ -23,6 +24,6 @@ def read_pads(footprint):
           "size":(float(size[1]),float(size[2])) if size else None,
           "drill":info["drill"],"drill_shape":info["drill_shape"],"drill_size":info["drill_size"],"drill_offset":info["drill_offset"],
           "layers":tuple(map(str,layers[1:])) if layers else (),
-          "net":int(net[1]) if net else None
+          "net":read_net_reference(net,context="pad net",with_name=True)
         })
     return out
