@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Hardened Gerber numeric decoding so malformed/non-finite coordinate and I/J tokens, coordinate arithmetic overflow, non-finite standard-aperture modifiers, and aperture unit-conversion overflow fail closed with explicit parser diagnostics instead of leaking infinities or raw numeric exceptions into reconstruction.
+- Hardened Gerber numeric decoding so malformed/non-finite coordinate and I/J tokens, coordinate arithmetic overflow, non-finite standard-aperture modifiers, aperture unit-conversion overflow, and step-and-repeat increment overflow fail closed with explicit parser diagnostics instead of leaking infinities or raw numeric exceptions into reconstruction.
 
 - Added an optional C++17 native spatial-acceleration backend behind a versioned C ABI. The backend provides deterministic AABB candidate-pair generation plus batched point-radius broad-phase queries used by drill association, footprint clustering/metrics, and component inference/metrics; Python remains the correctness reference and automatic fallback, exact Euclidean/connectivity predicates stay authoritative, native discovery is cached, ABI/range failures are explicit, and CI builds/loads the shared library on Python 3.11/3.12/3.13 before running the full regression suite.
 
