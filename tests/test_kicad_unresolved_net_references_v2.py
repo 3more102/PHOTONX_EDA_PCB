@@ -142,7 +142,7 @@ def test_plated_slot_with_unknown_but_consistent_net_keeps_geometry_without_net_
     text = path.read_text(encoding="utf-8")
     slot_pad = next(
         line for line in _pad_lines(text)
-        if "slot-pad:" not in line or "thru_hole" in line
+        if "thru_hole" in line
     )
 
     assert "RecoveredPlatedSlot" in text
