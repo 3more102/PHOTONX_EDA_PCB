@@ -39,6 +39,14 @@ The native ABI also supports batched point-radius candidate generation. PHOTONX 
 
 The batch path is used by drill association, footprint clustering and metrics, and component-pair inference and metrics. This reduces repeated Python-to-native transitions while preserving the previous Python result contract.
 
+## Measured backend comparison
+
+Native acceleration is not assumed to win for every workload. The benchmark helpers in `photonx_eda_pcb.benchmark_comparisons` compare the forced Python and native paths only after checking that their complete results are identical.
+
+`benchmark_candidate_pair_backends(index, tolerance, ...)` measures AABB candidate generation. `benchmark_radius_query_backends(index, queries, ...)` measures the batched radius path. Both return the existing `BenchmarkResult` objects, and `native_backend_summary()` reports the measured median ratio without declaring a universal winner.
+
+Timing thresholds should be derived from representative boards and recorded environments. Unit tests verify parity and benchmark plumbing but intentionally do not assert that one backend must be faster, because shared CI timing is not a stable product benchmark.
+
 ## Safety contract
 
 The native backend:
