@@ -128,6 +128,12 @@ def _region_lines(board,net_num,report):
         ])
         report.exported_regions+=1
         report.exported_region_ids.append(region.id)
+        report.issues.append(KicadExportIssue(
+            "warning",
+            "KICAD_COPPER_REGION_ZONE_RULES_DEFAULTED",
+            region.id,
+            "saved fill preserves observed copper geometry; KiCad repour clearance and thermal rules use exporter defaults because Gerber does not preserve the original zone-design rules",
+        ))
     return lines
 
 def _slot_lines(board,net_num,report):
