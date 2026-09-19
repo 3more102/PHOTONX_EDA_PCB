@@ -5,3 +5,7 @@ The helper modules recognize unit statements, tool definitions/selections, hits,
 ## XNC safety validation
 
 For the supported XNC-compatible subset, `M30` is terminal: non-comment data after it is invalid and fails closed. Tool definitions must be unique, tool selections must reference a tool already present in the tool table, and tool diameters must decode to finite positive values. Strict mode raises parser errors for these violations; permissive mode emits `INVALID_EXCELLON_*` diagnostics and suppresses geometry from the affected file.
+
+## Tool identifier grammar
+
+Tool identifiers use ASCII decimal digits only. Unicode digit lookalikes and malformed `T...` selections/definitions are rejected. Permissive parsing suppresses file geometry and reports an `INVALID_EXCELLON_TOOL_*` diagnostic rather than accepting a visually similar identifier.
