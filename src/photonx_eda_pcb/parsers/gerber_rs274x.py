@@ -1603,6 +1603,126 @@ class GerberRS274XParser:
             )
             return
 
+        if primitive["kind"] == "outline":
+            if len(values) < 3:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"outline aperture macro {name!r} has too few modifiers",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            exposure = values[0]
+            vertices_value = values[1]
+            finite_values = all(isfinite(float(value)) for value in values)
+            if (
+                not finite_values
+                or exposure != 1
+                or not float(vertices_value).is_integer()
+                or int(vertices_value) != 4
+                or len(values) != 13
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    (
+                        f"outline aperture macro {name!r} requires one positive, "
+                        "closed four-vertex rectangle with finite coordinates and rotation"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            coordinates = values[2:-1]
+            rotation = float(values[-1])
+            points = [
+                (float(coordinates[index]), float(coordinates[index + 1]))
+                for index in range(0, len(coordinates), 2)
+            ]
+            scale = max(
+                1.0,
+                *(abs(component) for point in points for component in point),
+            )
+            epsilon = 1e-10 * scale
+
+            def _near_zero(value: float, tolerance: float = epsilon) -> bool:
+                return abs(value) <= tolerance
+
+            if (
+                not _near_zero(points[-1][0] - points[0][0])
+                or not _near_zero(points[-1][1] - points[0][1])
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    f"outline aperture macro {name!r} must be explicitly closed",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            p0, p1, p2, p3 = points[:4]
+            edge0 = (p1[0] - p0[0], p1[1] - p0[1])
+            edge1 = (p2[0] - p1[0], p2[1] - p1[1])
+            edge2 = (p3[0] - p2[0], p3[1] - p2[1])
+            edge3 = (p0[0] - p3[0], p0[1] - p3[1])
+            width = hypot(*edge0)
+            height = hypot(*edge1)
+            vector_tolerance = 1e-10 * max(1.0, width, height)
+            dot_tolerance = 1e-10 * max(1.0, width * height)
+            center_a = ((p0[0] + p2[0]) / 2.0, (p0[1] + p2[1]) / 2.0)
+            center_b = ((p1[0] + p3[0]) / 2.0, (p1[1] + p3[1]) / 2.0)
+
+            rectangle_is_exact = (
+                width > epsilon
+                and height > epsilon
+                and _near_zero(edge0[0] + edge2[0], vector_tolerance)
+                and _near_zero(edge0[1] + edge2[1], vector_tolerance)
+                and _near_zero(edge1[0] + edge3[0], vector_tolerance)
+                and _near_zero(edge1[1] + edge3[1], vector_tolerance)
+                and _near_zero(
+                    edge0[0] * edge1[0] + edge0[1] * edge1[1],
+                    dot_tolerance,
+                )
+                and _near_zero(center_a[0])
+                and _near_zero(center_a[1])
+                and _near_zero(center_b[0])
+                and _near_zero(center_b[1])
+            )
+            if not rectangle_is_exact:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    (
+                        f"outline aperture macro {name!r} is not an exact "
+                        "origin-centered rectangle"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            base_rotation = degrees(atan2(edge0[1], edge0[0])) + rotation
+            self.apertures[code] = Aperture(
+                code,
+                "R",
+                to_mm(width, self.units),
+                to_mm(height, self.units),
+                base_rotation_deg=base_rotation % 360.0,
+            )
+            return
+
         if primitive["kind"] == "polygon":
             if len(values) != 6:
                 self._fail_or_warn(
