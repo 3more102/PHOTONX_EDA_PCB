@@ -2388,6 +2388,7 @@ class GerberRS274XParser:
                             self.layer,
                         ]
                         id_parts.extend(self._image_transform_id_parts())
+                        id_parts.extend(self._aperture_transform_id_parts())
                         if self.step_repeat is not None:
                             id_parts.extend(["sr", x_index, y_index])
                         obj_id = stable_id("pad", *id_parts)
