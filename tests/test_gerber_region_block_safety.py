@@ -48,8 +48,11 @@ def test_single_linear_closed_region_reconstructs_as_zone(tmp_path: Path):
     assert zone.clearance_mm is None
     assert zone.min_thickness_mm is None
     assert len(zone.islands) == 1
-    assert zone.islands[0].polygon == pytest.approx(
-        ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0))
+    assert zone.islands[0].polygon == (
+        (0.0, 0.0),
+        (1.0, 0.0),
+        (1.0, 1.0),
+        (0.0, 1.0),
     )
     assert zone_area(zone) == pytest.approx(1.0)
     assert any(
@@ -126,8 +129,8 @@ def test_region_step_repeat_creates_distinct_zones_without_scaling_sr_distance(
     assert result.zones[0].id != result.zones[1].id
     first = result.zones[0].islands[0].polygon
     second = result.zones[1].islands[0].polygon
-    assert first == pytest.approx(((0, 0), (2, 0), (2, 2), (0, 2)))
-    assert second == pytest.approx(((3, 0), (5, 0), (5, 2), (3, 2)))
+    assert first == ((0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0))
+    assert second == ((3.0, 0.0), (5.0, 0.0), (5.0, 2.0), (3.0, 2.0))
 
 
 def test_region_composes_with_mi_sf_of_ir(tmp_path: Path):
@@ -148,7 +151,7 @@ def test_region_composes_with_mi_sf_of_ir(tmp_path: Path):
     # SF -> (0,0),(-2,0),(-2,1),(0,1)
     # OF -> (3,4),(1,4),(1,5),(3,5)
     # IR90 -> (-4,3),(-4,1),(-5,1),(-5,3)
-    assert polygon == pytest.approx(((-4, 3), (-4, 1), (-5, 1), (-5, 3)))
+    assert polygon == ((-4.0, 3.0), (-4.0, 1.0), (-5.0, 1.0), (-5.0, 3.0))
 
 
 def test_region_direction_is_not_significant(tmp_path: Path):
