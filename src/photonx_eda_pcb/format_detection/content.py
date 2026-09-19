@@ -1,8 +1,15 @@
 import re
 
 
-_EXCELLON_TOOL = re.compile(r"(?m)^T\d+C[0-9.]+(?:F[0-9.]+)?(?:S[0-9.]+)?\s*$")
-_EXCELLON_COORD = re.compile(r"(?m)^(?:X[+-]?[0-9.]+)?(?:Y[+-]?[0-9.]+)?\s*$")
+_DECIMAL = r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
+_SIGNED_DECIMAL = rf"[+-]?{_DECIMAL}"
+_EXCELLON_TOOL = re.compile(
+    rf"(?m)^T[0-9]+C{_DECIMAL}(?:F{_DECIMAL})?(?:S{_DECIMAL})?\s*$"
+)
+_EXCELLON_COORD = re.compile(
+    rf"(?m)^(?:X{_SIGNED_DECIMAL}(?:Y{_SIGNED_DECIMAL})?|"
+    rf"Y{_SIGNED_DECIMAL}(?:X{_SIGNED_DECIMAL})?)\s*$"
+)
 
 
 def content_hints(text):
@@ -26,12 +33,11 @@ def content_hints(text):
         or "M72" in u
     ):
         out.append(("excellon", .85, "excellon_header"))
-    elif _EXCELLON_TOOL.search(u) and (
-        re.search(r"(?m)^X[+-]?[0-9.]+(?:Y[+-]?[0-9.]+)?\s*$", u)
-        or re.search(r"(?m)^Y[+-]?[0-9.]+\s*$", u)
-    ):
+    elif _EXCELLON_TOOL.search(u) and _EXCELLON_COORD.search(u):
         # Headerless drill files exist in the wild. Detection is allowed, but
-        # the parser still requires explicit units before geometry is trusted.
+        # the lexical hint must still use Excellon's ASCII numeric grammar;
+        # the production parser remains authoritative for semantic validity
+        # and still requires explicit units before geometry is trusted.
         out.append(("excellon", .72, "excellon_tool_coordinate_shape"))
 
     if "IPC-D-356" in u or s.startswith("P  "):
