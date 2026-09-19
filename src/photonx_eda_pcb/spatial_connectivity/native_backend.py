@@ -43,6 +43,7 @@ class _NativePair(ctypes.Structure):
     ]
 
 
+@lru_cache(maxsize=1)
 def _library_candidates() -> tuple[str, ...]:
     candidates: list[str] = []
     configured = os.environ.get("PHOTONX_NATIVE_LIBRARY")
