@@ -2365,6 +2365,22 @@ class GerberRS274XParser:
                 self._disable_image_geometry(out)
             return
 
+        max_x_offset_mm = (x_count - 1) * x_step_mm
+        max_y_offset_mm = (y_count - 1) * y_step_mm
+        if not isfinite(max_x_offset_mm) or not isfinite(max_y_offset_mm):
+            self.step_repeat = None
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_STEP_REPEAT",
+                "step-and-repeat offset arithmetic must remain finite",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
         self.step_repeat = StepRepeat(
             x_count=x_count,
             y_count=y_count,
