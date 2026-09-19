@@ -350,7 +350,7 @@ This distinction feeds provenance, conflict handling, review workflows, validati
 | Gerber linear draws / flashes | **Partial** | Circular-aperture D01 draws and solid C/R/O flashes are exact; non-circular draws and holed apertures fail closed |
 | Gerber unit declaration | **Required** | `MO` or supported legacy `G70/G71` must establish units before dimensional data; conflicting unit switches fail closed |
 | Gerber X2 file polarity | **Partial** | Explicit `Positive` is accepted; `Negative` fails closed because absence-of-material image inversion is not yet modeled |
-| Gerber layer polarity | **Partial** | `LPD` dark objects are supported; `LPC` clear objects fail closed because ordered image subtraction is not yet modeled |
+| Gerber layer polarity | **Partial** | `LPD` dark objects are supported; an internal ordered polygon union/difference engine now models dark/clear image composition deterministically, while parser-level `LPC` remains fail-closed until BoardModel materialization is integrated |
 | Gerber aperture transforms | **Partial** | Modal LM/LR/LS is exact for centered symmetric C/R/O geometry: mirror, positive scaling, arbitrary circle rotation, and orthogonal R/O flash rotation; non-orthogonal R/O flashes fail closed |
 | Gerber C/R/O apertures | **Implemented subset** | Positive-size solid C/R/O apertures are modeled; zero-size outer geometry and round-hole modifiers fail closed |
 | Gerber step-and-repeat | **Implemented subset** | Supported geometry expands deterministically; malformed/non-positive/over-limit SR state fails closed and suppresses permissive file geometry |
