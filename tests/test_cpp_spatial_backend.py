@@ -1,7 +1,11 @@
 import pytest
 
 from photonx_eda_pcb.spatial_connectivity import AABB, SpatialHashIndex, candidate_pairs
-from photonx_eda_pcb.spatial_connectivity.native_backend import native_available
+from photonx_eda_pcb.spatial_connectivity import native_backend
+from photonx_eda_pcb.spatial_connectivity.native_backend import (
+    NativeBackendLoadError,
+    native_available,
+)
 
 
 def _sample_index():
@@ -28,6 +32,26 @@ def test_backend_selector_preserves_reference_contract():
 def test_unknown_backend_is_rejected():
     with pytest.raises(ValueError, match="backend"):
         candidate_pairs(_sample_index(), backend="gpu")
+
+
+def test_broken_native_library_does_not_silently_fallback(monkeypatch):
+    index = _sample_index()
+    native_backend._load_library.cache_clear()
+    monkeypatch.setattr(
+        native_backend,
+        "_library_candidates",
+        lambda: ("broken-photonx-native.so",),
+    )
+
+    def fail_load(_candidate):
+        raise OSError("simulated loader failure")
+
+    monkeypatch.setattr(native_backend.ctypes, "CDLL", fail_load)
+    try:
+        with pytest.raises(NativeBackendLoadError, match="simulated loader failure"):
+            candidate_pairs(index, 0.1, backend="auto")
+    finally:
+        native_backend._load_library.cache_clear()
 
 
 @pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
