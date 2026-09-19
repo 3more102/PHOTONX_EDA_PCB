@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
+import pytest
 
 from photonx_eda_pcb.board_diff import (
     compact_diff_report,
@@ -98,6 +101,18 @@ def test_board_diff_reports_per_collection_changes_deterministically():
     ]
 
 
+def test_board_diff_rejects_duplicate_object_ids():
+    payload = _payload(
+        [
+            {"id": "P1", "size_x": 1.0},
+            {"id": "P1", "size_x": 2.0},
+        ]
+    )
+
+    with pytest.raises(ValueError, match="duplicate object id"):
+        diff_board_payloads(payload, _payload([]))
+
+
 def test_board_diff_accepts_reconstruction_bundle_directories(tmp_path):
     before_dir = tmp_path / "before"
     after_dir = tmp_path / "after"
@@ -117,8 +132,13 @@ def test_board_diff_accepts_reconstruction_bundle_directories(tmp_path):
 
     assert report["summary"]["total"] == 1
     assert report["entries"][0]["object_id"] == "P1"
-    assert report["sources"]["before"].endswith("before/board.json")
-    assert report["sources"]["after"].endswith("after/board.json")
+
+    before_source = Path(report["sources"]["before"])
+    after_source = Path(report["sources"]["after"])
+    assert before_source.name == "board.json"
+    assert before_source.parent.name == "before"
+    assert after_source.name == "board.json"
+    assert after_source.parent.name == "after"
 
 
 def test_board_diff_cli_exit_codes_and_summary_output(tmp_path, capsys):
