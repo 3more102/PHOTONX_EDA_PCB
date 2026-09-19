@@ -1,4 +1,7 @@
 _REASON_CODES={
+    "skipped_pads":{
+        "KICAD_PAD_LAYER_UNSUPPORTED",
+    },
     "skipped_slots":{
         "KICAD_SLOT_PLATED_UNSUPPORTED",
         "KICAD_SLOT_PLATING_UNKNOWN",
@@ -31,6 +34,8 @@ def _missing_reason(values,manifest_issues,allowed_codes):
 
 def validate_omission_manifest(data):
     issues=[]
+    exported_pads=list(data.get("exported_pads",()))
+    skipped_pads=list(data.get("skipped_pads",()))
     exported_slots=list(data.get("exported_slots",()))
     skipped_slots=list(data.get("skipped_slots",()))
     exported_regions=list(data.get("exported_regions",()))
@@ -40,6 +45,8 @@ def validate_omission_manifest(data):
     omitted_routes=list(data.get("omitted_routes",()))
 
     duplicate_checks=(
+        ("OMISSION_EXPORTED_PAD_DUPLICATE_ID",exported_pads),
+        ("OMISSION_SKIPPED_PAD_DUPLICATE_ID",skipped_pads),
         ("OMISSION_EXPORTED_SLOT_DUPLICATE_ID",exported_slots),
         ("OMISSION_SKIPPED_SLOT_DUPLICATE_ID",skipped_slots),
         ("OMISSION_EXPORTED_REGION_DUPLICATE_ID",exported_regions),
@@ -52,6 +59,7 @@ def validate_omission_manifest(data):
         if _duplicate(values):issues.append(code)
 
     overlap_checks=(
+        ("OMISSION_PAD_BOTH_EXPORTED_AND_SKIPPED",exported_pads,skipped_pads),
         ("OMISSION_SLOT_BOTH_EXPORTED_AND_SKIPPED",exported_slots,skipped_slots),
         ("OMISSION_REGION_BOTH_EXPORTED_AND_SKIPPED",exported_regions,skipped_regions),
         ("OMISSION_TRACK_BOTH_EXPORTED_AND_SKIPPED",exported_tracks,skipped_tracks),
@@ -61,6 +69,7 @@ def validate_omission_manifest(data):
 
     manifest_issues=list(data.get("issues",()))
     reason_checks=(
+        ("OMISSION_SKIPPED_PAD_WITHOUT_REASON","skipped_pads",skipped_pads),
         ("OMISSION_SKIPPED_SLOT_WITHOUT_REASON","skipped_slots",skipped_slots),
         ("OMISSION_SKIPPED_REGION_WITHOUT_REASON","skipped_regions",skipped_regions),
         ("OMISSION_SKIPPED_TRACK_WITHOUT_REASON","skipped_tracks",skipped_tracks),
