@@ -125,3 +125,33 @@ def test_bad_pad_layer_and_unresolved_net_report_both_but_skip_once(tmp_path):
     assert "KICAD_PAD_LAYER_UNSUPPORTED" in codes
     assert "KICAD_NET_REFERENCE_UNRESOLVED" in codes
     assert validate_omission_manifest(omission_manifest(report)) == []
+
+
+def test_pad_manifest_validator_checks_duplicates_overlap_and_reason():
+    data = {
+        "exported_pads": ["P1", "P1"],
+        "skipped_pads": ["P1"],
+        "issues": [],
+    }
+
+    assert validate_omission_manifest(data) == [
+        "OMISSION_EXPORTED_PAD_DUPLICATE_ID",
+        "OMISSION_PAD_BOTH_EXPORTED_AND_SKIPPED",
+        "OMISSION_SKIPPED_PAD_WITHOUT_REASON",
+    ]
+
+
+def test_pad_manifest_requires_pad_specific_reason():
+    data = {
+        "skipped_pads": ["P1"],
+        "issues": [
+            {
+                "object_id": "P1",
+                "code": "KICAD_TRACK_LAYER_UNSUPPORTED",
+            }
+        ],
+    }
+
+    assert validate_omission_manifest(data) == [
+        "OMISSION_SKIPPED_PAD_WITHOUT_REASON",
+    ]
