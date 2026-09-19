@@ -116,3 +116,68 @@ def test_point_only_clear_contact_does_not_claim_component_provenance(tmp_path: 
     assert region_shape(region).area == pytest.approx(100.0)
     assert "%LPC*%" not in {source.raw for source in region.provenance.sources}
     assert "relevant_operations=1" in _composition_detail(region)
+
+def test_lpc_refill_component_excludes_erased_dark_provenance(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%LPD*%\n"
+        + _rectangle("000000", "000000", "100000", "100000")
+        + "%LPC*%\n"
+        + _rectangle("020000", "020000", "080000", "080000")
+        + "%LPD*%\n"
+        + _rectangle("040000", "040000", "060000", "060000"),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 2
+    outer = max(result.regions, key=lambda region: region_shape(region).area)
+    refill = min(result.regions, key=lambda region: region_shape(region).area)
+    assert region_shape(outer).area == pytest.approx(64.0)
+    assert region_shape(refill).area == pytest.approx(4.0)
+
+    outer_sources = {source.raw for source in outer.provenance.sources}
+    refill_sources = {source.raw for source in refill.provenance.sources}
+
+    assert "X000000Y000000D02*" in outer_sources
+    assert "X020000Y020000D02*" in outer_sources
+    assert "X040000Y040000D02*" not in outer_sources
+
+    assert "X040000Y040000D02*" in refill_sources
+    assert "X000000Y000000D02*" not in refill_sources
+    assert "X020000Y020000D02*" not in refill_sources
+    assert "%LPC*%" not in refill_sources
+
+    assert "effective_operations=3" in _composition_detail(outer)
+    assert "relevant_operations=2" in _composition_detail(outer)
+    assert "effective_operations=3" in _composition_detail(refill)
+    assert "relevant_operations=1" in _composition_detail(refill)
+
+
+def test_lpc_redundant_dark_region_does_not_pollute_provenance_or_id(tmp_path: Path):
+    base_body = (
+        "%LPD*%\n"
+        + _rectangle("000000", "000000", "100000", "100000")
+        + "%LPC*%\n"
+        + _rectangle("200000", "200000", "210000", "210000")
+    )
+    redundant_body = (
+        "%LPD*%\n"
+        + _rectangle("000000", "000000", "100000", "100000")
+        + _rectangle("020000", "020000", "040000", "040000")
+        + "%LPC*%\n"
+        + _rectangle("200000", "200000", "210000", "210000")
+    )
+
+    base = _write(tmp_path / "base", base_body)
+    redundant = _write(tmp_path / "redundant", redundant_body)
+
+    base_region = GerberRS274XParser("F.Cu", strict=True).parse(base).regions[0]
+    redundant_region = GerberRS274XParser("F.Cu", strict=True).parse(redundant).regions[0]
+
+    assert region_shape(base_region).equals(region_shape(redundant_region))
+    assert base_region.id == redundant_region.id
+    redundant_sources = {source.raw for source in redundant_region.provenance.sources}
+    assert "X020000Y020000D02*" not in redundant_sources
+    assert "relevant_operations=1" in _composition_detail(redundant_region)
+
