@@ -4,7 +4,7 @@ from .ast import MacroPrimitive, MacroVariableDefinition
 from .lexer import split_macro_statements
 
 
-_VARIABLE_DEFINITION = re.compile(r"^\\$(\\d+)\\s*=\\s*(.+)$")
+_VARIABLE_DEFINITION = re.compile(r"^\$(\d+)\s*=\s*(.+)$")
 
 
 def parse_macro_body(body):
