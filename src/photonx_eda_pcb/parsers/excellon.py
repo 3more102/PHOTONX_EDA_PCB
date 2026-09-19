@@ -4,7 +4,11 @@ from math import hypot, isfinite, pi, sqrt
 import re
 from pathlib import Path
 from ..errors import ParseError, UnsupportedFeatureError
-from ..excellon_numeric import SIGNED_DECIMAL_PATTERN, UNSIGNED_DECIMAL_PATTERN
+from ..excellon_numeric import (
+    SIGNED_DECIMAL_PATTERN,
+    TOOL_NUMBER_PATTERN,
+    UNSIGNED_DECIMAL_PATTERN,
+)
 from ..gerber_geometry.arc import (
     ArcSpec,
     arc_points,
@@ -28,10 +32,10 @@ from ..units import CoordinateFormat, to_mm
 from .excellon_parts.slots import parse_slot_command
 
 _TOOL_DEF = re.compile(
-    rf"^T(\d+)C({UNSIGNED_DECIMAL_PATTERN})"
+    rf"^T({TOOL_NUMBER_PATTERN})C({UNSIGNED_DECIMAL_PATTERN})"
     rf"(?:F{UNSIGNED_DECIMAL_PATTERN})?(?:S{UNSIGNED_DECIMAL_PATTERN})?$"
 )
-_TOOL_SEL = re.compile(r"^T(\d+)$")
+_TOOL_SEL = re.compile(rf"^T({TOOL_NUMBER_PATTERN})$")
 _HIT = re.compile(
     rf"^(?:X({SIGNED_DECIMAL_PATTERN}))?(?:Y({SIGNED_DECIMAL_PATTERN}))?$"
 )
@@ -473,6 +477,21 @@ class ExcellonParser:
                     self._disable_geometry(out)
                     continue
                 self.tool=m.group(1);continue
+            if line.startswith("T"):
+                message = f"malformed Excellon tool selection: {line}"
+                if self.strict:
+                    raise ParseError(f"{p}:{line_no}: {message}")
+                out.diagnostics.append(
+                    ParseDiagnostic(
+                        "warning",
+                        "INVALID_EXCELLON_TOOL_SELECTION",
+                        message,
+                        str(p),
+                        line_no,
+                    )
+                )
+                self._disable_geometry(out)
+                continue
             m=_HIT.match(line)
             if m and (m.group(1) is not None or m.group(2) is not None):
                 if self.route.tool_down:
