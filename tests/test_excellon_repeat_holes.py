@@ -177,6 +177,30 @@ M30
     ]
 
 
+def test_repeat_hole_step_outside_coordinate_format_fails_closed(tmp_path):
+    path = _write(
+        tmp_path,
+        """M48
+METRIC
+T01C0.800
+%
+T01
+X1.000Y2.000
+R2X1234567
+M30
+""",
+    )
+
+    with pytest.raises(ParseError, match="invalid repeat-hole step"):
+        ExcellonParser(strict=True).parse(path)
+
+    result = ExcellonParser(strict=False).parse(path)
+    assert result.drills == []
+    assert [diagnostic.code for diagnostic in result.diagnostics] == [
+        "INVALID_EXCELLON_REPEAT_STEP"
+    ]
+
+
 def test_malformed_repeat_hole_syntax_fails_closed(tmp_path):
     path = _write(
         tmp_path,
