@@ -339,3 +339,72 @@ def test_cpp_radius_backend_rejects_pathological_dense_match_output():
     queries = tuple((0.0, 0.0, 0.0) for _ in range(1000))
     with pytest.raises(NativeBackendUnsupported, match="status=3"):
         radius_queries(index, queries, backend="native")
+
+
+def test_candidate_pairs_uses_initial_native_output_buffer(monkeypatch):
+    class FakeLibrary:
+        calls = 0
+
+        def photonx_candidate_pairs(
+            self,
+            _boxes,
+            _box_count,
+            _tolerance,
+            _cell_size,
+            out_pairs,
+            out_capacity,
+            out_count,
+        ):
+            self.calls += 1
+            assert out_pairs is not None
+            assert int(out_capacity.value) >= 1
+            out_count._obj.value = 1
+            out_pairs[0].first = 0
+            out_pairs[0].second = 1
+            return native_backend._OK
+
+    library = FakeLibrary()
+    monkeypatch.setattr(native_backend, "_load_library", lambda: library)
+
+    result = candidate_pairs(_sample_index(), 0.1, backend="native")
+    assert result == [("a", "b")]
+    assert library.calls == 1
+
+
+def test_radius_queries_reject_duplicate_native_matches(monkeypatch):
+    class FakeLibrary:
+        def photonx_point_radius_candidates(
+            self,
+            _boxes,
+            _box_count,
+            _queries,
+            _query_count,
+            _cell_size,
+            out_matches,
+            _out_capacity,
+            out_count,
+        ):
+            out_count._obj.value = 2
+            out_matches[0].query = 0
+            out_matches[0].point = 0
+            out_matches[1].query = 0
+            out_matches[1].point = 0
+            return native_backend._OK
+
+    index = SpatialHashIndex(1.0)
+    index.insert("p", AABB(0.0, 0.0, 0.0, 0.0))
+    monkeypatch.setattr(native_backend, "_load_library", lambda: FakeLibrary())
+
+    with pytest.raises(NativeBackendUnavailable, match="duplicate radius"):
+        radius_queries(index, ((0.0, 0.0, 0.0),), backend="native")
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_backend_uses_exact_second_pass_when_initial_buffer_is_small():
+    index = SpatialHashIndex(1.0)
+    for i in range(20):
+        index.insert(f"dense-{i:02d}", AABB(0.0, 0.0, 0.0, 0.0))
+
+    expected = candidate_pairs(index, backend="python")
+    assert len(expected) == 190
+    assert candidate_pairs(index, backend="native") == expected
