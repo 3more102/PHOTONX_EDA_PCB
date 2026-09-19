@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import ctypes
 import os
+import weakref
 from math import hypot
 from ctypes.util import find_library
 from functools import lru_cache
 from pathlib import Path
+from threading import RLock
 
 
-_ABI_VERSION = 2
+_ABI_VERSION = 3
 _OK = 0
 _BUFFER_TOO_SMALL = 1
 _INVALID_ARGUMENT = 2
@@ -59,6 +61,35 @@ class _NativeQueryMatch(ctypes.Structure):
     ]
 
 
+
+class _PersistentNativeIndex:
+    def __init__(self, library, handle, ids, revision, destroy):
+        self.library = library
+        self.handle = handle
+        self.ids = ids
+        self.revision = revision
+        self._destroy = destroy
+
+    def close(self) -> None:
+        handle = self.handle
+        if handle is None:
+            return
+        self.handle = None
+        if handle.value:
+            self._destroy(handle)
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
+_AABB_INDEX_CACHE = weakref.WeakKeyDictionary()
+_POINT_INDEX_CACHE = weakref.WeakKeyDictionary()
+_INDEX_CACHE_LOCK = RLock()
+
+
 @lru_cache(maxsize=1)
 def _library_candidates() -> tuple[str, ...]:
     candidates: list[str] = []
@@ -100,6 +131,48 @@ def _configure_library(library: ctypes.CDLL) -> ctypes.CDLL:
     ]
     library.photonx_candidate_pairs.restype = ctypes.c_int
 
+
+    library.photonx_aabb_index_create.argtypes = [
+        ctypes.POINTER(_NativeAABB),
+        ctypes.c_uint32,
+        ctypes.c_double,
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    library.photonx_aabb_index_create.restype = ctypes.c_int
+
+    library.photonx_aabb_index_destroy.argtypes = [ctypes.c_void_p]
+    library.photonx_aabb_index_destroy.restype = None
+
+    library.photonx_aabb_index_candidate_pairs.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_double,
+        ctypes.POINTER(_NativePair),
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    library.photonx_aabb_index_candidate_pairs.restype = ctypes.c_int
+
+    library.photonx_point_index_create.argtypes = [
+        ctypes.POINTER(_NativeAABB),
+        ctypes.c_uint32,
+        ctypes.c_double,
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    library.photonx_point_index_create.restype = ctypes.c_int
+
+    library.photonx_point_index_destroy.argtypes = [ctypes.c_void_p]
+    library.photonx_point_index_destroy.restype = None
+
+    library.photonx_point_index_radius_candidates.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(_NativePointQuery),
+        ctypes.c_uint32,
+        ctypes.POINTER(_NativeQueryMatch),
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    library.photonx_point_index_radius_candidates.restype = ctypes.c_int
+
     library.photonx_point_radius_candidates.argtypes = [
         ctypes.POINTER(_NativeAABB),
         ctypes.c_uint32,
@@ -140,7 +213,16 @@ def _load_library() -> ctypes.CDLL:
     raise error_type(detail)
 
 
+def _clear_native_index_caches() -> None:
+    with _INDEX_CACHE_LOCK:
+        # Dropping cache references is enough. Active queries keep a strong
+        # reference to their borrowed handle until the query returns.
+        _AABB_INDEX_CACHE.clear()
+        _POINT_INDEX_CACHE.clear()
+
+
 def _clear_library_cache() -> None:
+    _clear_native_index_caches()
     _probe_library.cache_clear()
     clear_candidates = getattr(_library_candidates, "cache_clear", None)
     if clear_candidates is not None:
@@ -159,6 +241,107 @@ def native_available() -> bool:
     return True
 
 
+def _native_box_array(index, ids):
+    try:
+        cell_size = float(index.cell_size)
+        boxes = tuple(
+            (
+                float(index.box(obj_id).min_x),
+                float(index.box(obj_id).min_y),
+                float(index.box(obj_id).max_x),
+                float(index.box(obj_id).max_y),
+            )
+            for obj_id in ids
+        )
+    except (TypeError, ValueError, OverflowError, AttributeError) as exc:
+        raise NativeBackendUnsupported("index is not native-compatible") from exc
+
+    box_array_type = _NativeAABB * len(ids)
+    native_boxes = box_array_type(*(_NativeAABB(*box) for box in boxes))
+    return cell_size, native_boxes
+
+
+def _build_native_index(index, library, ids, revision, kind):
+    cell_size, native_boxes = _native_box_array(index, ids)
+    handle = ctypes.c_void_p()
+
+    if kind == "aabb":
+        create = library.photonx_aabb_index_create
+        destroy = library.photonx_aabb_index_destroy
+    elif kind == "point":
+        create = library.photonx_point_index_create
+        destroy = library.photonx_point_index_destroy
+    else:
+        raise ValueError(f"unknown native index kind: {kind}")
+
+    status = int(
+        create(
+            native_boxes,
+            ctypes.c_uint32(len(ids)),
+            ctypes.c_double(cell_size),
+            ctypes.byref(handle),
+        )
+    )
+    if status != _OK:
+        _raise_status(status)
+    if not handle.value:
+        raise NativeBackendUnavailable(
+            f"native backend returned a null {kind}-index handle"
+        )
+
+    return _PersistentNativeIndex(
+        library,
+        handle,
+        ids,
+        revision,
+        destroy,
+    )
+
+
+def _native_index(index, library, ids, *, kind):
+    revision = getattr(index, "revision", None)
+    if not isinstance(revision, int):
+        return _build_native_index(
+            index,
+            library,
+            ids,
+            revision=None,
+            kind=kind,
+        ), True
+
+    cache = _AABB_INDEX_CACHE if kind == "aabb" else _POINT_INDEX_CACHE
+    try:
+        with _INDEX_CACHE_LOCK:
+            cached = cache.get(index)
+            if (
+                cached is not None
+                and cached.revision == revision
+                and cached.ids == ids
+                and cached.handle is not None
+            ):
+                return cached, False
+
+            fresh = _build_native_index(
+                index,
+                library,
+                ids,
+                revision=revision,
+                kind=kind,
+            )
+            cache[index] = fresh
+            return fresh, False
+    except TypeError:
+        # Duck-typed indexes can be unhashable or non-weak-referenceable.
+        # Without a trustworthy weak-key + revision contract they are ephemeral.
+        return _build_native_index(
+            index,
+            library,
+            ids,
+            revision=None,
+            kind=kind,
+        ), True
+
+
 def native_candidate_pairs(index, tolerance: float = 0.0):
     library = _load_library()
     ids = tuple(index.ids())
@@ -168,71 +351,70 @@ def native_candidate_pairs(index, tolerance: float = 0.0):
 
     try:
         tolerance_value = float(tolerance)
-        cell_size = float(index.cell_size)
-    except (TypeError, ValueError, AttributeError) as exc:
-        raise NativeBackendUnsupported("index/tolerance is not native-compatible") from exc
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise NativeBackendUnsupported("tolerance is not native-compatible") from exc
 
     if tolerance_value < 0.0:
         raise NativeBackendUnsupported(
             "negative tolerance keeps the Python reference semantics"
         )
 
-    box_array_type = _NativeAABB * len(ids)
-    native_boxes = box_array_type(
-        *(
-            _NativeAABB(
-                float(index.box(obj_id).min_x),
-                float(index.box(obj_id).min_y),
-                float(index.box(obj_id).max_x),
-                float(index.box(obj_id).max_y),
+    native_index, ephemeral = _native_index(
+        index,
+        library,
+        ids,
+        kind="aabb",
+    )
+
+    try:
+        required = ctypes.c_uint32(0)
+        status = int(
+            library.photonx_aabb_index_candidate_pairs(
+                native_index.handle,
+                ctypes.c_double(tolerance_value),
+                None,
+                ctypes.c_uint32(0),
+                ctypes.byref(required),
             )
-            for obj_id in ids
-        )
-    )
-
-    required = ctypes.c_uint32(0)
-    status = int(
-        library.photonx_candidate_pairs(
-            native_boxes,
-            ctypes.c_uint32(len(ids)),
-            ctypes.c_double(tolerance_value),
-            ctypes.c_double(cell_size),
-            None,
-            ctypes.c_uint32(0),
-            ctypes.byref(required),
-        )
-    )
-
-    if status == _OK and required.value == 0:
-        return []
-    if status not in (_OK, _BUFFER_TOO_SMALL):
-        _raise_status(status)
-
-    out_type = _NativePair * required.value
-    out = out_type()
-    written = ctypes.c_uint32(0)
-    status = int(
-        library.photonx_candidate_pairs(
-            native_boxes,
-            ctypes.c_uint32(len(ids)),
-            ctypes.c_double(tolerance_value),
-            ctypes.c_double(cell_size),
-            out,
-            ctypes.c_uint32(required.value),
-            ctypes.byref(written),
-        )
-    )
-    if status != _OK:
-        _raise_status(status)
-    if written.value != required.value:
-        raise NativeBackendUnavailable(
-            "native backend changed pair count between sizing and fill calls"
         )
 
-    return [
-        (ids[out[i].first], ids[out[i].second])
-        for i in range(written.value)
-    ]
+        if status == _OK and required.value == 0:
+            return []
+        if status not in (_OK, _BUFFER_TOO_SMALL):
+            _raise_status(status)
+
+        out_type = _NativePair * required.value
+        out = out_type()
+        written = ctypes.c_uint32(0)
+        status = int(
+            library.photonx_aabb_index_candidate_pairs(
+                native_index.handle,
+                ctypes.c_double(tolerance_value),
+                out,
+                ctypes.c_uint32(required.value),
+                ctypes.byref(written),
+            )
+        )
+        if status != _OK:
+            _raise_status(status)
+        if written.value != required.value:
+            raise NativeBackendUnavailable(
+                "native backend changed pair count between sizing and fill calls"
+            )
+
+        pairs = []
+        for i in range(written.value):
+            first = int(out[i].first)
+            second = int(out[i].second)
+            if first >= len(ids) or second >= len(ids):
+                raise NativeBackendUnavailable(
+                    "native backend returned an out-of-range pair candidate"
+                )
+            pairs.append((ids[first], ids[second]))
+        return pairs
+    finally:
+        if ephemeral:
+            native_index.close()
 
 
 def native_radius_queries(index, queries):
@@ -245,22 +427,11 @@ def native_radius_queries(index, queries):
             "native backend supports at most 2^32-1 boxes and queries"
         )
 
-    try:
-        cell_size = float(index.cell_size)
-    except (TypeError, ValueError, AttributeError) as exc:
-        raise NativeBackendUnsupported("index is not native-compatible") from exc
-
-    box_array_type = _NativeAABB * len(ids)
-    native_boxes = box_array_type(
-        *(
-            _NativeAABB(
-                float(index.box(obj_id).min_x),
-                float(index.box(obj_id).min_y),
-                float(index.box(obj_id).max_x),
-                float(index.box(obj_id).max_y),
-            )
-            for obj_id in ids
-        )
+    point_index, ephemeral = _native_index(
+        index,
+        library,
+        ids,
+        kind="point",
     )
 
     native_query_type = _NativePointQuery * len(query_specs)
@@ -271,67 +442,67 @@ def native_radius_queries(index, queries):
         )
     )
 
-    required = ctypes.c_uint32(0)
-    status = int(
-        library.photonx_point_radius_candidates(
-            native_boxes,
-            ctypes.c_uint32(len(ids)),
-            native_queries,
-            ctypes.c_uint32(len(query_specs)),
-            ctypes.c_double(cell_size),
-            None,
-            ctypes.c_uint32(0),
-            ctypes.byref(required),
-        )
-    )
-
-    if status == _OK and required.value == 0:
-        return [[] for _ in query_specs]
-    if status not in (_OK, _BUFFER_TOO_SMALL):
-        _raise_status(status)
-
-    out_type = _NativeQueryMatch * required.value
-    out = out_type()
-    written = ctypes.c_uint32(0)
-    status = int(
-        library.photonx_point_radius_candidates(
-            native_boxes,
-            ctypes.c_uint32(len(ids)),
-            native_queries,
-            ctypes.c_uint32(len(query_specs)),
-            ctypes.c_double(cell_size),
-            out,
-            ctypes.c_uint32(required.value),
-            ctypes.byref(written),
-        )
-    )
-    if status != _OK:
-        _raise_status(status)
-    if written.value != required.value:
-        raise NativeBackendUnavailable(
-            "native backend changed radius-candidate count between sizing and fill calls"
-        )
-
-    results = [[] for _ in query_specs]
-    for i in range(written.value):
-        query_index = int(out[i].query)
-        point_index = int(out[i].point)
-        if query_index >= len(query_specs) or point_index >= len(ids):
-            raise NativeBackendUnavailable(
-                "native backend returned an out-of-range radius candidate"
+    try:
+        required = ctypes.c_uint32(0)
+        status = int(
+            library.photonx_point_index_radius_candidates(
+                point_index.handle,
+                native_queries,
+                ctypes.c_uint32(len(query_specs)),
+                None,
+                ctypes.c_uint32(0),
+                ctypes.byref(required),
             )
-        x, y, radius = query_specs[query_index]
-        obj_id = ids[point_index]
-        box = index.box(obj_id)
-        center_x = (float(box.min_x) + float(box.max_x)) / 2.0
-        center_y = (float(box.min_y) + float(box.max_y)) / 2.0
-        distance = hypot(x - center_x, y - center_y)
-        if distance <= radius:
-            results[query_index].append((distance, obj_id))
+        )
 
-    for result in results:
-        result.sort(key=lambda item: (item[0], item[1]))
-    return results
+        if status == _OK and required.value == 0:
+            return [[] for _ in query_specs]
+        if status not in (_OK, _BUFFER_TOO_SMALL):
+            _raise_status(status)
+
+        out_type = _NativeQueryMatch * required.value
+        out = out_type()
+        written = ctypes.c_uint32(0)
+        status = int(
+            library.photonx_point_index_radius_candidates(
+                point_index.handle,
+                native_queries,
+                ctypes.c_uint32(len(query_specs)),
+                out,
+                ctypes.c_uint32(required.value),
+                ctypes.byref(written),
+            )
+        )
+        if status != _OK:
+            _raise_status(status)
+        if written.value != required.value:
+            raise NativeBackendUnavailable(
+                "native backend changed radius-candidate count between sizing and fill calls"
+            )
+
+        results = [[] for _ in query_specs]
+        for i in range(written.value):
+            query_index = int(out[i].query)
+            point_id = int(out[i].point)
+            if query_index >= len(query_specs) or point_id >= len(ids):
+                raise NativeBackendUnavailable(
+                    "native backend returned an out-of-range radius candidate"
+                )
+            x, y, radius = query_specs[query_index]
+            obj_id = ids[point_id]
+            box = index.box(obj_id)
+            center_x = (float(box.min_x) + float(box.max_x)) / 2.0
+            center_y = (float(box.min_y) + float(box.max_y)) / 2.0
+            distance = hypot(x - center_x, y - center_y)
+            if distance <= radius:
+                results[query_index].append((distance, obj_id))
+
+        for result in results:
+            result.sort(key=lambda item: (item[0], item[1]))
+        return results
+    finally:
+        if ephemeral:
+            point_index.close()
 
 
 def _raise_status(status: int) -> None:
