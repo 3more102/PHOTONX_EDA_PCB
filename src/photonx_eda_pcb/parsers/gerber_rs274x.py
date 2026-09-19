@@ -1678,7 +1678,16 @@ class GerberRS274XParser:
                 self.current = nxt
                 return
             if not self.region_state.vertices:
-                self.region_state.add(self.current.x, self.current.y)
+                self._region_parse_fail(
+                    path,
+                    line_no,
+                    line,
+                    "GERBER_REGION_START_MOVE_REQUIRED",
+                    "a region contour must begin with D02 before its first D01 segment",
+                    out,
+                )
+                self.current = nxt
+                return
             self.region_state.add(nxt.x, nxt.y)
             self.region_sources.append(src)
             self.current = nxt
@@ -1830,7 +1839,16 @@ class GerberRS274XParser:
             return
 
         if not self.region_state.vertices:
-            self.region_state.add(self.current.x, self.current.y)
+            self._region_parse_fail(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_START_MOVE_REQUIRED",
+                "a region contour must begin with D02 before its first circular D01 segment",
+                out,
+            )
+            self.current = nxt
+            return
         for vertex in arc_vertices[1:]:
             self.region_state.add(vertex.x, vertex.y)
 
@@ -2018,7 +2036,7 @@ class GerberRS274XParser:
                     "gerber_region",
                     (
                         f"{region_kind}; vertices={len(unique)}; "
-                        f"arc_segments={len(arc_evidence)}; "
+                        f"arc_commands={len(arc_evidence)}; "
                         f"source_area_mm2={float(source_shape.area):.12g}; "
                         f"output_area_mm2={float(transformed_shape.area):.12g}"
                     ),
@@ -2457,7 +2475,18 @@ class GerberRS274XParser:
 
                 op_match = _OP_SELECT.match(line)
                 if op_match:
-                    self.current_operation = op_match.group(1)
+                    operation = op_match.group(1)
+                    if operation == "3":
+                        self._region_fail(
+                            p,
+                            line_no,
+                            line,
+                            "GERBER_REGION_FLASH_UNSUPPORTED",
+                            "D03 is not allowed inside a Gerber region statement",
+                            out,
+                        )
+                        continue
+                    self.current_operation = operation
                     continue
 
                 arc_match = _ARC_COORD.match(line)
