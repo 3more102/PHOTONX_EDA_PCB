@@ -5,6 +5,8 @@ from math import isclose, isfinite, pi
 from pathlib import Path
 import re
 
+from shapely.geometry import Polygon
+
 from ..aperture_macros import evaluate_macro, parse_macro_body
 from ..errors import ParseError, UnsupportedFeatureError
 from ..gerber_geometry.arc import (
@@ -19,6 +21,7 @@ from ..gerber_geometry.model import GeoPoint
 from ..ids import stable_id
 from ..models import OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
 from ..provenance import Evidence, Provenance, SourceRef
+from ..zones.model import Zone, ZoneIsland
 from ..units import CoordinateFormat, to_mm
 from .gerber_parts.step_repeat import parse_step_repeat
 from .gerber_parts.tokenizer import iter_gerber_statements
@@ -121,6 +124,7 @@ class GerberLayerResult:
     tracks: list[Track] = field(default_factory=list)
     pads: list[PadCandidate] = field(default_factory=list)
     outline: list[OutlineSegment] = field(default_factory=list)
+    zones: list[Zone] = field(default_factory=list)
     diagnostics: list[ParseDiagnostic] = field(default_factory=list)
 
 
@@ -175,6 +179,11 @@ class GerberRS274XParser:
         self.aperture_rotation_source: SourceRef | None = None
         self.aperture_scale_source: SourceRef | None = None
         self.image_body_started = False
+        self.region_active = False
+        self.region_start_source: SourceRef | None = None
+        self.region_points: list[Point] = []
+        self.region_sources: list[SourceRef] = []
+        self.region_contour_started = False
 
     def _fail_or_warn(self, path, line_no, raw, code, message, out):
         if self.strict:
@@ -189,6 +198,7 @@ class GerberRS274XParser:
         out.tracks.clear()
         out.pads.clear()
         out.outline.clear()
+        out.zones.clear()
 
     def _declare_units(
         self,
