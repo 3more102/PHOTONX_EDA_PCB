@@ -133,7 +133,7 @@ class GerberRS274XParser:
     Supported: FS, MO, ADD(C/R/O), Dnn selection, G01/D01/D02/D03,
     bounded G74 single-quadrant and G75 multi-quadrant G02/G03 circular
     interpolation with circular apertures, dark multi-contour linear/G75
-    G36/G37 regions with bounded simple cut-in holes, G04, M02, and standard
+    G36/G37 regions with bounded multi-hole cut-ins, G04, M02, and standard
     linear step-and-repeat
     (%SR...*% / %SR*%).
 
@@ -1762,76 +1762,185 @@ class GerberRS274XParser:
         cutin_evidence: list[Evidence] = []
 
         if coincident_edges:
-            if len(coincident_edges) != 1:
-                self._region_fail(
-                    path,
-                    line_no,
-                    raw,
-                    "GERBER_REGION_CUTIN_COMPLEX_UNSUPPORTED",
-                    (
-                        "only one fully-coincident cut-in bridge pair per "
-                        "contour is currently supported"
-                    ),
-                    out,
-                )
-                return False
+            bridge_pairs: list[
+                tuple[int, int, Point, Point, str]
+            ] = []
+            bridge_indices: set[int] = set()
+            bridge_axes: set[str] = set()
 
-            uses = coincident_edges[0]
-            if len(uses) != 2:
-                self._region_parse_fail(
-                    path,
-                    line_no,
-                    raw,
-                    "GERBER_REGION_CUTIN_INVALID",
-                    "cut-in bridge must occur exactly twice",
-                    out,
-                )
-                return False
+            for uses in coincident_edges:
+                if len(uses) != 2:
+                    self._region_parse_fail(
+                        path,
+                        line_no,
+                        raw,
+                        "GERBER_REGION_CUTIN_INVALID",
+                        "each cut-in bridge must occur exactly twice",
+                        out,
+                    )
+                    return False
 
-            first_use, second_use = sorted(uses, key=lambda item: item[0])
-            i, a0, a1 = first_use
-            j, b0, b1 = second_use
-            reversed_pair = a0 == b1 and a1 == b0
-            axis_aligned = (
-                isclose(a0.x, a1.x, rel_tol=0.0, abs_tol=1e-12)
-                or isclose(a0.y, a1.y, rel_tol=0.0, abs_tol=1e-12)
-            )
-            bridge_is_linear = (
-                self.region_current_edge_kinds[i] == "linear"
-                and self.region_current_edge_kinds[j] == "linear"
-            )
-            if not reversed_pair or not axis_aligned or not bridge_is_linear:
-                self._region_parse_fail(
-                    path,
-                    line_no,
-                    raw,
-                    "GERBER_REGION_CUTIN_INVALID",
-                    (
-                        "cut-in requires two opposite fully-coincident linear "
-                        "segments that are horizontal or vertical"
-                    ),
-                    out,
+                first_use, second_use = sorted(uses, key=lambda item: item[0])
+                i, a0, a1 = first_use
+                j, b0, b1 = second_use
+                reversed_pair = a0 == b1 and a1 == b0
+                horizontal = isclose(
+                    a0.y,
+                    a1.y,
+                    rel_tol=0.0,
+                    abs_tol=1e-12,
                 )
-                return False
-
-            loop_a = tuple(points[i + 1 : j + 1])
-            loop_b = tuple(points[j + 1 :] + points[1 : i + 1])
-            loops = (loop_a, loop_b)
-            loop_shapes = []
-            for loop_index, ring in enumerate(loops):
-                if len(ring) < 4 or ring[0] != ring[-1]:
+                vertical = isclose(
+                    a0.x,
+                    a1.x,
+                    rel_tol=0.0,
+                    abs_tol=1e-12,
+                )
+                bridge_is_linear = (
+                    self.region_current_edge_kinds[i] == "linear"
+                    and self.region_current_edge_kinds[j] == "linear"
+                )
+                if (
+                    not reversed_pair
+                    or not bridge_is_linear
+                    or horizontal == vertical
+                ):
                     self._region_parse_fail(
                         path,
                         line_no,
                         raw,
                         "GERBER_REGION_CUTIN_INVALID",
                         (
-                            "removing the cut-in bridge did not produce two "
-                            "closed boundary loops"
+                            "cut-in requires two opposite fully-coincident "
+                            "linear segments that are strictly horizontal or "
+                            "vertical"
                         ),
                         out,
                     )
                     return False
+
+                axis = "horizontal" if horizontal else "vertical"
+                bridge_axes.add(axis)
+                bridge_indices.update((i, j))
+                bridge_pairs.append((i, j, a0, a1, axis))
+
+            if len(bridge_axes) != 1:
+                self._region_parse_fail(
+                    path,
+                    line_no,
+                    raw,
+                    "GERBER_REGION_CUTIN_DIRECTION_MISMATCH",
+                    (
+                        "all cut-ins in one Gerber contour must have the same "
+                        "direction, either all horizontal or all vertical"
+                    ),
+                    out,
+                )
+                return False
+
+            edges = list(enumerate(zip(points, points[1:])))
+            adjacency: dict[
+                tuple[float, float],
+                list[tuple[tuple[float, float], int]],
+            ] = {}
+            edge_coords: dict[
+                int,
+                tuple[tuple[float, float], tuple[float, float]],
+            ] = {}
+            for edge_index, (edge_start, edge_end) in edges:
+                if edge_index in bridge_indices:
+                    continue
+                start_key = (edge_start.x, edge_start.y)
+                end_key = (edge_end.x, edge_end.y)
+                edge_coords[edge_index] = (start_key, end_key)
+                adjacency.setdefault(start_key, []).append(
+                    (end_key, edge_index)
+                )
+                adjacency.setdefault(end_key, []).append(
+                    (start_key, edge_index)
+                )
+
+            if not edge_coords or any(
+                len(neighbors) != 2 for neighbors in adjacency.values()
+            ):
+                self._region_parse_fail(
+                    path,
+                    line_no,
+                    raw,
+                    "GERBER_REGION_CUTIN_INVALID",
+                    (
+                        "removing cut-in bridges must leave disjoint closed "
+                        "boundary cycles without self-touching vertices"
+                    ),
+                    out,
+                )
+                return False
+
+            unvisited = set(edge_coords)
+            loops: list[tuple[Point, ...]] = []
+            while unvisited:
+                first_edge = min(unvisited)
+                start_key, current_key = edge_coords[first_edge]
+                ring_keys = [start_key, current_key]
+                unvisited.remove(first_edge)
+                previous_edge = first_edge
+
+                while current_key != start_key:
+                    candidates = [
+                        (neighbor_key, edge_index)
+                        for neighbor_key, edge_index in adjacency[current_key]
+                        if edge_index in unvisited
+                        and edge_index != previous_edge
+                    ]
+                    if len(candidates) != 1:
+                        self._region_parse_fail(
+                            path,
+                            line_no,
+                            raw,
+                            "GERBER_REGION_CUTIN_INVALID",
+                            (
+                                "cut-in bridge removal produced ambiguous or "
+                                "open boundary topology"
+                            ),
+                            out,
+                        )
+                        return False
+                    next_key, next_edge = candidates[0]
+                    ring_keys.append(next_key)
+                    unvisited.remove(next_edge)
+                    previous_edge = next_edge
+                    current_key = next_key
+
+                ring = tuple(Point(x, y) for x, y in ring_keys)
+                if len(ring) < 4 or ring[0] != ring[-1]:
+                    self._region_parse_fail(
+                        path,
+                        line_no,
+                        raw,
+                        "GERBER_REGION_CUTIN_INVALID",
+                        "cut-in boundary cycle is not a valid closed ring",
+                        out,
+                    )
+                    return False
+                loops.append(ring)
+
+            if len(loops) != len(bridge_pairs) + 1:
+                self._region_parse_fail(
+                    path,
+                    line_no,
+                    raw,
+                    "GERBER_REGION_CUTIN_INVALID",
+                    (
+                        "cut-in decomposition did not produce exactly one "
+                        "boundary loop per cut-in plus the enclosing contour"
+                    ),
+                    out,
+                )
+                return False
+
+            loop_shapes = []
+            loop_signed_areas: list[float] = []
+            for loop_index, ring in enumerate(loops):
                 ring_unique = {(p.x, p.y) for p in ring[:-1]}
                 if len(ring_unique) < 3:
                     self._region_parse_fail(
@@ -1866,30 +1975,99 @@ class GerberRS274XParser:
                         out,
                     )
                     return False
+                signed_area = 0.5 * sum(
+                    a.x * b.y - b.x * a.y
+                    for a, b in zip(ring, ring[1:])
+                )
+                if isclose(signed_area, 0.0, rel_tol=0.0, abs_tol=1e-15):
+                    self._region_parse_fail(
+                        path,
+                        line_no,
+                        raw,
+                        "GERBER_REGION_CUTIN_INVALID",
+                        f"cut-in boundary loop {loop_index + 1} has zero signed area",
+                        out,
+                    )
+                    return False
                 loop_shapes.append(ring_shape)
+                loop_signed_areas.append(signed_area)
 
-            if loop_shapes[0].contains(loop_shapes[1]):
-                shell, hole = loop_a, loop_b
-                hole_area = float(loop_shapes[1].area)
-            elif loop_shapes[1].contains(loop_shapes[0]):
-                shell, hole = loop_b, loop_a
-                hole_area = float(loop_shapes[0].area)
-            else:
+            top_level = [
+                index
+                for index, candidate_shape in enumerate(loop_shapes)
+                if not any(
+                    other_index != index
+                    and loop_shapes[other_index].contains(candidate_shape)
+                    for other_index in range(len(loop_shapes))
+                )
+            ]
+            if len(top_level) != 1:
                 self._region_fail(
                     path,
                     line_no,
                     raw,
                     "GERBER_REGION_CUTIN_DISJOINT_UNSUPPORTED",
                     (
-                        "fully-coincident bridge produces disjoint filled "
-                        "areas rather than one bounded hole; this valid Gerber "
-                        "case is not modeled yet"
+                        "fully-coincident cut-in topology resolves to multiple "
+                        "top-level filled areas rather than one enclosing "
+                        "region; disjoint cut-in output is not modeled yet"
                     ),
                     out,
                 )
                 return False
 
-            holes = (hole,)
+            shell_index = top_level[0]
+            shell = loops[shell_index]
+            shell_shape = loop_shapes[shell_index]
+            shell_sign = 1.0 if loop_signed_areas[shell_index] > 0 else -1.0
+            hole_indices = [
+                index for index in range(len(loops))
+                if index != shell_index
+            ]
+
+            for hole_index in hole_indices:
+                hole_shape = loop_shapes[hole_index]
+                if not shell_shape.contains(hole_shape):
+                    self._region_parse_fail(
+                        path,
+                        line_no,
+                        raw,
+                        "GERBER_REGION_CUTIN_INVALID",
+                        "every cut-in hole must be strictly inside one shell",
+                        out,
+                    )
+                    return False
+                hole_sign = 1.0 if loop_signed_areas[hole_index] > 0 else -1.0
+                if hole_sign == shell_sign:
+                    self._region_parse_fail(
+                        path,
+                        line_no,
+                        raw,
+                        "GERBER_REGION_CUTIN_WINDING_INVALID",
+                        (
+                            "cut-in hole traversal must have the opposite "
+                            "winding from the enclosing boundary"
+                        ),
+                        out,
+                    )
+                    return False
+
+            for pos, left_index in enumerate(hole_indices):
+                for right_index in hole_indices[pos + 1 :]:
+                    if not loop_shapes[left_index].disjoint(
+                        loop_shapes[right_index]
+                    ):
+                        self._region_parse_fail(
+                            path,
+                            line_no,
+                            raw,
+                            "GERBER_REGION_CUTIN_INVALID",
+                            "cut-in holes may not touch, overlap, or nest",
+                            out,
+                        )
+                        return False
+
+            holes = tuple(loops[index] for index in hole_indices)
             candidate = CopperRegion(
                 "validation",
                 shell,
@@ -1903,36 +2081,41 @@ class GerberRS274XParser:
                     line_no,
                     raw,
                     "GERBER_REGION_CUTIN_INVALID",
-                    "cut-in shell/hole reconstruction produced invalid geometry",
+                    (
+                        "multi-cut-in shell/hole reconstruction produced "
+                        "invalid polygon geometry"
+                    ),
                     out,
                 )
                 return False
 
-            bridge_orientation = (
-                "vertical"
-                if isclose(a0.x, a1.x, rel_tol=0.0, abs_tol=1e-12)
-                else "horizontal"
-            )
             evidence_source = (
                 self.region_current_sources[-1]
                 if self.region_current_sources
                 else SourceRef(str(path), line_no, raw)
             )
-            cutin_evidence.append(
-                Evidence(
-                    "gerber_region_cut_in",
-                    (
-                        "simple_single_hole; "
-                        f"bridge_orientation={bridge_orientation}; "
-                        f"bridge_start_mm=({a0.x:.12g},{a0.y:.12g}); "
-                        f"bridge_end_mm=({a1.x:.12g},{a1.y:.12g}); "
-                        f"hole_area_mm2={hole_area:.12g}; "
-                        f"filled_area_mm2={float(shape.area):.12g}"
-                    ),
-                    1.0,
-                    evidence_source,
+            for bridge_index, (
+                _,
+                _,
+                bridge_start,
+                bridge_end,
+                bridge_axis,
+            ) in enumerate(bridge_pairs):
+                cutin_evidence.append(
+                    Evidence(
+                        "gerber_region_cut_in",
+                        (
+                            f"cut_in={bridge_index + 1}/{len(bridge_pairs)}; "
+                            f"bridge_orientation={bridge_axis}; "
+                            f"bridge_start_mm=({bridge_start.x:.12g},{bridge_start.y:.12g}); "
+                            f"bridge_end_mm=({bridge_end.x:.12g},{bridge_end.y:.12g}); "
+                            f"holes={len(holes)}; "
+                            f"filled_area_mm2={float(shape.area):.12g}"
+                        ),
+                        1.0,
+                        evidence_source,
+                    )
                 )
-            )
         else:
             candidate = CopperRegion(
                 "validation",
@@ -2312,9 +2495,9 @@ class GerberRS274XParser:
             cutin_evidence = contour_cutin_evidence[contour_index]
             if cutin_evidence:
                 region_kind = (
-                    "linear_g75_simple_cutin_dark"
+                    "linear_g75_multi_cutin_dark"
                     if arc_evidence
-                    else "linear_simple_cutin_dark"
+                    else "linear_multi_cutin_dark"
                 )
             else:
                 region_kind = (
