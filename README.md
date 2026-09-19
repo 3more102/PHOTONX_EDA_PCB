@@ -214,7 +214,7 @@ PHOTONX is designed to fail visibly when evidence or supported semantics are ins
 | Unsupported syntax in `--permissive` mode | The condition is retained as a diagnostic for review |
 | Reconstructed model contains validation errors | CLI completes the reconstruction bundle and returns exit code **2** |
 | Reconstructed model has no validation errors | CLI returns exit code **0** |
-| `--kicad` requested | PHOTONX writes the KiCad output and a separate `kicad_validation.txt` result |
+| `--kicad` requested | PHOTONX writes the KiCad board plus `kicad_export_report.json`, `kicad_omissions.json`, and a separate `kicad_validation.txt` native-validation result |
 | `kicad-cli` unavailable | The missing native validator is reported; PHOTONX does not present that as successful native validation |
 | Unknown semantic fact | The model keeps it unresolved rather than fabricating a convenient value |
 
