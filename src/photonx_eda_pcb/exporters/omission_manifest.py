@@ -4,6 +4,8 @@ def omission_manifest(report):
     return {
       "exported_slots":list(report.exported_slot_ids),
       "skipped_slots":list(report.skipped_slot_ids),
+      "skipped_regions":list(getattr(report,"skipped_region_ids",())),
+      "omitted_routes":list(getattr(report,"skipped_route_ids",())),
       "issues":[{"severity":x.severity,"code":x.code,"object_id":x.object_id,"message":x.message} for x in report.issues]
     }
 def write_omission_manifest(report,path):
