@@ -24,6 +24,7 @@ from ..excellon_routing.arc_commands import (
 )
 from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
+from .common.limits import ParseLimits
 from .excellon_parts.slots import parse_slot_command
 
 _TOOL_DEF = re.compile(r"^T(\d+)C([0-9.]+)(?:F[0-9.]+)?(?:S[0-9.]+)?$")
@@ -48,8 +49,8 @@ class ExcellonParser:
     existing I/J center-offset subset plus standard XNC X/Y/A radius form,
     and are converted to deterministic polyline points with explicit evidence.
     """
-    def __init__(self, strict: bool = True):
-        self.strict = strict; self.units = "mm"; self.zero = "L"; self.units_declared = False; self.incremental = False
+    def __init__(self, strict: bool = True, limits: ParseLimits | None = None):
+        self.strict = strict; self.limits = limits or ParseLimits(); self.units = "mm"; self.zero = "L"; self.units_declared = False; self.incremental = False
         self.fmt = CoordinateFormat(2, 4, "L"); self.tools = {}; self.tool = None; self.current = Point(0.0, 0.0)
         self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
         self.geometry_enabled=True
@@ -274,9 +275,18 @@ class ExcellonParser:
         out.routes.append(RoutedPath(rid,pts,self.tools[self.tool],"unknown",f"T{self.tool}",prov))
         self._route_sources=[];self._route_evidence=[]
 
+    def _iter_limited_lines(self, path: Path):
+        with path.open(encoding="utf-8-sig", errors="strict") as stream:
+            for line_no, raw in enumerate(stream, 1):
+                try:
+                    self.limits.check_line(raw.rstrip("\r\n"), line_no)
+                except ValueError as exc:
+                    raise ParseError(f"{path}:{line_no}: {exc}") from exc
+                yield line_no, raw
+
     def parse(self,path:str|Path)->ExcellonResult:
         p=Path(path);out=ExcellonResult()
-        for line_no,raw in enumerate(p.read_text(encoding="utf-8-sig",errors="strict").splitlines(),1):
+        for line_no,raw in self._iter_limited_lines(p):
             line=raw.strip().upper()
             if not line or line in {"M48","%","M30","M95"} or line.startswith(";"):continue
             if line.startswith("METRIC") or line == "M71":
