@@ -9,7 +9,8 @@ def check_geometry(board):
     for d in board.drills:
         if d.diameter<=0:issues.append(CheckIssue("error","DRILL_DIAMETER_INVALID","drill diameter must be positive",d.id))
     for region in getattr(board,"regions",()):
-        vals=[v for p in region.points for v in (p.x,p.y)]
+        rings=(region.points,*getattr(region,"holes",()))
+        vals=[v for ring in rings for p in ring for v in (p.x,p.y)]
         if not all(is_finite_number(v) for v in vals):issues.append(CheckIssue("error","REGION_COORDINATE_INVALID","region coordinates must be finite",region.id))
     for s in getattr(board,"slots",()):
         if not is_finite_number(s.width_mm) or s.width_mm<=0:issues.append(CheckIssue("error","SLOT_WIDTH_INVALID","slot width must be positive",s.id))
