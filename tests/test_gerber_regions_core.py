@@ -11,6 +11,7 @@ from photonx_eda_pcb.models import BoardModel, CopperRegion, PadCandidate, Point
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 from photonx_eda_pcb.preflight import preflight
 from photonx_eda_pcb.provenance import Provenance
+from photonx_eda_pcb.roundtrip.canonicalize import canonical_board_dict
 
 
 def _write(tmp_path: Path, name: str, text: str) -> Path:
@@ -334,6 +335,12 @@ def test_region_shape_and_serialization_preserve_explicit_holes():
     payload = board.to_dict()["regions"][0]
     assert len(payload["holes"]) == 1
     assert payload["holes"][0][0] == {"x": 1, "y": 1}
+
+
+    canonical = canonical_board_dict(board)["regions"][0]
+    assert canonical["holes"] == [
+        [[1, 1], [1, 3], [3, 3], [3, 1], [1, 1]]
+    ]
 
 
 def test_region_is_indexed_and_serialized_by_board_model():
@@ -671,6 +678,115 @@ def test_cut_in_hole_is_not_physical_copper_for_connectivity(tmp_path: Path):
 
     assert graph.has_edge(region.id, "PCU")
     assert not graph.has_edge(region.id, "PHOLE")
+
+
+def test_simple_cut_in_step_repeat_preserves_holes_and_unique_ids(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "cut_in_panel.gtl",
+        _region_file(
+            "%SRX2Y1I20J0*%\n"
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X100000Y000000D01*\n"
+            "X100000Y100000D01*\n"
+            "X000000Y100000D01*\n"
+            "X000000Y050000D01*\n"
+            "X030000Y050000D01*\n"
+            "X030000Y070000D01*\n"
+            "X070000Y070000D01*\n"
+            "X070000Y030000D01*\n"
+            "X030000Y030000D01*\n"
+            "X030000Y050000D01*\n"
+            "X000000Y050000D01*\n"
+            "X000000Y000000D01*\n"
+            "G37*\n"
+            "%SR*%"
+        ),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 2
+    assert len({region.id for region in result.regions}) == 2
+    assert all(len(region.holes) == 1 for region in result.regions)
+    assert [region_shape(region).area for region in result.regions] == pytest.approx(
+        [84.0, 84.0]
+    )
+    assert result.regions[0].holes[0][0].x == pytest.approx(3.0)
+    assert result.regions[1].holes[0][0].x == pytest.approx(23.0)
+
+
+def test_simple_cut_in_hole_follows_image_transform(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "cut_in_transform.gtl",
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%MIA1*%\n"
+        "%IR90*%\n"
+        "G36*\n"
+        "X000000Y000000D02*\n"
+        "X100000Y000000D01*\n"
+        "X100000Y100000D01*\n"
+        "X000000Y100000D01*\n"
+        "X000000Y050000D01*\n"
+        "X030000Y050000D01*\n"
+        "X030000Y070000D01*\n"
+        "X070000Y070000D01*\n"
+        "X070000Y030000D01*\n"
+        "X030000Y030000D01*\n"
+        "X030000Y050000D01*\n"
+        "X000000Y050000D01*\n"
+        "X000000Y000000D01*\n"
+        "G37*\n"
+        "M02*\n",
+    )
+
+    region = GerberRS274XParser("F.Cu", strict=True).parse(path).regions[0]
+
+    assert len(region.holes) == 1
+    assert region_shape(region).area == pytest.approx(84.0)
+    assert min(point.x for point in region.points) == pytest.approx(-10.0)
+    assert max(point.x for point in region.points) == pytest.approx(0.0)
+    assert min(point.y for point in region.points) == pytest.approx(-10.0)
+    assert max(point.y for point in region.points) == pytest.approx(0.0)
+
+
+def test_multiple_cut_in_pairs_remain_fail_closed(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "two_cut_ins.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X120000Y000000D01*\n"
+            "X120000Y120000D01*\n"
+            "X000000Y120000D01*\n"
+            "X000000Y090000D01*\n"
+            "X020000Y090000D01*\n"
+            "X020000Y110000D01*\n"
+            "X040000Y110000D01*\n"
+            "X040000Y090000D01*\n"
+            "X020000Y090000D01*\n"
+            "X000000Y090000D01*\n"
+            "X000000Y030000D01*\n"
+            "X020000Y030000D01*\n"
+            "X020000Y050000D01*\n"
+            "X040000Y050000D01*\n"
+            "X040000Y030000D01*\n"
+            "X020000Y030000D01*\n"
+            "X000000Y030000D01*\n"
+            "X000000Y000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="only one fully-coincident cut-in bridge pair",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
 def test_diagonal_fully_coincident_bridge_is_invalid_cut_in(tmp_path: Path):
