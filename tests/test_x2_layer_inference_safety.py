@@ -29,6 +29,8 @@ def test_valid_x2_file_functions(attribute: str, expected: str) -> None:
         "%TF.FileFunction,Profile*%",
         "%TF.FileFunction,Soldermask,Top,0*%",
         "%TF.FileFunction,Drillmap*%",
+        "%TF.FileFunction*%",
+        "%TF.FileFunction,Copper,L1,,Top*%",
     ],
 )
 def test_present_but_unusable_x2_does_not_fall_back_to_filename(attribute: str) -> None:
