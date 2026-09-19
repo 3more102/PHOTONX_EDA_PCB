@@ -17,6 +17,17 @@ def _review_threshold(name: str, value: float | None) -> float | None:
     return numeric
 
 
+def _add_deduplicated(queue: ReviewQueue, item: ReviewItem) -> None:
+    """Add an item once while still surfacing true stable-ID collisions."""
+
+    existing = queue.get(item.id)
+    if existing is None:
+        queue.add(item)
+        return
+    if existing != item:
+        raise ValueError(f"review item stable ID collision: {item.id}")
+
+
 def build_board_review_queue(
     board: BoardModel,
     *,
@@ -55,7 +66,7 @@ def build_board_review_queue(
                 None,
             )
             target = selectable or f"validation:{issue.code}"
-            queue.add(
+            _add_deduplicated(queue,
                 ReviewItem(
                     stable_id(
                         "review",
@@ -192,7 +203,7 @@ def build_board_review_queue(
                 if diagnostic.line is not None
                 else diagnostic.path
             )
-            queue.add(
+            _add_deduplicated(queue,
                 ReviewItem(
                     stable_id(
                         "review",
