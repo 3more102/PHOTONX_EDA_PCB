@@ -1,5 +1,5 @@
 from __future__ import annotations
-import shutil,subprocess,uuid
+import re,shutil,subprocess,uuid
 from pathlib import Path
 from math import isfinite
 from ..models import BoardModel
@@ -9,6 +9,28 @@ from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
 def _u(name:str)->str:return str(uuid.uuid5(uuid.NAMESPACE_URL,"https://photonx.local/"+name))
 def _q(text:str)->str:return '"'+text.replace("\\","\\\\").replace('"','\\"').replace("\n","\\n").replace("\r","\\r")+'"'
+
+
+_INNER_COPPER_LAYER_RE=re.compile(r"^In([1-9]|[12][0-9]|30)\.Cu$")
+
+def _inner_copper_layers(board):
+    observed={str(getattr(obj,"layer","")) for obj in [*board.tracks,*board.pads,*getattr(board,"regions",())]}
+    indices=[]
+    for name in observed:
+        match=_INNER_COPPER_LAYER_RE.fullmatch(name)
+        if match:indices.append(int(match.group(1)))
+    highest=max(indices,default=0)
+    return tuple((index,f"In{index}.Cu") for index in range(1,highest+1))
+
+def _declared_copper_layer_names(board):
+    return {"F.Cu","B.Cu"} | {name for _,name in _inner_copper_layers(board)}
+
+def _copper_layer_lines(board):
+    return [
+        '    (0 "F.Cu" signal)',
+        *(f'    ({ordinal} "{name}" signal)' for ordinal,name in _inner_copper_layers(board)),
+        '    (31 "B.Cu" signal)',
+    ]
 
 def _pad_export_layers(pad):
     layer=str(pad.layer)
@@ -84,6 +106,7 @@ def _region_points(region):
 
 def _region_lines(board,net_num,report):
     lines=[]
+    declared_copper_layers=_declared_copper_layer_names(board)
     for region in getattr(board,"regions",()):
         if getattr(region,"holes",()):
             _record_region_skip(
@@ -93,12 +116,12 @@ def _region_lines(board,net_num,report):
                 "copper region contains one or more holes; exact KiCad zone-hole export is not implemented",
             )
             continue
-        if region.layer not in {"F.Cu","B.Cu"}:
+        if region.layer not in declared_copper_layers:
             _record_region_skip(
                 report,
                 region,
                 "KICAD_COPPER_REGION_LAYER_UNSUPPORTED",
-                f"copper region layer {region.layer!r} is not declared by the current KiCad exporter",
+                f"copper region layer {region.layer!r} is not a declared canonical KiCad copper layer",
             )
             continue
         points=_region_points(region)
@@ -161,7 +184,7 @@ def _slot_lines(board,net_num,report):
 
 def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadExportReport]:
     p=Path(path);p.parent.mkdir(parents=True,exist_ok=True);report=KicadExportReport();net_num={net.id:i+1 for i,net in enumerate(board.nets)}
-    lines=['(kicad_pcb (version 20240108) (generator "photonx_eda_pcb")','  (general (thickness 1.6))','  (paper "A4")','  (layers','    (0 "F.Cu" signal)','    (31 "B.Cu" signal)','    (36 "B.SilkS" user "b.silkscreen")','    (37 "F.SilkS" user "f.silkscreen")','    (44 "Edge.Cuts" user)','  )','  (setup (pad_to_mask_clearance 0))','  (net 0 "")']
+    lines=['(kicad_pcb (version 20240108) (generator "photonx_eda_pcb")','  (general (thickness 1.6))','  (paper "A4")','  (layers',*_copper_layer_lines(board),'    (36 "B.SilkS" user "b.silkscreen")','    (37 "F.SilkS" user "f.silkscreen")','    (44 "Edge.Cuts" user)','  )','  (setup (pad_to_mask_clearance 0))','  (net 0 "")']
     for net in board.nets:lines.append(f'  (net {net_num[net.id]} {_q(net.label or net.id)})')
     lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));lines.extend(_region_lines(board,net_num,report))
     for trk in board.tracks:
