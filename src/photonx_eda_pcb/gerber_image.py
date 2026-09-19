@@ -61,6 +61,20 @@ class TrackPolygonization:
     approximated: bool
 
 
+@dataclass(frozen=True)
+class ApertureTrackPolygonization:
+    """Polygonal linear D01 sweep for a centered C/R/O aperture."""
+
+    geometry: Polygon
+    shape: str
+    size_x: float
+    size_y: float
+    length_mm: float
+    curved_segments: int
+    max_chord_error_mm: float
+    approximated: bool
+
+
 def polygonize_track(
     start_x: float,
     start_y: float,
@@ -136,6 +150,105 @@ def polygonize_track(
         curved_segments=capsule.curved_segments,
         max_chord_error_mm=capsule.max_chord_error_mm,
         approximated=True,
+    )
+
+
+def polygonize_aperture_track(
+    start_x: float,
+    start_y: float,
+    end_x: float,
+    end_y: float,
+    size_x: float,
+    size_y: float,
+    shape: str,
+    *,
+    max_chord_error_mm: float = 0.005,
+    max_arc_segments: int = 4096,
+) -> ApertureTrackPolygonization:
+    """Return the swept image of a centered C/R/O aperture along a line.
+
+    Rectangular apertures are exact. Circular and obround curved boundaries use
+    the same deterministic inscribed-chord policy as flash polygonization.
+    The sweep of a convex aperture along a line segment is the convex hull of
+    the aperture translated to the two segment endpoints.
+    """
+
+    x0 = float(start_x)
+    y0 = float(start_y)
+    x1 = float(end_x)
+    y1 = float(end_y)
+    sx = float(size_x)
+    sy = float(size_y)
+    kind = str(shape).upper()
+
+    if sx <= 0.0 or sy <= 0.0:
+        raise ValueError("Gerber aperture-track dimensions must be positive")
+    if kind not in {"C", "R", "O"}:
+        raise ValueError(
+            f"unsupported Gerber aperture shape for track polygonization: {kind!r}"
+        )
+
+    length = hypot(x1 - x0, y1 - y0)
+    if kind == "C":
+        if not isclose(sx, sy, rel_tol=1e-12, abs_tol=1e-12):
+            raise ValueError("circular Gerber aperture track must have equal X/Y dimensions")
+        track = polygonize_track(
+            x0,
+            y0,
+            x1,
+            y1,
+            sx,
+            max_chord_error_mm=max_chord_error_mm,
+            max_arc_segments=max_arc_segments,
+        )
+        return ApertureTrackPolygonization(
+            geometry=track.geometry,
+            shape=kind,
+            size_x=sx,
+            size_y=sy,
+            length_mm=track.length_mm,
+            curved_segments=track.curved_segments,
+            max_chord_error_mm=track.max_chord_error_mm,
+            approximated=track.approximated,
+        )
+
+    start_flash = polygonize_flash(
+        x0,
+        y0,
+        sx,
+        sy,
+        kind,
+        max_chord_error_mm=max_chord_error_mm,
+        max_arc_segments=max_arc_segments,
+    )
+    if length <= 1e-15:
+        geometry = start_flash.geometry
+    else:
+        end_flash = polygonize_flash(
+            x1,
+            y1,
+            sx,
+            sy,
+            kind,
+            max_chord_error_mm=max_chord_error_mm,
+            max_arc_segments=max_arc_segments,
+        )
+        geometry = start_flash.geometry.union(end_flash.geometry).convex_hull
+
+    if not isinstance(geometry, Polygon):
+        raise ValueError("Gerber aperture-track sweep produced non-polygonal geometry")
+    if geometry.is_empty or float(geometry.area) <= 0.0 or not geometry.is_valid:
+        raise ValueError("Gerber aperture-track polygonization produced invalid geometry")
+
+    return ApertureTrackPolygonization(
+        geometry=geometry,
+        shape=kind,
+        size_x=sx,
+        size_y=sy,
+        length_mm=length,
+        curved_segments=start_flash.curved_segments,
+        max_chord_error_mm=start_flash.max_chord_error_mm,
+        approximated=start_flash.approximated,
     )
 
 
