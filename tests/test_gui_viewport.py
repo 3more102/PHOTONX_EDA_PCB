@@ -73,6 +73,16 @@ def test_fit_viewport_centers_board_with_padding():
     assert fitted == (10.0, 60.0, 10.0)
 
 
+def test_fit_viewport_can_zoom_below_legacy_two_x_floor():
+    board = BoardModel(
+        outline=[OutlineSegment("O1", Point(0, 0), Point(1000, 2000))]
+    )
+
+    fitted = fit_viewport(board, 220, 220, padding=10)
+
+    assert fitted == (0.1, 60.0, 10.0)
+
+
 def test_empty_board_has_no_bounds_or_fit():
     board = BoardModel()
 
