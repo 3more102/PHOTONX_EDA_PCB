@@ -35,6 +35,18 @@ Deprecated `SF` scales A/X and B/Y coordinate data only. Aperture dimensions and
 
 Deprecated `OF` applies an absolute translation in the active MO units to the complete image. The transformation order follows the legacy Gerber rule independently of command appearance: MI is applied first, then SF, then OF translation, then IR rotation.
 
+## Aperture graphics-state transforms
+
+Modern Gerber `LM`, `LR`, and `LS` are modal object-creation transforms and are applied to the original current aperture rather than cumulatively mutating aperture definitions. For the current exact C/R/O geometry subset:
+
+- `LMN/LMX/LMY/LMXY` are exact because supported standard apertures and reduced simple macros are centered and mirror-symmetric;
+- `LR` accepts any finite angle for circular apertures, where rotation is geometry-invariant;
+- rectangular and obround flashes are exact for rotations in 90-degree steps, swapping X/Y extents for 90/270 degrees;
+- `LS` accepts any finite factor greater than zero and scales aperture dimensions, linear draw width, and circular-arc draw width;
+- non-orthogonal rectangular/obround flashes fail closed because the current `PadCandidate` model cannot represent a rotated axis-aligned shape exactly.
+
+The transform state can be changed multiple times. Each new LM/LR/LS command replaces that parameter's previous value, matching the Gerber graphics-state model. Active non-default states are recorded in provenance and deterministic IDs.
+
 ## Deliberately unsupported
 
 The production parser still rejects or diagnoses:
