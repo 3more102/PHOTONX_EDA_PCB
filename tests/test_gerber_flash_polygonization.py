@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from photonx_eda_pcb.gerber_image import polygonize_flash
+from photonx_eda_pcb.gerber_image import polygonize_flash, polygonize_rotated_flash
 
 
 def test_rectangular_flash_polygonization_is_exact():
@@ -81,3 +81,72 @@ def test_flash_polygonization_is_deterministic():
 
     assert first == second
     assert first.geometry.equals_exact(second.geometry, tolerance=0.0)
+
+
+def test_rotated_rectangular_flash_remains_exact():
+    result = polygonize_rotated_flash(
+        0.0,
+        0.0,
+        4.0,
+        2.0,
+        "R",
+        rotation_deg=45.0,
+    )
+
+    assert not result.approximated
+    assert result.curved_segments == 0
+    assert result.geometry.is_valid
+    assert result.geometry.area == pytest.approx(8.0)
+    extent = 3.0 * math.sqrt(2.0)
+    assert result.geometry.bounds == pytest.approx(
+        (-extent / 2.0, -extent / 2.0, extent / 2.0, extent / 2.0)
+    )
+
+
+def test_rotated_obround_flash_retains_chord_error_metadata():
+    result = polygonize_rotated_flash(
+        1.0,
+        -2.0,
+        4.0,
+        2.0,
+        "O",
+        rotation_deg=33.25,
+    )
+
+    assert result.approximated
+    assert result.curved_segments > 0
+    assert result.max_chord_error_mm == pytest.approx(0.005)
+    assert result.geometry.is_valid
+
+
+def test_rotated_flash_normalizes_rotation_and_is_deterministic():
+    first = polygonize_rotated_flash(
+        0.0,
+        0.0,
+        4.0,
+        2.0,
+        "R",
+        rotation_deg=405.0,
+    )
+    second = polygonize_rotated_flash(
+        0.0,
+        0.0,
+        4.0,
+        2.0,
+        "R",
+        rotation_deg=45.0,
+    )
+
+    assert first.geometry.equals_exact(second.geometry, tolerance=0.0)
+
+
+def test_rotated_flash_rejects_non_finite_rotation():
+    with pytest.raises(ValueError, match="rotation must be finite"):
+        polygonize_rotated_flash(
+            0.0,
+            0.0,
+            4.0,
+            2.0,
+            "R",
+            rotation_deg=math.inf,
+        )
