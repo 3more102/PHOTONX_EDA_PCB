@@ -53,6 +53,13 @@ def test_macro_variable_zero_index_is_invalid():
         parse_macro_body("$0=1*1,1,1,0,0")
 
 
+def test_macro_variable_zero_index_reference_is_invalid():
+    statements = parse_macro_body("1,1,$0+1,0,0")
+
+    with pytest.raises(ValueError, match="positive integer"):
+        evaluate_macro(statements)
+
+
 def test_production_parser_supports_macro_variable_definition(tmp_path: Path):
     path = _write(
         tmp_path,
