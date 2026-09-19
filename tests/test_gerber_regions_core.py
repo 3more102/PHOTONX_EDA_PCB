@@ -356,7 +356,7 @@ def test_region_is_indexed_and_serialized_by_board_model():
     assert board.to_dict()["regions"][0]["id"] == "R1"
 
 
-def test_kicad_export_reports_region_omission_instead_of_silent_drop(tmp_path: Path):
+def test_kicad_export_preserves_simple_region_as_zone(tmp_path: Path):
     region = CopperRegion(
         "R1",
         (Point(0, 0), Point(1, 0), Point(0, 1), Point(0, 0)),
@@ -369,13 +369,12 @@ def test_kicad_export_reports_region_omission_instead_of_silent_drop(tmp_path: P
     )
 
     assert path.exists()
-    assert report.skipped_regions == 1
-    assert report.skipped_region_ids == ["R1"]
-    assert any(
-        issue.code == "KICAD_COPPER_REGION_UNSUPPORTED"
-        and issue.object_id == "R1"
-        for issue in report.issues
-    )
+    assert report.exported_regions == 1
+    assert report.exported_region_ids == ["R1"]
+    assert report.skipped_regions == 0
+    text = path.read_text(encoding="utf-8")
+    assert "(zone" in text
+    assert '(name "PHOTONX:R1")' in text
 
 
 def test_two_nonoverlapping_contours_are_filled_individually(tmp_path: Path):
