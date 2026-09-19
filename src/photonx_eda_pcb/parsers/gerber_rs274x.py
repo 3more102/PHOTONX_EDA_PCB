@@ -2875,6 +2875,20 @@ class GerberRS274XParser:
             )
 
         aperture = self.apertures[self.current_aperture]
+        if aperture.hole_diameter is not None:
+            self._fail_or_warn(
+                path,
+                line_no,
+                line,
+                "UNSUPPORTED_GERBER_APERTURE_HOLE_DRAW",
+                (
+                    "G02/G03 interpolation with a holed aperture is not yet "
+                    "modeled safely"
+                ),
+                out,
+            )
+            self.current = nxt
+            return
         if aperture.shape != "C":
             self._fail_or_warn(
                 path,
@@ -3911,6 +3925,20 @@ class GerberRS274XParser:
                 src = SourceRef(str(p), line_no, line)
 
                 if operation == "1":
+                    if ap.hole_diameter is not None:
+                        self._fail_or_warn(
+                            p,
+                            line_no,
+                            line,
+                            "UNSUPPORTED_GERBER_APERTURE_HOLE_DRAW",
+                            (
+                                "linear D01 draw with a holed aperture is not yet "
+                                "modeled safely"
+                            ),
+                            out,
+                        )
+                        self.current = nxt
+                        continue
                     if ap.shape == "C":
                         width = ap.x * self.aperture_scale
 
@@ -4092,6 +4120,142 @@ class GerberRS274XParser:
                             )
 
                 elif operation == "3":
+                    if ap.hole_diameter is not None:
+                        if self.layer == "Edge.Cuts":
+                            self._fail_or_warn(
+                                p,
+                                line_no,
+                                line,
+                                "UNSUPPORTED_GERBER_APERTURE_HOLE_EDGE",
+                                (
+                                    "holed D03 flashes are supported only on "
+                                    "material layers"
+                                ),
+                                out,
+                            )
+                            self.current = nxt
+                            continue
+
+                        scaled_x = ap.x * self.aperture_scale
+                        scaled_y = ap.y * self.aperture_scale
+                        scaled_hole = ap.hole_diameter * self.aperture_scale
+                        output_aperture_rotation = (
+                            self.aperture_rotation_deg + self.image_rotation_deg
+                        ) % 360.0
+
+                        for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
+                            center = self._transform_output_point(
+                                nxt, dx_mm, dy_mm
+                            )
+                            try:
+                                polygonization = polygonize_holed_flash(
+                                    center.x,
+                                    center.y,
+                                    scaled_x,
+                                    scaled_y,
+                                    ap.shape,
+                                    scaled_hole,
+                                    rotation_deg=output_aperture_rotation,
+                                    max_chord_error_mm=_ARC_MAX_CHORD_ERROR_MM,
+                                    max_arc_segments=_MAX_ARC_SEGMENTS,
+                                )
+                                components = canonical_polygon_components(
+                                    polygonization.geometry
+                                )
+                            except (TypeError, ValueError) as exc:
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "GERBER_HOLED_FLASH_INVALID",
+                                    f"holed flash polygonization failed: {exc}",
+                                    out,
+                                )
+                                continue
+
+                            if len(components) != 1 or len(components[0].holes) != 1:
+                                self._parse_error_or_warn(
+                                    p,
+                                    line_no,
+                                    line,
+                                    "GERBER_HOLED_FLASH_INVALID",
+                                    (
+                                        "holed flash did not produce one connected "
+                                        "polygon with one centered hole"
+                                    ),
+                                    out,
+                                )
+                                continue
+
+                            component = components[0]
+                            shell = tuple(Point(x, y) for x, y in component.shell)
+                            holes = tuple(
+                                tuple(Point(x, y) for x, y in ring)
+                                for ring in component.holes
+                            )
+                            id_parts = [
+                                p.name,
+                                line_no,
+                                "holed_flash",
+                                nxt.x,
+                                nxt.y,
+                                ap.code,
+                                ap.shape,
+                                scaled_x,
+                                scaled_y,
+                                scaled_hole,
+                                output_aperture_rotation,
+                                self.layer,
+                            ]
+                            id_parts.extend(self._image_transform_id_parts())
+                            id_parts.extend(self._aperture_transform_id_parts())
+                            if self.step_repeat is not None:
+                                id_parts.extend(["sr", x_index, y_index])
+                            obj_id = stable_id("reg", *id_parts)
+                            prov = self._step_repeat_provenance(
+                                src, x_index or 0, y_index or 0, dx_mm, dy_mm
+                            )
+                            self._add_aperture_transform_provenance(prov)
+                            prov.add_evidence(
+                                Evidence(
+                                    "gerber_aperture_hole",
+                                    (
+                                        f"outer_shape={ap.shape}; "
+                                        f"size_x_mm={scaled_x:.12g}; "
+                                        f"size_y_mm={scaled_y:.12g}; "
+                                        f"hole_diameter_mm={scaled_hole:.12g}; "
+                                        f"rotation_deg_ccw="
+                                        f"{output_aperture_rotation:.12g}; "
+                                        "hole_semantics=transparent; "
+                                        f"outer_curved_segments="
+                                        f"{polygonization.outer_curved_segments}; "
+                                        f"hole_curved_segments="
+                                        f"{polygonization.hole_curved_segments}; "
+                                        f"max_chord_error_mm="
+                                        f"{polygonization.max_chord_error_mm:.12g}; "
+                                        f"approximated="
+                                        f"{str(polygonization.approximated).lower()}"
+                                    ),
+                                    1.0,
+                                    src,
+                                )
+                            )
+                            region = CopperRegion(
+                                obj_id,
+                                shell,
+                                self.layer,
+                                provenance=prov,
+                                holes=holes,
+                            )
+                            out.regions.append(region)
+                            self.material_image_operations.append(
+                                self.layer_polarity,
+                                region,
+                            )
+
+                        self.current = nxt
+                        continue
+
                     scaled_x = ap.x * self.aperture_scale
                     scaled_y = ap.y * self.aperture_scale
                     orthogonal_size = (
