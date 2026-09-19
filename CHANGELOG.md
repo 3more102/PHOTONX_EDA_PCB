@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Added exact reduction of single positive origin-centered, zero-rotation, axis-aligned Code-20 vector-line Gerber macros (plus the deprecated Code-2 alias) to rectangular apertures; diagonal, offset, rotated, zero-width, and zero-length cases remain fail-closed.
+- Added exact deprecated Code-22 lower-left Gerber macro reduction for positive-size rectangles centered on the macro origin, including 0/90/180/270-degree rotations; non-centered, non-orthogonal, zero-size, and exposure-off cases remain fail-closed.
+- Expanded exact rectangular macro normalization so centered Code-20/Code-2 vector-line and Code-21 center-line primitives accept 90-degree-step rotations, and origin-centered circles accept rotation as a geometry-invariant parameter.
+- Added exact reduction of single positive origin-centered, axis-aligned Code-20 vector-line Gerber macros (plus the deprecated Code-2 alias) to rectangular apertures; diagonal, offset, non-orthogonally rotated, zero-width, and zero-length cases remain fail-closed.
 - Added legacy Gerber incremental coordinate support for `G91` and FS `I` notation: X/Y values now accumulate from the preceding coordinate position, `G90`/FS `A` restore absolute notation, and arc I/J values remain center offsets from the arc start.
 - Added exact reduction of single positive origin-centered, zero-rotation Code-21 center-line Gerber macros to rectangular apertures, with active-unit conversion and fail-closed boundaries.
 - Hardened Gerber unit semantics: dimensional data now requires explicit `MO` or supported legacy `G70/G71`, and conflicting unit switches fail closed with permissive file-geometry suppression instead of defaulting to millimeters or mixing unit systems.
