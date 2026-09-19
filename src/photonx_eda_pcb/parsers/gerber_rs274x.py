@@ -1626,6 +1626,65 @@ class GerberRS274XParser:
             )
             return
 
+        if primitive["kind"] == "polygon":
+            if len(values) != 6:
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "INVALID_GERBER_APERTURE_MACRO",
+                    f"polygon aperture macro {name!r} requires six modifiers",
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            exposure, vertices_value, center_x, center_y, diameter, rotation = values
+            centered = (
+                isfinite(center_x)
+                and isfinite(center_y)
+                and abs(center_x) <= 1e-12
+                and abs(center_y) <= 1e-12
+            )
+            valid_vertices = (
+                isfinite(vertices_value)
+                and float(vertices_value).is_integer()
+                and 3 <= int(vertices_value) <= 12
+            )
+            if (
+                exposure != 1
+                or not valid_vertices
+                or not centered
+                or not isfinite(diameter)
+                or diameter <= 0
+                or not isfinite(rotation)
+            ):
+                self._fail_or_warn(
+                    path,
+                    line_no,
+                    line,
+                    "UNSUPPORTED_GERBER_APERTURE_MACRO",
+                    (
+                        f"polygon aperture macro {name!r} requires positive exposure, "
+                        "an integer vertex count in 3..12, origin-centered geometry, "
+                        "a positive circumscribed diameter, and finite rotation"
+                    ),
+                    out,
+                )
+                self.unsupported_apertures.add(code)
+                return
+
+            diameter_mm = to_mm(float(diameter), self.units)
+            self.apertures[code] = Aperture(
+                code,
+                "P",
+                diameter_mm,
+                diameter_mm,
+                polygon_vertices=int(vertices_value),
+                polygon_rotation_deg=float(rotation) % 360.0,
+            )
+            return
+
         self._fail_or_warn(
             path,
             line_no,
