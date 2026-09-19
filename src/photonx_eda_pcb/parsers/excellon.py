@@ -68,6 +68,15 @@ class ExcellonParser:
         except ValueError as exc:
             raise ParseError(f"Excellon {exc}") from exc
 
+    def _iter_limited_lines(self, path: Path):
+        with path.open(encoding="utf-8-sig", errors="strict") as stream:
+            for line_no, raw in enumerate(stream, 1):
+                try:
+                    self.limits.check_line(raw.rstrip("\r\n"), line_no)
+                except ValueError as exc:
+                    raise ParseError(f"{path}:{line_no}: {exc}") from exc
+                yield line_no, raw
+
     def _disable_geometry(self,out:ExcellonResult):
         self.geometry_enabled=False
         out.drills.clear();out.slots.clear();out.routes.clear()
@@ -291,12 +300,7 @@ class ExcellonParser:
 
     def parse(self,path:str|Path)->ExcellonResult:
         p=Path(path);out=ExcellonResult()
-        text=p.read_text(encoding="utf-8-sig",errors="strict")
-        try:
-            self.limits.check_text(text)
-        except ValueError as exc:
-            raise ParseError(f"{p}: {exc}") from exc
-        for line_no,raw in enumerate(text.splitlines(),1):
+        for line_no,raw in self._iter_limited_lines(p):
             line=raw.strip().upper()
             if not line or line in {"M48","%","M30","M95"} or line.startswith(";"):continue
             if line.startswith("METRIC") or line == "M71":
