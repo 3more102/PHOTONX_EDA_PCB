@@ -83,7 +83,6 @@ The generic input path also handles several common real-world variations:
 - legacy AS axis-select forms are accepted as output-device-only metadata because they do not alter CAD-to-CAM image geometry;
 - legacy IN/LN names are preserved as diagnostic comment metadata; G55 and M01 are accepted as no-image-effect commands, while M00 terminates parsing like M02;
 - deprecated whole-image Gerber IR rotation at the specification-defined 0/90/180/270-degree angles, applied exactly to flashes, linear/arc geometry, outlines, and step-repeat instances;
-- identity legacy Gerber SF/AS/IP/MI/OF transform statements; non-identity SF remains fail-closed;
 - Excellon M71/M72 metric/inch selection;
 - Excellon tool definitions with feed/spindle suffixes;
 - standard XNC G02/G03 routed arcs using explicit X/Y endpoints plus A radius
@@ -112,7 +111,7 @@ sniff window are ignored by content detection.
 ### Fail-closed boundaries
 
 PHOTONX still rejects or explicitly diagnoses semantics that would be unsafe to
-guess, including unsupported legacy Gerber AS/IP/SF transforms, Gerber regions/complex aperture macros not supported by the production
+guess, including unsupported legacy Gerber IP semantics and anisotropic-SF circular interpolation, Gerber regions/complex aperture macros not supported by the production
 geometry path, aperture blocks, and Excellon routed-arc dialects outside the bounded G02/G03 I/J or standard XNC X/Y/A-radius subsets. An input being discovered does not mean
 every construct inside it is automatically accepted.
 
