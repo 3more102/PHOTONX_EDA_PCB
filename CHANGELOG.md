@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- Added bounded dark single-contour linear Gerber G36/G37 region reconstruction as exact copper polygons, with modal/incremental coordinates, step-repeat, supported whole-image transforms, source provenance, connectivity/DRC integration, validation, and explicit KiCad omission reporting; arc-bounded, multi-contour/hole, clear-polarity, and Edge.Cuts regions remain fail-closed.
+- Added G75 multi-quadrant G02/G03 circular boundaries inside dark single-contour G36/G37 regions with deterministic 0.005 mm output chord-error-bounded tessellation, incremental endpoint support, anisotropic SF-compatible boundary transforms, and explicit arc provenance; G74 region arcs remain fail-closed.
+- Corrected region closure semantics to match the Gerber specification: G37 no longer implicitly closes an open contour, and zero-length contour segments are rejected.
+
+- Added bounded dark single-contour Gerber G36/G37 region reconstruction as copper polygons, initially for linear boundaries and now extended to G75 circular boundaries; G74 arc boundaries, multi-contour/hole, clear-polarity, and Edge.Cuts regions remain fail-closed.
 - Hardened legacy Gerber header placement: AS/IN/MI/SF/OF/IR commands are now considered late after the first coordinate statement, including non-emitting D02 moves, rather than only after physical geometry has already been emitted.
 - Preflight now classifies LATE_GERBER_* and DUPLICATE_GERBER_* diagnostics as strict blockers so parser-invalid header state cannot be reported as ready for strict reconstruction.
 - Expanded production Gerber aperture-transform support from identity-only to an exact modal LM/LR/LS subset: mirror-symmetric C/R/O apertures accept all LM states, circles accept arbitrary finite LR, rectangular/obround flashes accept 90-degree-step LR, and positive LS scales flash dimensions plus circular draw/arc widths. Non-orthogonal R/O flashes remain fail-closed.
@@ -57,7 +60,6 @@
 - Added explicit `gerber_arc_tessellation` provenance evidence and step-repeat composition for generated arc segments.
 - Added safe production support for single positive centered-circle Gerber aperture macros, including parameterized diameters and active-unit conversion.
 - Added bounded legacy G74 single-quadrant G02/G03 arc support using unsigned I/J distances, four-candidate center resolution, <=90-degree sweep enforcement, and fail-closed ambiguity handling.
-- Kept Gerber regions, complex aperture macros, and aperture blocks explicitly unsupported.
 - Added standard XNC G02/G03 X/Y/A-radius routed-arc support with <=180-degree center resolution, deterministic tessellation, and fail-closed invalid geometry.
 
 ## 0.2.0

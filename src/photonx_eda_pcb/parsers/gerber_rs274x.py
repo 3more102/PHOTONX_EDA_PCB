@@ -132,7 +132,7 @@ class GerberRS274XParser:
 
     Supported: FS, MO, ADD(C/R/O), Dnn selection, G01/D01/D02/D03,
     bounded G74 single-quadrant and G75 multi-quadrant G02/G03 circular
-    interpolation with circular apertures, single-contour dark linear
+    interpolation with circular apertures, single-contour dark linear/G75
     G36/G37 regions, G04, M02, and standard linear step-and-repeat
     (%SR...*% / %SR*%).
 
@@ -157,6 +157,7 @@ class GerberRS274XParser:
         self.current_operation: str | None = None
         self.region_state = RegionState()
         self.region_sources: list[SourceRef] = []
+        self.region_arc_evidence: list[Evidence] = []
         self.region_start_line: int | None = None
         self.file_polarity: str | None = None
         self.layer_polarity = "dark"
@@ -1561,6 +1562,7 @@ class GerberRS274XParser:
     def _abort_region(self) -> None:
         self.region_state.abort()
         self.region_sources.clear()
+        self.region_arc_evidence.clear()
         self.region_start_line = None
 
     def _region_fail(
@@ -1573,6 +1575,18 @@ class GerberRS274XParser:
         out: GerberLayerResult,
     ) -> None:
         self._fail_or_warn(path, line_no, raw, code, message, out)
+        self._abort_region()
+
+    def _region_parse_fail(
+        self,
+        path: Path,
+        line_no: int,
+        raw: str,
+        code: str,
+        message: str,
+        out: GerberLayerResult,
+    ) -> None:
+        self._parse_error_or_warn(path, line_no, raw, code, message, out)
         self._abort_region()
 
     def _begin_region(
@@ -1614,6 +1628,7 @@ class GerberRS274XParser:
             return
         self.region_state.begin()
         self.region_sources = [SourceRef(str(path), line_no, line)]
+        self.region_arc_evidence = []
         self.region_start_line = line_no
 
     def _region_coordinate(
@@ -1630,6 +1645,7 @@ class GerberRS274XParser:
         if op is not None:
             self.current_operation = op
         nxt = self._coordinate_point(x_raw, y_raw)
+        self.image_body_started = True
         src = SourceRef(str(path), line_no, line)
 
         if operation == "2":
@@ -1655,14 +1671,23 @@ class GerberRS274XParser:
                     path,
                     line_no,
                     line,
-                    "GERBER_REGION_ARC_UNSUPPORTED",
-                    "only linear interpolation is supported inside regions",
+                    "GERBER_REGION_ARC_DISPATCH_ERROR",
+                    "circular region draw reached the linear-region handler",
                     out,
                 )
                 self.current = nxt
                 return
             if not self.region_state.vertices:
-                self.region_state.add(self.current.x, self.current.y)
+                self._region_parse_fail(
+                    path,
+                    line_no,
+                    line,
+                    "GERBER_REGION_START_MOVE_REQUIRED",
+                    "a region contour must begin with D02 before its first D01 segment",
+                    out,
+                )
+                self.current = nxt
+                return
             self.region_state.add(nxt.x, nxt.y)
             self.region_sources.append(src)
             self.current = nxt
@@ -1674,19 +1699,175 @@ class GerberRS274XParser:
                 line_no,
                 line,
                 "GERBER_REGION_FLASH_UNSUPPORTED",
-                "D03 flashes are not valid in the supported region subset",
+                "D03 flashes are not valid inside a Gerber region statement",
                 out,
             )
             self.current = nxt
             return
 
-        self._region_fail(
+        self._region_parse_fail(
             path,
             line_no,
             line,
             "GERBER_REGION_DCODE_REQUIRED",
             "region coordinates require D01 or D02, either explicit or modal",
             out,
+        )
+        self.current = nxt
+
+    def _region_arc_coordinate(
+        self,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+        x_raw: str | None,
+        y_raw: str | None,
+        i_raw: str | None,
+        j_raw: str | None,
+        op: str | None,
+    ) -> None:
+        operation = op or self.current_operation
+        if op is not None:
+            self.current_operation = op
+        nxt = self._coordinate_point(x_raw, y_raw)
+        self.image_body_started = True
+
+        if operation == "2":
+            self._region_coordinate(
+                path,
+                line_no,
+                line,
+                out,
+                x_raw,
+                y_raw,
+                op,
+            )
+            return
+
+        if operation != "1":
+            self._region_parse_fail(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_ARC_DCODE_REQUIRED",
+                "circular region interpolation requires D01",
+                out,
+            )
+            self.current = nxt
+            return
+
+        if self.interpolation not in {"cw_arc", "ccw_arc"}:
+            self._region_parse_fail(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_ARC_MODE_MISSING",
+                "region I/J offsets require active G02 or G03 interpolation",
+                out,
+            )
+            self.current = nxt
+            return
+
+        if self.quadrant_mode != "multi":
+            self._region_fail(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_ARC_QUADRANT_UNSUPPORTED",
+                "region arcs currently require G75 multi-quadrant mode before G36",
+                out,
+            )
+            self.current = nxt
+            return
+
+        if i_raw is None and j_raw is None:
+            self._region_parse_fail(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_ARC_CENTER_MISSING",
+                "G75 region arc requires I and/or J center offset data",
+                out,
+            )
+            self.current = nxt
+            return
+
+        i_mm = 0.0 if i_raw is None else self._decode(i_raw, "x")
+        j_mm = 0.0 if j_raw is None else self._decode(j_raw, "y")
+        center = Point(self.current.x + i_mm, self.current.y + j_mm)
+        clockwise = self.interpolation == "cw_arc"
+        spec = ArcSpec(
+            GeoPoint(self.current.x, self.current.y),
+            GeoPoint(nxt.x, nxt.y),
+            GeoPoint(center.x, center.y),
+            clockwise=clockwise,
+        )
+        radius_tolerance = self._arc_radius_tolerance_mm()
+
+        try:
+            radius = validate_arc(
+                spec,
+                rel_tol=1e-6,
+                abs_tol=radius_tolerance,
+            )
+            output_scale = max(abs(self.scale_a), abs(self.scale_b))
+            source_chord_error = _ARC_MAX_CHORD_ERROR_MM / output_scale
+            segment_count = segments_for_chord_error(
+                spec,
+                source_chord_error,
+                max_segments=_MAX_ARC_SEGMENTS,
+                rel_tol=1e-6,
+                abs_tol=radius_tolerance,
+            )
+            arc_vertices = arc_points(
+                spec,
+                segments=segment_count,
+                rel_tol=1e-6,
+                abs_tol=radius_tolerance,
+            )
+        except ValueError as exc:
+            self._region_parse_fail(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_ARC_INVALID",
+                f"invalid G75 region arc geometry ({exc})",
+                out,
+            )
+            self.current = nxt
+            return
+
+        if not self.region_state.vertices:
+            self._region_parse_fail(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_START_MOVE_REQUIRED",
+                "a region contour must begin with D02 before its first circular D01 segment",
+                out,
+            )
+            self.current = nxt
+            return
+        for vertex in arc_vertices[1:]:
+            self.region_state.add(vertex.x, vertex.y)
+
+        src = SourceRef(str(path), line_no, line)
+        self.region_sources.append(src)
+        self.region_arc_evidence.append(
+            Evidence(
+                "gerber_region_arc_tessellation",
+                (
+                    f"quadrant_mode=multi; "
+                    f"direction={'CW' if clockwise else 'CCW'}; "
+                    f"source_center_mm=({center.x:.12g},{center.y:.12g}); "
+                    f"source_radius_mm={radius:.12g}; "
+                    f"segments={segment_count}; "
+                    f"max_output_chord_error_mm={_ARC_MAX_CHORD_ERROR_MM:.12g}"
+                ),
+                1.0,
+                src,
+            )
         )
         self.current = nxt
 
@@ -1710,27 +1891,68 @@ class GerberRS274XParser:
 
         raw_vertices = self.region_state.end()
         sources = [*self.region_sources, SourceRef(str(path), line_no, line)]
+        arc_evidence = list(self.region_arc_evidence)
         start_line = self.region_start_line
         self.region_sources = []
+        self.region_arc_evidence = []
         self.region_start_line = None
 
         if not self.image_geometry_enabled:
             return
 
         points = [Point(float(x), float(y)) for x, y in raw_vertices]
-        unique = {(point.x, point.y) for point in points}
+        if len(points) < 2:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_VERTEX_COUNT_INVALID",
+                "region needs a non-empty closed contour",
+                out,
+            )
+            return
+
+        first = points[0]
+        last = points[-1]
+        closure_tol_mm = 1e-9
+        if not (
+            isclose(first.x, last.x, rel_tol=0.0, abs_tol=closure_tol_mm)
+            and isclose(first.y, last.y, rel_tol=0.0, abs_tol=closure_tol_mm)
+        ):
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_NOT_CLOSED",
+                "G37 does not implicitly close a region contour; final point must coincide with its first point",
+                out,
+            )
+            return
+        if last != first:
+            points[-1] = first
+
+        if any(a == b for a, b in zip(points, points[1:])):
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "GERBER_REGION_ZERO_LENGTH_SEGMENT",
+                "zero-length contour segments are not valid in the supported region subset",
+                out,
+            )
+            return
+
+        unique = {(point.x, point.y) for point in points[:-1]}
         if len(unique) < 3:
             self._parse_error_or_warn(
                 path,
                 line_no,
                 line,
                 "GERBER_REGION_VERTEX_COUNT_INVALID",
-                "region needs at least three unique vertices",
+                "region needs at least three unique contour vertices",
                 out,
             )
             return
-        if points[-1] != points[0]:
-            points.append(points[0])
 
         source_region = CopperRegion(
             "validation",
@@ -1749,13 +1971,18 @@ class GerberRS274XParser:
                 line_no,
                 line,
                 "GERBER_REGION_GEOMETRY_INVALID",
-                "region polygon is empty, zero-area, or self-intersecting",
+                "region polygon is empty, zero-area, self-touching, or self-intersecting",
                 out,
             )
             return
 
         coords = tuple((point.x, point.y) for point in points)
         end_src = sources[-1]
+        region_kind = (
+            "linear_g75_single_contour_dark"
+            if arc_evidence
+            else "linear_single_contour_dark"
+        )
         for x_index, y_index, dx_mm, dy_mm in self._iter_repetitions():
             transformed = tuple(
                 self._transform_output_point(point, dx_mm, dy_mm)
@@ -1802,11 +2029,14 @@ class GerberRS274XParser:
             )
             for source in sources:
                 prov.add_source(source)
+            for evidence in arc_evidence:
+                prov.add_evidence(evidence)
             prov.add_evidence(
                 Evidence(
                     "gerber_region",
                     (
-                        f"linear_single_contour_dark; vertices={len(unique)}; "
+                        f"{region_kind}; vertices={len(unique)}; "
+                        f"arc_commands={len(arc_evidence)}; "
                         f"source_area_mm2={float(source_shape.area):.12g}; "
                         f"output_area_mm2={float(transformed_shape.area):.12g}"
                     ),
@@ -2236,11 +2466,62 @@ class GerberRS274XParser:
                 if line in {"G01*", "G1*"}:
                     self.interpolation = "linear"
                     continue
+                if line in {"G02*", "G2*"}:
+                    self.interpolation = "cw_arc"
+                    continue
+                if line in {"G03*", "G3*"}:
+                    self.interpolation = "ccw_arc"
+                    continue
 
                 op_match = _OP_SELECT.match(line)
                 if op_match:
-                    self.current_operation = op_match.group(1)
+                    operation = op_match.group(1)
+                    if operation == "3":
+                        self._region_fail(
+                            p,
+                            line_no,
+                            line,
+                            "GERBER_REGION_FLASH_UNSUPPORTED",
+                            "D03 is not allowed inside a Gerber region statement",
+                            out,
+                        )
+                        continue
+                    self.current_operation = operation
                     continue
+
+                arc_match = _ARC_COORD.match(line)
+                if arc_match:
+                    gcode, x_raw, y_raw, i_raw, j_raw, op = arc_match.groups()
+                    operation = op or self.current_operation
+                    arc_candidate = (
+                        gcode is not None
+                        or i_raw is not None
+                        or j_raw is not None
+                        or (
+                            self.interpolation in {"cw_arc", "ccw_arc"}
+                            and operation == "1"
+                        )
+                    )
+                    if arc_candidate:
+                        if not self._require_units(p, line_no, line, out):
+                            self._abort_region()
+                            continue
+                        if gcode in {"G02", "G2"}:
+                            self.interpolation = "cw_arc"
+                        elif gcode in {"G03", "G3"}:
+                            self.interpolation = "ccw_arc"
+                        self._region_arc_coordinate(
+                            p,
+                            line_no,
+                            line,
+                            out,
+                            x_raw,
+                            y_raw,
+                            i_raw,
+                            j_raw,
+                            op,
+                        )
+                        continue
 
                 coord_match = _COORD.match(line)
                 if coord_match:
@@ -2259,34 +2540,15 @@ class GerberRS274XParser:
                     )
                     continue
 
-                arc_match = _ARC_COORD.match(line)
-                if arc_match:
-                    gcode, x_raw, y_raw, i_raw, j_raw, op = arc_match.groups()
-                    arc_candidate = (
-                        gcode is not None
-                        or i_raw is not None
-                        or j_raw is not None
-                        or self.interpolation in {"cw_arc", "ccw_arc"}
-                    )
-                    if arc_candidate:
-                        if self._require_units(p, line_no, line, out):
-                            self.current = self._coordinate_point(x_raw, y_raw)
-                        self._region_fail(
-                            p,
-                            line_no,
-                            line,
-                            "GERBER_REGION_ARC_UNSUPPORTED",
-                            "arc interpolation or I/J offsets inside regions are not supported",
-                            out,
-                        )
-                        continue
-
                 self._region_fail(
                     p,
                     line_no,
                     line,
                     "GERBER_REGION_UNSUPPORTED_STATEMENT",
-                    "statement is outside the supported linear single-contour region subset",
+                    (
+                        "only D01/D02 and G01/G02/G03 contour commands are "
+                        "supported inside the current region subset"
+                    ),
                     out,
                 )
                 continue

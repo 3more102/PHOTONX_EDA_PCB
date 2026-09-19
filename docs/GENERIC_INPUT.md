@@ -84,7 +84,7 @@ The generic input path also handles several common real-world variations:
 - legacy AS axis-select forms are accepted as output-device-only metadata because they do not alter CAD-to-CAM image geometry; AS/IN/MI/SF/OF/IR header state must appear before the first coordinate statement, including D02 moves;
 - legacy IN/LN names are preserved as diagnostic comment metadata; G55 and M01 are accepted as no-image-effect commands, while M00 terminates parsing like M02;
 - deprecated whole-image Gerber IR rotation at the specification-defined 0/90/180/270-degree angles, applied exactly to flashes, linear/arc geometry, supported regions, outlines, and step-repeat instances;
-- dark single-contour linear G36/G37 Gerber regions, represented as closed copper polygons and composed with supported MI/SF/OF/IR whole-image transforms plus step-repeat;
+- dark single-contour G36/G37 Gerber regions with linear segments plus G75 G02/G03 circular boundaries, represented as closed copper polygons using deterministic chord-error-bounded arc tessellation and composed with supported MI/SF/OF/IR whole-image transforms plus step-repeat;
 - Excellon M71/M72 metric/inch selection;
 - Excellon tool definitions with feed/spindle suffixes;
 - standard XNC G02/G03 routed arcs using explicit X/Y endpoints plus A radius
@@ -113,7 +113,7 @@ sniff window are ignored by content detection.
 ### Fail-closed boundaries
 
 PHOTONX still rejects or explicitly diagnoses semantics that would be unsafe to
-guess, including unsupported legacy Gerber IP semantics and anisotropic-SF circular interpolation, unsupported region forms such as arc-bounded, multi-contour/hole, clear-polarity, or Edge.Cuts regions, complex aperture macros, aperture blocks, and Excellon routed-arc dialects outside the bounded G02/G03 I/J or standard XNC X/Y/A-radius subsets. An input being discovered does not mean
+guess, including unsupported legacy Gerber IP semantics and anisotropic-SF circular interpolation, unsupported region forms such as G74 arc-bounded, multi-contour/hole, clear-polarity, or Edge.Cuts regions, complex aperture macros, aperture blocks, and Excellon routed-arc dialects outside the bounded G02/G03 I/J or standard XNC X/Y/A-radius subsets. An input being discovered does not mean
 every construct inside it is automatically accepted.
 
 
