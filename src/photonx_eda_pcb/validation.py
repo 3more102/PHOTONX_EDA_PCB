@@ -125,7 +125,6 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
                             intersection.geom_type=="Point"
                             and len(shared_keys)==1
                             and key_xy(float(intersection.x),float(intersection.y)) in shared_keys
-                            and degree.get(next(iter(shared_keys)))==2
                         )
                         if allowed_joint:continue
                         r.issues.append(ValidationIssue(
