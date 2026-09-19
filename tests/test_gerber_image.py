@@ -6,6 +6,7 @@ from photonx_eda_pcb.gerber_image import (
     ImageOperation,
     canonical_polygon_components,
     compose_polygon_operations,
+    trace_polygon_operation_contributions,
 )
 
 
@@ -124,3 +125,76 @@ def test_polygon_composition_rejects_sequence_gaps():
 
     with pytest.raises(ValueError, match="contiguous and ordered"):
         compose_polygon_operations(operations)
+
+def test_contribution_trace_removes_erased_dark_material_before_refill():
+    stream = ImageCompositionStream()
+    stream.append("dark", box(0, 0, 10, 10))
+    stream.append("clear", box(2, 2, 8, 8))
+    stream.append("dark", box(4, 4, 6, 6))
+
+    trace = trace_polygon_operation_contributions(stream.operations)
+
+    dark_outer, clear_hole, dark_refill = trace.contributions
+    assert dark_outer.geometry.area == pytest.approx(64.0)
+    assert clear_hole.geometry.length == pytest.approx(24.0)
+    assert dark_refill.geometry.area == pytest.approx(4.0)
+    assert dark_outer.geometry.intersection(box(4, 4, 6, 6)).is_empty
+
+
+def test_contribution_trace_marks_redundant_dark_operation_as_noop():
+    stream = ImageCompositionStream()
+    stream.append("dark", box(0, 0, 10, 10))
+    stream.append("dark", box(2, 2, 4, 4))
+
+    trace = trace_polygon_operation_contributions(stream.operations)
+
+    assert trace.contributions[0].geometry.area == pytest.approx(100.0)
+    assert trace.contributions[1].geometry.is_empty
+    assert trace.image.area == pytest.approx(100.0)
+
+
+def test_contribution_trace_marks_clear_before_dark_as_noop():
+    stream = ImageCompositionStream()
+    stream.append("clear", box(2, 2, 4, 4))
+    stream.append("dark", box(0, 0, 10, 10))
+
+    trace = trace_polygon_operation_contributions(stream.operations)
+
+    assert trace.contributions[0].geometry.is_empty
+    assert trace.contributions[1].geometry.area == pytest.approx(100.0)
+
+
+def test_contribution_trace_marks_duplicate_clear_as_noop():
+    stream = ImageCompositionStream()
+    stream.append("dark", box(0, 0, 10, 10))
+    stream.append("clear", box(2, 2, 4, 4))
+    stream.append("clear", box(2, 2, 4, 4))
+
+    trace = trace_polygon_operation_contributions(stream.operations)
+
+    assert trace.contributions[1].geometry.length == pytest.approx(8.0)
+    assert trace.contributions[2].geometry.is_empty
+
+
+def test_contribution_trace_final_image_matches_normal_composition():
+    stream = ImageCompositionStream()
+    stream.append("dark", box(0, 0, 10, 10))
+    stream.append("clear", box(3, -1, 7, 6))
+    stream.append("dark", box(4, 4, 9, 9))
+    stream.append("clear", box(8, 8, 12, 12))
+
+    trace = trace_polygon_operation_contributions(stream.operations)
+    composed = compose_polygon_operations(stream.operations)
+
+    assert trace.image.equals(composed)
+
+
+def test_contribution_trace_rejects_sequence_gaps():
+    operations = (
+        ImageOperation(0, "dark", box(0, 0, 1, 1)),
+        ImageOperation(2, "clear", box(0, 0, 0.5, 0.5)),
+    )
+
+    with pytest.raises(ValueError, match="contiguous and ordered"):
+        trace_polygon_operation_contributions(operations)
+

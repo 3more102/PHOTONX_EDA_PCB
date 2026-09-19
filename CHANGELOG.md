@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Hardened LPC composition provenance and stable IDs with ordered effective-contribution tracing. Dark operations now contribute only newly added material that survives later clears; clear operations contribute only newly created boundary that survives on a final component. Redundant dark operations, clear-before-dark no-ops, duplicate clears, and fully erased material no longer contaminate component provenance or rename unchanged composed regions.
+
+- Extended bounded Gerber `%LPC*%` composition to solid circular and obround D03 flashes. C/O boundaries are converted to deterministic symmetric inscribed-chord polygons using the existing 0.005 mm Gerber chord-error policy, with `gerber_flash_polygonization` evidence on affected output components; rectangular flashes remain exact, ordering/refill/preflight semantics are preserved, and tracks/outlines remain fail-closed.
+
 - Extended bounded Gerber `%LPC*%` image composition beyond region-only files to include rectangular D03 flashes. Supported regions and R flashes now share one ordered dark/clear operation stream and materialize to deterministic CopperRegion shells/holes; clear-before-dark, dark refill, mixed region/flash ordering, and step-repeat are covered. Circular/obround flashes, tracks, and outlines remain fail-closed.
 
 - Hardened bounded Gerber LPC materialization so each composed CopperRegion carries only the dark/clear region provenance and LP graphics-state sources that geometrically contribute to that final component. Unrelated disjoint operations no longer contaminate component provenance or stable IDs, while point-only clear contact is treated as a no-op dependency.
