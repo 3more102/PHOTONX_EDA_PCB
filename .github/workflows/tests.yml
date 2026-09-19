@@ -35,6 +35,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-latest
+            native-library: build/native/lib/libphotonx_native.so
           - os: macos-latest
             native-library: build/native/lib/libphotonx_native.dylib
           - os: windows-latest
@@ -58,3 +60,15 @@ jobs:
         env:
           PHOTONX_NATIVE_LIBRARY: ${{ github.workspace }}/${{ matrix.native-library }}
         run: pytest -q tests/test_cpp_spatial_backend.py
+      - name: Install wheel build frontend
+        run: python -m pip install build
+      - name: Build wheel with embedded native library
+        env:
+          PHOTONX_BUILD_NATIVE: "1"
+        run: python -m build --wheel
+      - name: Verify wheel is platform-specific
+        run: python -c "from pathlib import Path; wheels=list(Path('dist').glob('*.whl')); assert len(wheels)==1, wheels; assert 'none-any' not in wheels[0].name, wheels[0].name"
+      - name: Install packaged native wheel
+        run: python -c "from pathlib import Path; import subprocess,sys; wheel=next(Path('dist').glob('*.whl')); subprocess.check_call([sys.executable,'-m','pip','install','--force-reinstall','--no-deps',str(wheel)])"
+      - name: Verify package-local native discovery
+        run: python -c "from photonx_eda_pcb.spatial_connectivity import AABB,SpatialHashIndex,candidate_pairs; from photonx_eda_pcb.spatial_connectivity.native_backend import native_available; assert native_available(); i=SpatialHashIndex(1.0); i.insert('a',AABB(0,0,1,1)); i.insert('b',AABB(1,0,2,1)); assert candidate_pairs(i,backend='native') == [('a','b')]"

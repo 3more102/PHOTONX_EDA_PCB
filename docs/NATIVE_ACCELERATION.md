@@ -31,7 +31,24 @@ Windows with a CMake-supported Visual Studio toolchain:
 
 Point Python at the resulting shared library with `PHOTONX_NATIVE_LIBRARY`.
 
-The Linux CI workflow builds the native library and executes the full pytest suite with it enabled so native/Python parity regressions are exercised continuously. Dedicated smoke jobs also build and load the native library on macOS and Windows and run the native parity regression module, guarding the C ABI and platform-specific shared-library layout.
+### Optional self-contained wheel
+
+A normal package build remains Python-only and does not require CMake or a C++ compiler. To produce a platform-specific wheel that embeds the native library beside the Python adapter, opt in at build time:
+
+Linux/macOS:
+
+    PHOTONX_BUILD_NATIVE=1 python -m build --wheel
+
+Windows PowerShell:
+
+    $env:PHOTONX_BUILD_NATIVE="1"
+    python -m build --wheel
+
+The build hook compiles the C++17 library with CMake, checks that its exported ABI version matches the Python adapter, and copies the shared library into `photonx_eda_pcb/spatial_connectivity`. The existing loader discovers that package-local library automatically, so an installed native wheel does not require `PHOTONX_NATIVE_LIBRARY`.
+
+Source distributions include the `native/` CMake project, so downstream builders can opt into the same native-wheel path from an sdist.
+
+The Linux CI workflow builds the native library and executes the full pytest suite with it enabled so native/Python parity regressions are exercised continuously. Dedicated portability jobs build and load the native library on Linux, macOS, and Windows, then build/install a self-contained native wheel and verify package-local discovery.
 
 ## Stage 2: batch point-radius broad phase
 
@@ -66,7 +83,7 @@ The next safe candidates are:
 
 1. persistent/batch AABB index handles to avoid rebuilding native grids across independent calls;
 2. benchmark-gated connectivity candidate acceleration and crossover thresholds;
-3. cross-platform packaging of the optional native library;
+3. automated release-wheel production/signing for supported platform/Python combinations;
 4. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
 
 Gerber/Excellon parsing, provenance, fail-closed diagnostics, and semantic inference should not be migrated merely for language uniformity. They should move only when a measured bottleneck and a parity strategy exist.
