@@ -5,6 +5,9 @@ from math import isclose, isfinite, pi
 from pathlib import Path
 import re
 
+from shapely.geometry import LineString, MultiPoint
+from shapely.ops import unary_union
+
 from ..aperture_macros import evaluate_macro, parse_macro_body
 from ..errors import ParseError, UnsupportedFeatureError
 from ..gerber_geometry.arc import (
@@ -2063,6 +2066,62 @@ class GerberRS274XParser:
                             raw,
                             "GERBER_REGION_CUTIN_INVALID",
                             "cut-in holes may not touch, overlap, or nest",
+                            out,
+                        )
+                        return False
+
+            boundary_union = unary_union(
+                [loop_shapes[index].boundary for index in range(len(loops))]
+            )
+            bridge_lines = []
+            for _, _, bridge_start, bridge_end, _ in bridge_pairs:
+                bridge_line = LineString(
+                    [
+                        (bridge_start.x, bridge_start.y),
+                        (bridge_end.x, bridge_end.y),
+                    ]
+                )
+                expected_contacts = MultiPoint(
+                    [
+                        (bridge_start.x, bridge_start.y),
+                        (bridge_end.x, bridge_end.y),
+                    ]
+                )
+                contacts = bridge_line.intersection(boundary_union)
+                if not contacts.equals(expected_contacts):
+                    self._region_parse_fail(
+                        path,
+                        line_no,
+                        raw,
+                        "GERBER_REGION_CUTIN_TOUCH_INVALID",
+                        (
+                            "cut-in bridge may touch or overlap contour "
+                            "boundaries only at its start and end points"
+                        ),
+                        out,
+                    )
+                    return False
+                if not shell_shape.covers(bridge_line):
+                    self._region_parse_fail(
+                        path,
+                        line_no,
+                        raw,
+                        "GERBER_REGION_CUTIN_INVALID",
+                        "cut-in bridge must remain inside the enclosing contour",
+                        out,
+                    )
+                    return False
+                bridge_lines.append(bridge_line)
+
+            for bridge_index, left_line in enumerate(bridge_lines):
+                for right_line in bridge_lines[bridge_index + 1 :]:
+                    if not left_line.intersection(right_line).is_empty:
+                        self._region_parse_fail(
+                            path,
+                            line_no,
+                            raw,
+                            "GERBER_REGION_CUTIN_TOUCH_INVALID",
+                            "cut-in bridges may not touch or intersect each other",
                             out,
                         )
                         return False
