@@ -219,7 +219,7 @@ class GerberRS274XParser:
         out.pads.clear()
         out.regions.clear()
         out.outline.clear()
-        self.region_image_operations.clear()
+        self.material_image_operations.clear()
 
     def _declare_units(
         self,
