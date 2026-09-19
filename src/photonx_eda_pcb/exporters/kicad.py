@@ -10,7 +10,7 @@ from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 def _u(name:str)->str:return str(uuid.uuid5(uuid.NAMESPACE_URL,"https://photonx.local/"+name))
 def _q(text:str)->str:return '"'+text.replace("\\","\\\\").replace('"','\\"').replace("\n","\\n").replace("\r","\\r")+'"'
 
-_INNER_COPPER_LAYER_RE=re.compile(r"^In([1-9]|[12][0-9]|30)\\.Cu$")
+_INNER_COPPER_LAYER_RE=re.compile(r"^In([1-9]|[12][0-9]|30)\.Cu$")
 
 def _copper_layer_ordinal(layer):
     name=str(layer)
