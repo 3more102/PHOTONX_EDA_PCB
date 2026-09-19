@@ -2,6 +2,7 @@ import pytest
 
 from photonx_eda_pcb.errors import ParseError, UnsupportedFeatureError
 from photonx_eda_pcb.parsers.excellon import ExcellonParser
+from photonx_eda_pcb.preflight import preflight
 
 
 def _write(tmp_path, body: str):
@@ -177,3 +178,57 @@ M30
     assert [diagnostic.code for diagnostic in result.diagnostics] == [
         "UNSUPPORTED_EXCELLON_REPEAT_SYNTAX"
     ]
+
+
+@pytest.mark.parametrize(
+    ("body", "expected_code"),
+    [
+        (
+            """M48
+METRIC
+T01C0.800
+%
+T01
+R2X0.500
+M30
+""",
+            "EXCELLON_REPEAT_NO_ANCHOR",
+        ),
+        (
+            """M48
+METRIC
+T01C0.800
+%
+T01
+X1.000Y2.000
+R10001X0.001
+M30
+""",
+            "EXCELLON_REPEAT_LIMIT",
+        ),
+        (
+            """M48
+METRIC
+T01C0.800
+%
+T01
+X1.000Y2.000
+G00X4.000Y5.000
+M15
+R2X0.500
+M16
+M30
+""",
+            "EXCELLON_REPEAT_ROUTE_STATE",
+        ),
+    ],
+)
+def test_repeat_hole_failures_are_preflight_blockers(
+    tmp_path, body: str, expected_code: str
+):
+    path = _write(tmp_path, body)
+
+    report = preflight(path)
+
+    assert not report.ready_for_strict_reconstruction
+    assert any(expected_code in blocker for blocker in report.strict_blockers)
