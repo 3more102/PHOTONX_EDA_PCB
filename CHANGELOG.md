@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extended bounded Gerber `%LPC*%` composition to linear D01 tracks drawn with circular apertures. Linear strokes are materialized as deterministic capsule polygons with exact straight sides and 0.005 mm chord-error-bounded round end-caps, with `gerber_track_polygonization` evidence on affected output components. Source-order dark/clear semantics, step-repeat, transforms, and causal provenance are preserved; tessellated G02/G03 arc tracks and outlines remain fail-closed.
+
 - Hardened LPC composition provenance and stable IDs with ordered effective-contribution tracing. Dark operations now contribute only newly added material that survives later clears; clear operations contribute only newly created boundary that survives on a final component. Redundant dark operations, clear-before-dark no-ops, duplicate clears, and fully erased material no longer contaminate component provenance or rename unchanged composed regions.
 
 - Extended bounded Gerber `%LPC*%` composition to solid circular and obround D03 flashes. C/O boundaries are converted to deterministic symmetric inscribed-chord polygons using the existing 0.005 mm Gerber chord-error policy, with `gerber_flash_polygonization` evidence on affected output components; rectangular flashes remain exact, ordering/refill/preflight semantics are preserved, and tracks/outlines remain fail-closed.
