@@ -19,7 +19,7 @@ from ..gerber_geometry.arc import (
     validate_arc,
 )
 from ..gerber_geometry.model import GeoPoint
-from ..geometry_kernel import region_shape
+from ..geometry_kernel import pad_shape, region_shape
 from ..gerber_image import (
     ImageCompositionStream,
     canonical_polygon_components,
@@ -181,7 +181,7 @@ class GerberRS274XParser:
         self.layer_polarity_sources: list[SourceRef] = []
         self.first_clear_polarity_source: SourceRef | None = None
         self.clear_polarity_seen = False
-        self.region_image_operations = ImageCompositionStream[CopperRegion]()
+        self.material_image_operations = ImageCompositionStream[object]()
         self.image_geometry_enabled = True
         self.incremental = False
         self.image_rotation_deg = 0
@@ -2661,7 +2661,7 @@ class GerberRS274XParser:
                     holes=transformed_holes,
                 )
                 out.regions.append(region)
-                self.region_image_operations.append(self.layer_polarity, region)
+                self.material_image_operations.append(self.layer_polarity, region)
 
     def _arc_radius_tolerance_mm(self) -> float:
         x_resolution = to_mm(10 ** (-self.xfmt.decimal), self.units)
@@ -3048,6 +3048,16 @@ class GerberRS274XParser:
 
         self.current = nxt
 
+    def _composition_geometry_shape(self, geometry):
+        """Return exact polygonal geometry for the bounded LPC material subset."""
+        if isinstance(geometry, CopperRegion):
+            return region_shape(geometry)
+        if isinstance(geometry, PadCandidate) and geometry.shape.upper() == "R":
+            return pad_shape(geometry)
+        raise TypeError(
+            "LPC composition supports CopperRegion and rectangular PadCandidate geometry"
+        )
+
     def _composition_operation_affects_component(
         self,
         operation,
@@ -3060,7 +3070,7 @@ class GerberRS274XParser:
         length part of the final component boundary. Point-only contact does not
         alter material and therefore does not create provenance dependency.
         """
-        operation_shape = region_shape(operation.geometry)
+        operation_shape = self._composition_geometry_shape(operation.geometry)
         if operation.polarity == "dark":
             overlap = component_shape.intersection(operation_shape)
             return not overlap.is_empty and float(overlap.area) > 0.0
@@ -3095,13 +3105,13 @@ class GerberRS274XParser:
         path: Path,
         out: GerberLayerResult,
     ) -> None:
-        """Materialize the bounded region-only LPC image subset.
+        """Materialize the bounded polygon-exact LPC image subset.
 
         Gerber clear polarity is an ordered image operation. PHOTONX currently
-        materializes that semantic only when every material-producing object in
-        the file is a supported G36/G37 CopperRegion. Tracks, flashes, and
-        outline segments remain fail-closed because flattening them into region
-        geometry would change the existing exactness boundary.
+        materializes supported G36/G37 regions plus axis-aligned rectangular
+        D03 flashes, whose geometry maps exactly to polygons. Tracks, outline
+        segments, and non-rectangular flashes remain fail-closed rather than
+        being flattened through an approximation boundary.
         """
         if not self.clear_polarity_seen:
             return
@@ -3110,16 +3120,33 @@ class GerberRS274XParser:
         source_line = clear_source.line if clear_source is not None else None
         source_raw = clear_source.raw if clear_source is not None else "%LPC*%"
 
-        if out.tracks or out.pads or out.outline:
+        if out.tracks or out.outline:
             self._fail_or_warn(
                 path,
                 source_line or 0,
                 source_raw or "%LPC*%",
-                "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_REGION_GEOMETRY",
+                "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY",
                 (
-                    "clear Gerber layer polarity is currently supported only for "
-                    "region-only files; tracks, flashes, or outline geometry are "
-                    "present and cannot be composed exactly into CopperRegion output"
+                    "clear Gerber layer polarity supports G36/G37 regions and "
+                    "rectangular D03 flashes only; tracks or outline geometry are "
+                    "present and remain outside the exact polygon-composition subset"
+                ),
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+
+        unsupported_pads = [pad for pad in out.pads if pad.shape.upper() != "R"]
+        if unsupported_pads:
+            self._fail_or_warn(
+                path,
+                source_line or 0,
+                source_raw or "%LPC*%",
+                "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_RECTANGULAR_FLASH",
+                (
+                    "clear Gerber layer polarity currently composes only rectangular "
+                    "D03 flashes exactly; circular or obround flashes remain fail-closed"
                 ),
                 out,
             )
@@ -3128,10 +3155,10 @@ class GerberRS274XParser:
             return
 
         shape_stream = ImageCompositionStream()
-        for operation in self.region_image_operations.operations:
+        for operation in self.material_image_operations.operations:
             shape_stream.append(
                 operation.polarity,
-                region_shape(operation.geometry),
+                self._composition_geometry_shape(operation.geometry),
             )
 
         try:
@@ -3150,7 +3177,7 @@ class GerberRS274XParser:
                 self._disable_image_geometry(out)
             return
 
-        operations = self.region_image_operations.operations
+        operations = self.material_image_operations.operations
         dark_count = sum(operation.polarity == "dark" for operation in operations)
         clear_count = sum(operation.polarity == "clear" for operation in operations)
         output_count = len(components)
@@ -3237,6 +3264,7 @@ class GerberRS274XParser:
             composed_regions.append(region)
 
         out.regions[:] = composed_regions
+        out.pads.clear()
 
     def parse(self, path: str | Path) -> GerberLayerResult:
         p = Path(path)
@@ -3842,16 +3870,19 @@ class GerberRS274XParser:
                             src, x_index or 0, y_index or 0, dx_mm, dy_mm
                         )
                         self._add_aperture_transform_provenance(prov)
-                        out.pads.append(
-                            PadCandidate(
-                                obj_id,
-                                center,
-                                size_x,
-                                size_y,
-                                ap.shape,
-                                self.layer,
-                                provenance=prov,
-                            )
+                        pad = PadCandidate(
+                            obj_id,
+                            center,
+                            size_x,
+                            size_y,
+                            ap.shape,
+                            self.layer,
+                            provenance=prov,
+                        )
+                        out.pads.append(pad)
+                        self.material_image_operations.append(
+                            self.layer_polarity,
+                            pad,
                         )
 
                 self.current = nxt
