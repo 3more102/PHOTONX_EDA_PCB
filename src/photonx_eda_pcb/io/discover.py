@@ -1,16 +1,19 @@
 from pathlib import Path
 
+from .walk import DEFAULT_MAX_RECURSIVE_ENTRIES, bounded_regular_files
+
+
 GERBER_SUFFIXES = {".gbr", ".ger", ".gtl", ".gbl", ".gto", ".gbo", ".gm1"}
 DRILL_SUFFIXES = {".drl", ".xln", ".exc"}
 
 
-def discover_manufacturing_files(root: str | Path) -> dict[str, list[Path]]:
+def discover_manufacturing_files(
+    root: str | Path,
+    *,
+    max_entries: int = DEFAULT_MAX_RECURSIVE_ENTRIES,
+) -> dict[str, list[Path]]:
     root = Path(root)
-    files = sorted(
-        p
-        for p in root.rglob("*")
-        if p.is_file() and not p.is_symlink()
-    )
+    files = sorted(bounded_regular_files(root, max_entries=max_entries))
     return {
         "gerber": [p for p in files if p.suffix.lower() in GERBER_SUFFIXES],
         "drill": [p for p in files if p.suffix.lower() in DRILL_SUFFIXES],
