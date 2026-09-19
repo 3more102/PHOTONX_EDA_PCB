@@ -240,12 +240,21 @@ build/led/
 ├── board.json             # reconstructed BoardModel
 ├── validation.json        # validation state, issues, and summary
 ├── reconstructed.json     # explicit JSON export of the BoardModel
+├── review/                # only when --review-artifacts is requested
+│   ├── report.md
+│   ├── summary.json
+│   ├── checks.junit.xml
+│   ├── board.svg
+│   ├── connectivity.graphml
+│   └── csv/
+│       ├── nets.csv
+│       └── components.csv
 └── reconstructed.kicad_pcb  # only when --kicad is requested
 ```
 
 The repository also contains library-level exporters and reporting infrastructure for additional machine-readable or review-oriented formats, including **SVG, CSV, GraphML, source manifests, JSON reports, Markdown reports, JUnit-style reporting, and KiCad-related artifacts**.
 
-Those library capabilities are not all exposed as top-level CLI switches.
+The main review-oriented formats are available together through `--review-artifacts`. Source manifests and specialized reporting remain available through the library APIs.
 
 ### Output semantics
 
