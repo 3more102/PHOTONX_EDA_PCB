@@ -511,15 +511,176 @@ def test_parameterized_outline_rectangle_macro_supports_linear_draw(tmp_path: Pa
     )
 
 
+def test_irregular_concave_outline_macro_flash_is_exact(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,5,0,0,2,0,2,1,1,0.4,0,1,0,0,0*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X010000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    shape = region_shape(result.regions[0])
+    assert shape.area == pytest.approx(1.4)
+    assert shape.bounds == pytest.approx((1.0, 2.0, 3.0, 3.0))
+    assert any(
+        evidence.kind == "gerber_outline_macro_flash"
+        and "vertices=5" in evidence.detail
+        and "method=exact_linear_outline" in evidence.detail
+        and "approximated=false" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+    report = preflight(path)
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_off_center_outline_macro_composes_primitive_and_modal_transforms(
+    tmp_path: Path,
+):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%IR90*%\n"
+        "%AMOUTLINE*4,1,3,1,0,3,0,1,1,1,0,30*%\n"
+        "%ADD10OUTLINE*%\n"
+        "%LMX*%\n"
+        "%LR15*%\n"
+        "%LS2*%\n"
+        "D10*\n"
+        "X010000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 1
+    shape = region_shape(result.regions[0])
+    assert shape.area == pytest.approx(4.0)
+    evidence = result.regions[0].provenance.evidence
+    assert any(
+        item.kind == "gerber_outline_macro_flash"
+        and "primitive_rotation_deg_ccw=30" in item.detail
+        and "mirror=X" in item.detail
+        and "aperture_scale=2" in item.detail
+        and "object_rotation_deg_ccw=105" in item.detail
+        for item in evidence
+    )
+    assert {
+        "gerber_aperture_mirror",
+        "gerber_aperture_rotation",
+        "gerber_aperture_scale",
+    }.issubset({item.kind for item in evidence})
+
+
+def test_irregular_outline_macro_respects_active_inch_units(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOIN*%\n"
+        "%AMOUTLINE*4,1,3,0,0,0.100,0,0,0.100,0,0,0*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    shape = region_shape(result.regions[0])
+    assert shape.area == pytest.approx((2.54 * 2.54) / 2.0)
+    assert shape.bounds == pytest.approx((0.0, 0.0, 2.54, 2.54))
+
+
+def test_irregular_outline_macro_step_repeat_preserves_regions(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,5,0,0,2,0,2,1,1,0.4,0,1,0,0,0*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "%SRX2Y1I3.0J0*%\n"
+        "X000000Y000000D03*\n"
+        "%SR*%\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 2
+    bounds = sorted(region_shape(region).bounds for region in result.regions)
+    assert bounds[0] == pytest.approx((0.0, 0.0, 2.0, 1.0))
+    assert bounds[1] == pytest.approx((3.0, 0.0, 5.0, 1.0))
+    assert all(
+        any(e.kind == "gerber_step_repeat" for e in region.provenance.evidence)
+        for region in result.regions
+    )
+
+
+def test_irregular_outline_macro_clear_flash_composes_with_lpc(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,3,0,0,0.5,0,0,0.5,0,0,0*%\n"
+        "%ADD10OUTLINE*%\n"
+        "%ADD11R,2X2*%\n"
+        "D11*\n"
+        "X000000Y000000D03*\n"
+        "%LPC*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.pads == []
+    assert len(result.regions) == 1
+    assert len(result.regions[0].holes) == 1
+    assert region_shape(result.regions[0]).area == pytest.approx(3.875)
+
+
+def test_general_outline_macro_d01_sweep_remains_fail_closed(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,5,0,0,2,0,2,1,1,0.4,0,1,0,0,0*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D02*\n"
+        "X010000Y000000D01*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="D03 flashes only",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
 @pytest.mark.parametrize(
     "macro_body",
     [
         "4,0,4,-1,-0.5,1,-0.5,1,0.5,-1,0.5,-1,-0.5,0",
         "4,1,4,-1,-0.5,1,-0.5,1,0.5,-1,0.5,-0.9,-0.5,0",
-        "4,1,4,-1,-0.5,1,-0.5,0.8,0.5,-1,0.5,-1,-0.5,0",
+        "4,1,4,0,0,1,1,0,1,1,0,0,0,0",
+        "4,1,4,0,0,1,0,1,0,0,1,0,0,0",
     ],
 )
-def test_outline_macro_outside_exact_subset_fails_closed(
+def test_invalid_outline_macro_contours_fail_closed(
     tmp_path: Path,
     macro_body: str,
 ):
