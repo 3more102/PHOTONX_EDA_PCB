@@ -53,10 +53,10 @@ def test_linear_dark_region_is_reconstructed_with_provenance(tmp_path: Path):
     assert {source.raw for source in region.provenance.sources} >= {"G36*", "G37*"}
 
 
-def test_region_end_closes_open_linear_contour(tmp_path: Path):
+def test_region_end_does_not_implicitly_close_open_contour(tmp_path: Path):
     path = _write(
         tmp_path,
-        "auto_close.gtl",
+        "open_contour.gtl",
         _region_file(
             "G36*\n"
             "X000000Y000000D02*\n"
@@ -67,11 +67,8 @@ def test_region_end_closes_open_linear_contour(tmp_path: Path):
         ),
     )
 
-    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
-
-    assert len(result.regions) == 1
-    assert result.regions[0].points[0] == result.regions[0].points[-1]
-    assert len(result.regions[0].points) == 5
+    with pytest.raises(ParseError, match="does not implicitly close"):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
 def test_step_repeat_expands_region_with_unique_ids_and_evidence(tmp_path: Path):
@@ -101,6 +98,127 @@ def test_step_repeat_expands_region_with_unique_ids_and_evidence(tmp_path: Path)
         >= {"gerber_region", "gerber_step_repeat"}
         for region in result.regions
     )
+
+
+def test_g75_semicircle_region_is_reconstructed_with_bounded_tessellation(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "g75_semicircle.gtl",
+        _region_file(
+            "G75*\n"
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X020000Y000000D01*\n"
+            "G03*\n"
+            "X000000Y000000I-010000J000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 1
+    region = result.regions[0]
+    assert region.points[0] == region.points[-1]
+    assert len(region.points) > 8
+    evidence = {event.kind for event in region.provenance.evidence}
+    assert "gerber_region_arc_tessellation" in evidence
+    assert "gerber_region" in evidence
+
+    from photonx_eda_pcb.geometry_kernel import region_shape
+
+    assert region_shape(region).area == pytest.approx(1.57079632679, abs=0.01)
+
+
+def test_g75_full_circle_can_form_entire_region_contour(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "g75_full_circle.gtl",
+        _region_file(
+            "G75*\n"
+            "G36*\n"
+            "X010000Y000000D02*\n"
+            "G03*\n"
+            "X010000Y000000I-010000J000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 1
+    from photonx_eda_pcb.geometry_kernel import region_shape
+
+    assert region_shape(result.regions[0]).area == pytest.approx(3.14159265359, abs=0.02)
+
+
+def test_g75_region_arc_supports_incremental_endpoints(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "g75_incremental_arc.gtl",
+        _region_file(
+            "G75*\n"
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X020000Y000000D01*\n"
+            "G03*\n"
+            "X-020000Y000000I-010000J000000D01*\n"
+            "G37*",
+            fs="%FSLIX24Y24*%",
+        ),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 1
+    assert result.regions[0].points[0] == result.regions[0].points[-1]
+
+
+def test_g75_region_arc_tessellation_bounds_anisotropic_image_scaling(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "g75_scaled_arc.gtl",
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%SFA2B3*%\n"
+        "G75*\n"
+        "G36*\n"
+        "X000000Y000000D02*\n"
+        "X020000Y000000D01*\n"
+        "G03*\n"
+        "X000000Y000000I-010000J000000D01*\n"
+        "G37*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    region = result.regions[0]
+    xs = [point.x for point in region.points]
+    ys = [point.y for point in region.points]
+    assert min(xs) == pytest.approx(0.0)
+    assert max(xs) == pytest.approx(4.0)
+    assert min(ys) == pytest.approx(0.0)
+    assert max(ys) == pytest.approx(3.0, abs=0.01)
+
+
+def test_g75_inside_active_region_is_rejected_by_region_grammar(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "late_g75.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "G75*\n"
+            "G37*"
+        ),
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="only D01/D02 and G01/G02/G03",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
 def test_incremental_modal_region_coordinates_are_supported(tmp_path: Path):
@@ -241,19 +359,23 @@ def test_multicontour_region_is_fail_closed(tmp_path: Path):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
-def test_region_arc_is_fail_closed(tmp_path: Path):
+def test_g74_region_arc_remains_fail_closed(tmp_path: Path):
     path = _write(
         tmp_path,
-        "region_arc.gtl",
+        "region_g74_arc.gtl",
         _region_file(
+            "G74*\n"
             "G36*\n"
-            "X010000Y000000D02*\n"
-            "G03X000000Y010000I-010000J000000D01*\n"
+            "X020000Y000000D02*\n"
+            "G03X000000Y000000I010000J000000D01*\n"
             "G37*"
         ),
     )
 
-    with pytest.raises(UnsupportedFeatureError):
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="require G75 multi-quadrant mode",
+    ):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
