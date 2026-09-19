@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from shapely.ops import unary_union
 
 from photonx_eda_pcb.connectivity import build_physical_graph, assign_physical_nets
 from photonx_eda_pcb.errors import ParseError, UnsupportedFeatureError
@@ -343,10 +344,102 @@ def test_kicad_export_reports_region_omission_instead_of_silent_drop(tmp_path: P
     )
 
 
-def test_multicontour_region_is_fail_closed(tmp_path: Path):
+def test_two_nonoverlapping_contours_are_filled_individually(tmp_path: Path):
     path = _write(
         tmp_path,
         "multicontour.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X020000Y000000D01*\n"
+            "X020000Y020000D01*\n"
+            "X000000Y020000D01*\n"
+            "X000000Y000000D01*\n"
+            "X030000Y000000D02*\n"
+            "X040000Y000000D01*\n"
+            "X040000Y010000D01*\n"
+            "X030000Y010000D01*\n"
+            "X030000Y000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 2
+    assert len({region.id for region in result.regions}) == 2
+    assert [region_shape(region).area for region in result.regions] == pytest.approx(
+        [4.0, 1.0]
+    )
+    assert all(
+        "statement_fill=union"
+        in next(
+            event.detail
+            for event in region.provenance.evidence
+            if event.kind == "gerber_region"
+        )
+        for region in result.regions
+    )
+
+
+def test_overlapping_contours_use_union_fill_not_hole_semantics(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "overlapping_contours.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X040000Y000000D01*\n"
+            "X040000Y040000D01*\n"
+            "X000000Y040000D01*\n"
+            "X000000Y000000D01*\n"
+            "X010000Y010000D02*\n"
+            "X030000Y010000D01*\n"
+            "X030000Y030000D01*\n"
+            "X010000Y030000D01*\n"
+            "X010000Y010000D01*\n"
+            "G37*"
+        ),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 2
+    combined = unary_union([region_shape(region) for region in result.regions])
+    assert combined.area == pytest.approx(16.0)
+
+
+def test_touching_contours_in_one_statement_are_valid(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "touching_contours.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X010000Y000000D01*\n"
+            "X010000Y010000D01*\n"
+            "X000000Y010000D01*\n"
+            "X000000Y000000D01*\n"
+            "X010000Y000000D02*\n"
+            "X020000Y000000D01*\n"
+            "X020000Y010000D01*\n"
+            "X010000Y010000D01*\n"
+            "X010000Y000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 2
+    combined = unary_union([region_shape(region) for region in result.regions])
+    assert combined.area == pytest.approx(2.0)
+
+
+def test_d02_cannot_finalize_open_previous_contour(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "open_before_second_contour.gtl",
         _region_file(
             "G36*\n"
             "X000000Y000000D02*\n"
@@ -356,8 +449,69 @@ def test_multicontour_region_is_fail_closed(tmp_path: Path):
         ),
     )
 
-    with pytest.raises(UnsupportedFeatureError):
+    with pytest.raises(ParseError, match="D02 cannot finalize an open"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
+def test_multicontour_step_repeat_expands_each_contour(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "multicontour_panel.gtl",
+        _region_file(
+            "%SRX2Y1I10J0*%\n"
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X010000Y000000D01*\n"
+            "X010000Y010000D01*\n"
+            "X000000Y010000D01*\n"
+            "X000000Y000000D01*\n"
+            "X020000Y000000D02*\n"
+            "X030000Y000000D01*\n"
+            "X030000Y010000D01*\n"
+            "X020000Y010000D01*\n"
+            "X020000Y000000D01*\n"
+            "G37*\n"
+            "%SR*%"
+        ),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 4
+    assert len({region.id for region in result.regions}) == 4
+    assert sorted(min(point.x for point in region.points) for region in result.regions) == pytest.approx(
+        [0.0, 2.0, 10.0, 12.0]
+    )
+
+
+def test_multicontour_can_mix_linear_and_g75_arc_contours(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "mixed_multicontour.gtl",
+        _region_file(
+            "G75*\n"
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X010000Y000000D01*\n"
+            "X010000Y010000D01*\n"
+            "X000000Y010000D01*\n"
+            "X000000Y000000D01*\n"
+            "X030000Y000000D02*\n"
+            "G03*\n"
+            "X030000Y000000I-010000J000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 2
+    kinds = [
+        {event.kind for event in region.provenance.evidence}
+        for region in result.regions
+    ]
+    assert "gerber_region_arc_tessellation" not in kinds[0]
+    assert "gerber_region_arc_tessellation" in kinds[1]
 
 
 def test_region_contour_must_begin_with_d02(tmp_path: Path):
@@ -445,7 +599,7 @@ def test_edge_cuts_region_is_rejected(tmp_path: Path):
         GerberRS274XParser("Edge.Cuts", strict=True).parse(path)
 
 
-def test_permissive_multicontour_aborts_region_and_records_diagnostic(tmp_path: Path):
+def test_permissive_open_contour_before_d02_aborts_statement(tmp_path: Path):
     path = _write(
         tmp_path,
         "multicontour_permissive.gtl",
@@ -461,7 +615,7 @@ def test_permissive_multicontour_aborts_region_and_records_diagnostic(tmp_path: 
 
     assert not result.regions
     assert any(
-        diagnostic.code == "GERBER_REGION_MULTICONTOUR_UNSUPPORTED"
+        diagnostic.code == "GERBER_REGION_NOT_CLOSED"
         for diagnostic in result.diagnostics
     )
 
