@@ -232,6 +232,17 @@ class GerberRS274XParser:
         self.aperture_scale_source: SourceRef | None = None
         self.image_body_started = False
 
+    def _read_limited_text(self, path: Path) -> str:
+        chunks: list[str] = []
+        with path.open(encoding="utf-8-sig", errors="strict") as stream:
+            for line_no, raw in enumerate(stream, 1):
+                try:
+                    self.limits.check_line(raw.rstrip("\r\n"), line_no)
+                except ValueError as exc:
+                    raise ParseError(f"{path}:{line_no}: {exc}") from exc
+                chunks.append(raw)
+        return "".join(chunks)
+
     def _check_object_count(self, count: int) -> None:
         try:
             self.limits.check_objects(count)
@@ -4130,11 +4141,7 @@ class GerberRS274XParser:
         p = Path(path)
         out = GerberLayerResult()
 
-        text = p.read_text(encoding="utf-8-sig", errors="strict")
-        try:
-            self.limits.check_text(text)
-        except ValueError as exc:
-            raise ParseError(f"{p}: {exc}") from exc
+        text = self._read_limited_text(p)
 
         for line_no, line in iter_gerber_statements(text):
             if not line or line.startswith("G04"):
