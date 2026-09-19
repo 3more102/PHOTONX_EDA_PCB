@@ -6,6 +6,8 @@ def builtin_cases():
         ConformanceCase("gerber-ir90-linear","gerber","%FSLAX24Y24*%\n%MOMM*%\n%IR90*%\n%ADD10C,0.200*%\nD10*\nX010000Y020000D02*\nX030000Y020000D01*\nM02*\n",ConformanceExpectation({"tracks":1,"pads":0,"outline":0})),
         ConformanceCase("gerber-mi-mirror-linear","gerber","%FSLAX24Y24*%\n%MOMM*%\n%MIA1*%\n%ADD10C,0.200*%\nD10*\nX010000Y020000D02*\nX030000Y020000D01*\nM02*\n",ConformanceExpectation({"tracks":1,"pads":0,"outline":0})),
         ConformanceCase("gerber-of-offset-flash","gerber","%FSLAX24Y24*%\n%MOMM*%\n%OFA1B-2*%\n%ADD10C,0.200*%\nD10*\nX010000Y020000D03*\nM02*\n",ConformanceExpectation({"tracks":0,"pads":1,"outline":0})),
+        ConformanceCase("gerber-axis-select-aybx-noop","gerber","%FSLAX24Y24*%\n%MOMM*%\n%ASAYBX*%\n%ADD10C,0.200*%\nD10*\nX010000Y020000D03*\nM02*\n",ConformanceExpectation({"tracks":0,"pads":1,"outline":0},("GERBER_AXIS_SELECT_OUTPUT_DEVICE_ONLY",))),
+        ConformanceCase("gerber-m01-noop","gerber","%FSLAX24Y24*%\n%MOMM*%\n%ADD10C,0.200*%\nD10*\nM01*\nX010000Y020000D03*\nM02*\n",ConformanceExpectation({"tracks":0,"pads":1,"outline":0},("GERBER_OPTIONAL_STOP_IGNORED",))),
         ConformanceCase("gerber-identity-sf","gerber","%FSLAX24Y24*%\n%MOMM*%\n%SFA1B1*%\n%ADD10C,0.200*%\nD10*\nX010000Y020000D03*\nM02*\n",ConformanceExpectation({"tracks":0,"pads":1,"outline":0})),
         ConformanceCase("gerber-flash","gerber","%FSLAX24Y24*%\n%MOMM*%\n%ADD10C,1.000*%\nD10*\nX010000Y020000D03*\nM02*\n",ConformanceExpectation({"tracks":0,"pads":1,"outline":0})),
         ConformanceCase("gerber-center-line-macro-flash","gerber","%FSLAX24Y24*%\n%MOMM*%\n%AMBOX*21,1,$1,$2,0,0,0*%\n%ADD10BOX,1.0X2.0*%\nD10*\nX010000Y020000D03*\nM02*\n",ConformanceExpectation({"tracks":0,"pads":1,"outline":0})),

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added legacy non-geometric Gerber compatibility: both AS axis-select forms are accepted without changing CAD-to-CAM geometry, IN/LN names are preserved as comment diagnostics, G55 and M01 are accepted as no-ops, and M00 now terminates parsing like M02.
+- Hardened Gerber end-of-file handling so M02 stops parsing immediately instead of allowing trailing statements to leak geometry after the formal program end.
 - Added exact deprecated Gerber `OF` image translation using active MO units, with deterministic composition after MI/SF and before IR regardless of command appearance; translations propagate through flashes, tracks, outlines, tessellated arcs, and step-repeat instances with provenance and transform-aware stable IDs.
 - Added exact deprecated Gerber `MI` mirror-image support for A/B coordinate data, preserving the specification rule that apertures and step-repeat distances are not mirrored; MI composes deterministically before IR and is recorded in provenance.
 - Included active MI/IR image-transform semantics in generated track/pad/arc stable IDs so geometrically different transformed objects cannot retain the same deterministic ID.
