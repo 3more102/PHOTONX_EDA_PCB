@@ -4,7 +4,11 @@ from math import hypot, isfinite, pi, sqrt
 import re
 from pathlib import Path
 from ..errors import ParseError, UnsupportedFeatureError
-from ..excellon_numeric import SIGNED_DECIMAL_PATTERN, UNSIGNED_DECIMAL_PATTERN
+from ..excellon_numeric import (
+    SIGNED_DECIMAL_PATTERN,
+    TOOL_NUMBER_PATTERN,
+    UNSIGNED_DECIMAL_PATTERN,
+)
 from ..gerber_geometry.arc import (
     ArcSpec,
     arc_points,
@@ -28,10 +32,10 @@ from ..units import CoordinateFormat, to_mm
 from .excellon_parts.slots import parse_slot_command
 
 _TOOL_DEF = re.compile(
-    rf"^T(\d+)C({UNSIGNED_DECIMAL_PATTERN})"
+    rf"^T({TOOL_NUMBER_PATTERN})C({UNSIGNED_DECIMAL_PATTERN})"
     rf"(?:F{UNSIGNED_DECIMAL_PATTERN})?(?:S{UNSIGNED_DECIMAL_PATTERN})?$"
 )
-_TOOL_SEL = re.compile(r"^T(\d+)$")
+_TOOL_SEL = re.compile(rf"^T({TOOL_NUMBER_PATTERN})$")
 _HIT = re.compile(
     rf"^(?:X({SIGNED_DECIMAL_PATTERN}))?(?:Y({SIGNED_DECIMAL_PATTERN}))?$"
 )
@@ -286,9 +290,24 @@ class ExcellonParser:
 
     def parse(self,path:str|Path)->ExcellonResult:
         p=Path(path);out=ExcellonResult()
-        for line_no,raw in enumerate(p.read_text(encoding="utf-8-sig",errors="strict").splitlines(),1):
+        lines=p.read_text(encoding="utf-8-sig",errors="strict").splitlines()
+        for line_no,raw in enumerate(lines,1):
             line=raw.strip().upper()
-            if not line or line in {"M48","%","M30","M95"} or line.startswith(";"):continue
+            if not line or line.startswith(";"):continue
+            if line == "M30":
+                trailing = [
+                    (later_no, later_raw.strip())
+                    for later_no, later_raw in enumerate(lines[line_no:], line_no + 1)
+                    if later_raw.strip() and not later_raw.strip().startswith(";")
+                ]
+                if trailing:
+                    later_no,later_line=trailing[0]
+                    message=f"data after M30 end-of-file command: {later_line}"
+                    if self.strict:raise ParseError(f"{p}:{later_no}: {message}")
+                    out.diagnostics.append(ParseDiagnostic("warning","INVALID_EXCELLON_DATA_AFTER_M30",message,str(p),later_no))
+                    self._disable_geometry(out)
+                break
+            if line in {"M48","%","M95"}:continue
             if line.startswith("METRIC") or line == "M71":
                 self.units="mm";self.units_declared=True;self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(3,3,self.zero);continue
             if line.startswith("INCH") or line == "M72":
@@ -433,9 +452,25 @@ class ExcellonParser:
                     self._disable_geometry(out)
                     continue
                 tool,diameter=m.groups()
+                if tool in self.tools:
+                    message=f"duplicate Excellon tool definition T{tool}"
+                    if self.strict:
+                        raise ParseError(f"{p}:{line_no}: {message}")
+                    out.diagnostics.append(
+                        ParseDiagnostic(
+                            "warning",
+                            "INVALID_EXCELLON_TOOL_REDEFINITION",
+                            message,
+                            str(p),
+                            line_no,
+                        )
+                    )
+                    self._disable_geometry(out)
+                    continue
                 diameter_value=float(diameter)
-                if not isfinite(diameter_value) or diameter_value <= 0:
-                    message="Excellon tool diameter must be positive"
+                diameter_mm=to_mm(diameter_value,self.units)
+                if not isfinite(diameter_value) or not isfinite(diameter_mm) or diameter_value <= 0:
+                    message="Excellon tool diameter must be positive and finite"
                     if self.strict:
                         raise ParseError(f"{p}:{line_no}: {message}: {line}")
                     out.diagnostics.append(
@@ -449,7 +484,7 @@ class ExcellonParser:
                     )
                     self._disable_geometry(out)
                     continue
-                self.tools[tool]=to_mm(diameter_value,self.units);continue
+                self.tools[tool]=diameter_mm;continue
             if line.startswith("T") and "C" in line:
                 message = f"malformed Excellon tool definition: {line}"
                 if self.strict:
@@ -472,7 +507,29 @@ class ExcellonParser:
                     out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","tool change while route active",str(p),line_no))
                     self._disable_geometry(out)
                     continue
-                self.tool=m.group(1);continue
+                tool=m.group(1)
+                if tool not in self.tools:
+                    message=f"undefined Excellon tool selection T{tool}"
+                    if self.strict:raise ParseError(f"{p}:{line_no}: {message}")
+                    out.diagnostics.append(ParseDiagnostic("warning","INVALID_EXCELLON_TOOL_SELECTION",message,str(p),line_no))
+                    self._disable_geometry(out)
+                    continue
+                self.tool=tool;continue
+            if line.startswith("T"):
+                message = f"malformed Excellon tool selection: {line}"
+                if self.strict:
+                    raise ParseError(f"{p}:{line_no}: {message}")
+                out.diagnostics.append(
+                    ParseDiagnostic(
+                        "warning",
+                        "INVALID_EXCELLON_TOOL_SELECTION",
+                        message,
+                        str(p),
+                        line_no,
+                    )
+                )
+                self._disable_geometry(out)
+                continue
             m=_HIT.match(line)
             if m and (m.group(1) is not None or m.group(2) is not None):
                 if self.route.tool_down:
