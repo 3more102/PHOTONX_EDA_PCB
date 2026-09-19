@@ -36,6 +36,7 @@ def validate_omission_manifest(data):
     skipped_regions=list(data.get("skipped_regions",()))
     exported_tracks=list(data.get("exported_tracks",()))
     skipped_tracks=list(data.get("skipped_tracks",()))
+    exported_routes=list(data.get("exported_routes",()))
     omitted_routes=list(data.get("omitted_routes",()))
 
     duplicate_checks=(
@@ -45,6 +46,7 @@ def validate_omission_manifest(data):
         ("OMISSION_SKIPPED_REGION_DUPLICATE_ID",skipped_regions),
         ("OMISSION_EXPORTED_TRACK_DUPLICATE_ID",exported_tracks),
         ("OMISSION_SKIPPED_TRACK_DUPLICATE_ID",skipped_tracks),
+        ("OMISSION_EXPORTED_ROUTE_DUPLICATE_ID",exported_routes),
         ("OMISSION_ROUTE_DUPLICATE_ID",omitted_routes),
     )
     for code,values in duplicate_checks:
@@ -54,6 +56,7 @@ def validate_omission_manifest(data):
         ("OMISSION_SLOT_BOTH_EXPORTED_AND_SKIPPED",exported_slots,skipped_slots),
         ("OMISSION_REGION_BOTH_EXPORTED_AND_SKIPPED",exported_regions,skipped_regions),
         ("OMISSION_TRACK_BOTH_EXPORTED_AND_SKIPPED",exported_tracks,skipped_tracks),
+        ("OMISSION_ROUTE_BOTH_EXPORTED_AND_SKIPPED",exported_routes,omitted_routes),
     )
     for code,exported,skipped in overlap_checks:
         if set(exported)&set(skipped):issues.append(code)
