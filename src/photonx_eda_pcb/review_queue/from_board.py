@@ -20,17 +20,17 @@ def _review_threshold(name: str, value: float | None) -> float | None:
 def build_board_review_queue(
     board: BoardModel,
     *,
+    validation=None,
     net_confidence_below: float | None = None,
     component_confidence_below: float | None = None,
     include_unknown_plating: bool = True,
     include_diagnostics: bool = True,
 ) -> ReviewQueue:
-    """Build a deterministic review queue from unresolved BoardModel state.
+    """Build a deterministic review queue from unresolved reconstruction state.
 
     Confidence thresholds are opt-in. With no thresholds supplied, the adapter
-    surfaces only explicit unresolved state already present in the model:
-    unknown drill plating, unlabeled physical nets, component hypotheses without
-    a reference, and parser diagnostics.
+    surfaces explicit unresolved state already present in the model plus any
+    supplied validation findings.
     """
 
     net_threshold = _review_threshold("net_confidence_below", net_confidence_below)
@@ -38,6 +38,46 @@ def build_board_review_queue(
         "component_confidence_below", component_confidence_below
     )
     queue = ReviewQueue()
+
+    if validation is not None:
+        object_index = board.object_index()
+        for issue in sorted(
+            getattr(validation, "issues", ()),
+            key=lambda item: (
+                item.severity,
+                item.code,
+                item.message,
+                tuple(item.object_ids),
+            ),
+        ):
+            selectable = next(
+                (object_id for object_id in issue.object_ids if object_id in object_index),
+                None,
+            )
+            target = selectable or f"validation:{issue.code}"
+            queue.add(
+                ReviewItem(
+                    stable_id(
+                        "review",
+                        "validation",
+                        issue.severity,
+                        issue.code,
+                        issue.message,
+                        tuple(issue.object_ids),
+                    ),
+                    "validation",
+                    target,
+                    f"{issue.severity}: {issue.code}: {issue.message}",
+                    0.0,
+                    metadata={
+                        "confidence_available": False,
+                        "severity": issue.severity,
+                        "code": issue.code,
+                        "object_ids": tuple(issue.object_ids),
+                        "selectable_object_id": selectable,
+                    },
+                )
+            )
 
     if include_unknown_plating:
         for drill in sorted(board.drills, key=lambda item: item.id):
@@ -55,6 +95,25 @@ def build_board_review_queue(
                         "plating": drill.plating,
                         "tool": drill.tool,
                         "diameter": drill.diameter,
+                    },
+                )
+            )
+
+        for slot in sorted(getattr(board, "slots", ()), key=lambda item: item.id):
+            if str(slot.plated).lower() != "unknown":
+                continue
+            queue.add(
+                ReviewItem(
+                    stable_id("review", "slot-plating", slot.id),
+                    "slot",
+                    slot.id,
+                    "slot plating unresolved",
+                    0.0,
+                    metadata={
+                        "confidence_available": False,
+                        "plating": slot.plated,
+                        "tool": getattr(slot, "tool", None),
+                        "width_mm": slot.width_mm,
                     },
                 )
             )
