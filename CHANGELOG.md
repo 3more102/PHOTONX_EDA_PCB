@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Added a fail-visible KiCad connectivity round-trip audit for `photonx reconstruct --kicad`. The CLI now re-reads the generated board and compares the exact net table, exported track net bindings, and recovered-pad net bindings, records missing/unexpected connectivity objects, distinguishes policy-preserving `roundtrip_equal` from full `source_equivalent`, and exposes skipped-track/unresolved-pad connectivity losses without changing existing reconstruction exit-code semantics.
+- Added a fail-visible, omission-aware KiCad connectivity round-trip audit for `photonx reconstruct --kicad`. The CLI now re-reads the generated board and checks the exact net table plus emitted track, recovered-pad, copper-region, and recovered-slot electrical bindings, including embedded net-name consistency and preserved PHOTONX identities. The audit distinguishes policy-preserving `roundtrip_equal` from `source_connectivity_complete` and full `source_equivalent`, exposing skipped tracks/regions/slots and unresolved pad/slot net claims without changing reconstruction exit-code semantics.
 
 - Added KiCad CopperRegion round-trip verification. The board reader now preserves zone shell/hole contours, layer/net/name identity, fill state, and cached filled polygons; a semantic comparator verifies exported regions independent of polygon start vertex or winding while retaining PhotonX region identity and net labels. Zone net ordinals are parsed fail-closed as integers instead of being silently coerced.
 
