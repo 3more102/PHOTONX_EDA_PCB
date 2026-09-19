@@ -23,8 +23,8 @@ from ..geometry_kernel import region_shape
 from ..gerber_image import (
     ImageCompositionStream,
     canonical_polygon_components,
-    compose_polygon_operations,
     polygonize_flash,
+    trace_polygon_operation_contributions,
 )
 from ..ids import stable_id
 from ..models import CopperRegion, OutlineSegment, PadCandidate, ParseDiagnostic, Point, Track
@@ -3100,27 +3100,26 @@ class GerberRS274XParser:
             source,
         )
 
-    def _composition_operation_affects_component(
+    def _composition_contribution_affects_component(
         self,
         operation,
+        contribution_geometry,
         component_shape,
     ) -> bool:
-        """Return whether one ordered image operation contributes to a component.
-
-        Dark geometry contributes when final material overlaps it with positive
-        area. Clear geometry contributes when its boundary defines a non-zero
-        length part of the final component boundary. Point-only contact does not
-        alter material and therefore does not create provenance dependency.
-        """
-        operation_shape = self._composition_geometry_shape(operation.geometry)
+        """Return whether one effective ordered contribution reaches a component."""
+        if contribution_geometry.is_empty:
+            return False
         if operation.polarity == "dark":
-            overlap = component_shape.intersection(operation_shape)
-            return not overlap.is_empty and float(overlap.area) > 0.0
+            overlap = component_shape.intersection(contribution_geometry)
+            return not overlap.is_empty and float(overlap.area) > 1e-15
 
         boundary_overlap = component_shape.boundary.intersection(
-            operation_shape.boundary
+            contribution_geometry
         )
-        return not boundary_overlap.is_empty and float(boundary_overlap.length) > 0.0
+        return (
+            not boundary_overlap.is_empty
+            and float(boundary_overlap.length) > 1e-12
+        )
 
     def _layer_polarity_source_for_operation(self, operation) -> SourceRef | None:
         """Return the LP command that established polarity for one region operation."""
@@ -3205,8 +3204,8 @@ class GerberRS274XParser:
             )
 
         try:
-            composed = compose_polygon_operations(shape_stream.operations)
-            components = canonical_polygon_components(composed)
+            trace = trace_polygon_operation_contributions(shape_stream.operations)
+            components = canonical_polygon_components(trace.image)
         except (TypeError, ValueError) as exc:
             self._parse_error_or_warn(
                 path,
@@ -3221,6 +3220,10 @@ class GerberRS274XParser:
             return
 
         operations = self.material_image_operations.operations
+        contribution_by_sequence = {
+            contribution.sequence: contribution.geometry
+            for contribution in trace.contributions
+        }
         dark_count = sum(operation.polarity == "dark" for operation in operations)
         clear_count = sum(operation.polarity == "clear" for operation in operations)
         output_count = len(components)
@@ -3242,8 +3245,9 @@ class GerberRS274XParser:
             relevant_operations = tuple(
                 operation
                 for operation in operations
-                if self._composition_operation_affects_component(
+                if self._composition_contribution_affects_component(
                     operation,
+                    contribution_by_sequence[operation.sequence],
                     component_shape,
                 )
             )
@@ -3299,6 +3303,7 @@ class GerberRS274XParser:
                     "gerber_layer_polarity_composition",
                     (
                         f"ordered_operations={len(operations)}; "
+                        f"effective_operations={sum(not contribution.geometry.is_empty for contribution in trace.contributions)}; "
                         f"relevant_operations={len(relevant_operations)}; "
                         f"dark_operations={dark_count}; "
                         f"clear_operations={clear_count}; "
