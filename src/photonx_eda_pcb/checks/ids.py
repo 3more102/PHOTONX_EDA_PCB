@@ -1,5 +1,24 @@
 from .base import CheckIssue
 from ..core.collections import duplicates
+
+
 def check_unique_object_ids(board):
-    ids=[o.id for o in [*board.tracks,*board.pads,*board.drills,*board.outline]]
-    return [CheckIssue("error","DUPLICATE_OBJECT_ID",f"duplicate object id {x}",x) for x in duplicates(ids)]
+    objects = [
+        *getattr(board, "tracks", ()),
+        *getattr(board, "pads", ()),
+        *getattr(board, "drills", ()),
+        *getattr(board, "outline", ()),
+        *getattr(board, "slots", ()),
+        *getattr(board, "routes", ()),
+        *getattr(board, "regions", ()),
+    ]
+    ids = [obj.id for obj in objects]
+    return [
+        CheckIssue(
+            "error",
+            "DUPLICATE_OBJECT_ID",
+            f"duplicate object id {object_id}",
+            object_id,
+        )
+        for object_id in duplicates(ids)
+    ]
