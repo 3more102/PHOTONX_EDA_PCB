@@ -209,3 +209,34 @@ def test_cpp_radius_batch_matches_python_center_rounding_at_cell_boundary():
     assert expected == [[(0.0, "edge")]]
     assert radius_queries(index, ((center, 0.0, 0.0),), backend="native") == expected
 
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_radius_persistent_index_reuses_until_index_revision_changes(monkeypatch):
+    native_backend._clear_point_index_cache()
+    index = SpatialHashIndex(0.25)
+    index.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+
+    builds = 0
+    real_build = native_backend._build_native_point_index
+
+    def counted_build(*args, **kwargs):
+        nonlocal builds
+        builds += 1
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(native_backend, "_build_native_point_index", counted_build)
+    try:
+        first = radius_query(index, 0.0, 0.0, 0.1, backend="native")
+        second = radius_query(index, 0.0, 0.0, 0.1, backend="native")
+        assert first == second == [(0.0, "a")]
+        assert builds == 1
+
+        index.insert("b", AABB(0.05, 0.0, 0.05, 0.0))
+        native_result = radius_query(index, 0.0, 0.0, 0.1, backend="native")
+        python_result = radius_query(index, 0.0, 0.0, 0.1, backend="python")
+        assert native_result == python_result
+        assert [obj_id for _, obj_id in native_result] == ["a", "b"]
+        assert builds == 2
+    finally:
+        native_backend._clear_point_index_cache()
