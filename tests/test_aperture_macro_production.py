@@ -4,6 +4,7 @@ import pytest
 
 from photonx_eda_pcb.errors import UnsupportedFeatureError
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
+from photonx_eda_pcb.preflight import preflight
 
 
 def _write(tmp_path: Path, text: str) -> Path:
@@ -424,6 +425,73 @@ def test_lower_left_rectangle_macro_non_exact_cases_fail_closed(
 
     with pytest.raises(UnsupportedFeatureError):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
+def test_lower_left_rectangle_macro_composes_with_step_repeat(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMLL*22,1,2.0,1.0,-1.0,-0.5,90*%\n"
+        "%ADD10LL*%\n"
+        "D10*\n"
+        "%SRX2Y1I3.0J0*%\n"
+        "X000000Y000000D03*\n"
+        "%SR*%\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.pads) == 2
+    assert [pad.center.x for pad in result.pads] == pytest.approx([0.0, 3.0])
+    assert all(pad.size_x == pytest.approx(1.0) for pad in result.pads)
+    assert all(pad.size_y == pytest.approx(2.0) for pad in result.pads)
+    assert all(
+        any(e.kind == "gerber_step_repeat" for e in pad.provenance.evidence)
+        for pad in result.pads
+    )
+
+
+def test_lower_left_rectangle_macro_preflight_is_strict_ready(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMLL*22,1,2.0,1.0,-1.0,-0.5,270*%\n"
+        "%ADD10LL*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    report = preflight(path)
+
+    assert report.discovered_files == 1
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_invalid_lower_left_rectangle_macro_preflight_blocks(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMLL*22,1,2.0,1.0,-1.0,-0.5,45*%\n"
+        "%ADD10LL*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    report = preflight(path)
+
+    assert report.discovered_files == 1
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "UNSUPPORTED_GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
 
 
 def test_lower_left_rectangle_macro_draw_remains_fail_closed(tmp_path: Path):
