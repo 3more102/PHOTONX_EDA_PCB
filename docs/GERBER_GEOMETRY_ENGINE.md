@@ -18,6 +18,19 @@ The high-level Gerber parser supports a deliberately bounded circular-arc subset
 
 Arc center/radius consistency is checked using the active coordinate resolution so valid quantized files are not rejected solely because of last-digit rounding.
 
+## Legacy whole-image rotation
+
+Deprecated Gerber `IR` image rotation is applied as an exact origin-centered transform after supported source geometry is resolved. The four specification-defined values are supported:
+
+- `IR0`: identity;
+- `IR90`: `(x, y) -> (-y, x)`;
+- `IR180`: `(x, y) -> (-x, -y)`;
+- `IR270`: `(x, y) -> (y, -x)`.
+
+The transform is applied consistently to linear tracks, outlines, flashes, tessellated arcs, and expanded step-repeat instances. Rectangular and obround flash X/Y dimensions are swapped at 90/270 degrees. Non-zero rotation is recorded as `gerber_image_rotation` provenance evidence.
+
+Legacy `SF` scale-factor syntax is also recognized. Identity scaling is accepted; non-identity scaling remains fail-closed because Gerber scales coordinate data but not apertures or step-repeat distances, and anisotropic scaling can change circular interpolation into non-circular geometry.
+
 ## Deliberately unsupported
 
 The production parser still rejects or diagnoses:
@@ -25,7 +38,7 @@ The production parser still rejects or diagnoses:
 - ambiguous or invalid **G74 single-quadrant** center resolution;
 - non-circular apertures used for curved interpolation;
 - region fills (G36/G37);
-- aperture macros and aperture blocks;
+- complex aperture macros outside the declared exact-reduction subset, and aperture blocks;
 - malformed/inconsistent arc geometry.
 
 Curved copper is represented as deterministic linear segments for the current BoardModel and downstream connectivity/export pipeline. The approximation is explicit evidence, not hidden geometry substitution.
