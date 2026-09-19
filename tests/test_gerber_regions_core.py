@@ -437,6 +437,33 @@ def test_touching_contours_in_one_statement_are_valid(tmp_path: Path):
     assert combined.area == pytest.approx(2.0)
 
 
+def test_coordinate_free_d02_starts_second_contour_at_current_point(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "d02_current_point.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X010000Y000000D01*\n"
+            "X010000Y010000D01*\n"
+            "X000000Y010000D01*\n"
+            "X000000Y000000D01*\n"
+            "D02*\n"
+            "X-010000Y010000D01*\n"
+            "X-020000Y000000D01*\n"
+            "X-010000Y-010000D01*\n"
+            "X000000Y000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 2
+    assert result.regions[1].points[0] == Point(0.0, 0.0)
+    assert result.regions[1].points[-1] == Point(0.0, 0.0)
+
+
 def test_d02_cannot_finalize_open_previous_contour(tmp_path: Path):
     path = _write(
         tmp_path,
