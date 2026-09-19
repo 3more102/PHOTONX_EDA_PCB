@@ -135,7 +135,7 @@ def test_conflicting_unit_switch_fails_closed_in_strict_mode(tmp_path: Path):
         "%\n"
         "T01\n"
         "X1.000Y1.000\n"
-        "INCH\n"
+        "M72\n"
         "X2.000Y2.000\n"
         "M30\n",
     )
@@ -174,7 +174,7 @@ def test_same_unit_redeclaration_remains_supported(tmp_path: Path):
         tmp_path,
         "M48\n"
         "METRIC\n"
-        "METRIC\n"
+        "M71\n"
         "T01C0.600\n"
         "%\n"
         "T01\n"
