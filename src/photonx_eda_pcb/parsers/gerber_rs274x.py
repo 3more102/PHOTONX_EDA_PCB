@@ -1718,19 +1718,7 @@ class GerberRS274XParser:
                 for index in range(0, len(coordinates), 2)
             ]
             epsilon = 1e-12
-            closure_scale = max(
-                1.0,
-                *(abs(coordinate) for point in points for coordinate in point),
-            )
-            closure_tolerance = 1e-9 * closure_scale
-            if (
-                exposure != 1
-                or hypot(
-                    points[-1][0] - points[0][0],
-                    points[-1][1] - points[0][1],
-                )
-                > closure_tolerance
-            ):
+            if exposure != 1 or points[-1] != points[0]:
                 self._fail_or_warn(
                     path,
                     line_no,
@@ -1738,7 +1726,8 @@ class GerberRS274XParser:
                     "UNSUPPORTED_GERBER_APERTURE_MACRO",
                     (
                         f"outline aperture macro {name!r} requires additive "
-                        "exposure and an explicitly closed contour"
+                        "exposure and an explicitly closed contour whose last "
+                        "vertex exactly equals its start vertex"
                     ),
                     out,
                 )
