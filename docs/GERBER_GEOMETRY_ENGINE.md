@@ -55,7 +55,7 @@ The production parser still rejects or diagnoses:
 - ambiguous or invalid **G74 single-quadrant** center resolution;
 - non-circular apertures used for curved interpolation;
 - unsupported G36/G37 region topologies outside the documented bounded multi-contour/cut-in subset;
-- complex aperture macros outside the declared exact-reduction subset, and aperture blocks;
+- complex aperture macros outside the declared exact-reduction subset, and aperture blocks outside the exact single-origin-flash reduction subset;
 - malformed/inconsistent arc geometry.
 
 Curved copper is represented as deterministic linear segments for the current BoardModel and downstream connectivity/export pipeline. The approximation is explicit evidence, not hidden geometry substitution.
