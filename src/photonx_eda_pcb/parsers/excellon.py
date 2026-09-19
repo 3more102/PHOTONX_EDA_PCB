@@ -30,7 +30,9 @@ _TOOL_DEF = re.compile(r"^T(\d+)C([0-9.]+)(?:F[0-9.]+)?(?:S[0-9.]+)?$")
 _TOOL_SEL = re.compile(r"^T(\d+)$")
 _HIT = re.compile(r"^(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?$")
 _REPEAT_HOLE = re.compile(
-    r"^R(\d+)(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?$"
+    r"^R(\d+)"
+    r"(?:X([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)))?"
+    r"(?:Y([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)))?$"
 )
 
 _ROUTE_ARC_MAX_CHORD_ERROR_MM = 0.005
@@ -297,7 +299,14 @@ class ExcellonParser:
         if self.tool is None or self.tool not in self.tools:
             raise ParseError(f"{p}:{line_no}: repeat-hole command before valid tool selection")
 
-        count=int(match.group(1))
+        try:
+            count=int(match.group(1))
+        except ValueError:
+            message="repeat-hole count is not representable"
+            if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
+            out.diagnostics.append(ParseDiagnostic("warning","INVALID_EXCELLON_REPEAT_COUNT",message,str(p),line_no))
+            self._disable_geometry(out)
+            return
         if count <= 0:
             message="repeat-hole count must be positive"
             if self.strict:raise ParseError(f"{p}:{line_no}: {message}: {line}")
