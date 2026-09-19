@@ -155,7 +155,7 @@ class GerberRS274XParser:
 
     Supported: FS, MO, ADD(C/R/O/P), Dnn selection, G01/D01/D02/D03,
     linear C/R/O/P aperture draws plus standard P and valid general Code-4
-    outline-macro D03 flashes on material layers,
+    outline-macro D03 flashes and D01 sweeps on material layers,
     bounded G74 single-quadrant
     and G75 multi-quadrant G02/G03 circular
     interpolation with circular apertures, dark multi-contour linear/G74/G75
@@ -418,8 +418,8 @@ class GerberRS274XParser:
                     (
                         "clear layer polarity is enabled for ordered polygon "
                         "composition of supported G36/G37 regions, C/R/O/P D03 "
-                        "flashes, valid Code-4 outline-macro D03 flashes, linear "
-                        "C/R/O/P D01 aperture sweeps, and bounded "
+                        "flashes, valid Code-4 outline-macro D03 flashes and D01 "
+                        "sweeps, linear C/R/O/P D01 aperture sweeps, and bounded "
                         "circular-aperture G02/G03 tessellation; curved boundaries use evidenced chord-"
                         "error bounds while outlines remain fail-closed"
                     ),
@@ -3945,7 +3945,8 @@ class GerberRS274XParser:
         """Materialize the bounded polygonal LPC image subset.
 
         Supported G36/G37 regions, rectangular, regular-polygon, and valid Code-4
-        outline-macro D03 flashes, rectangular linear-aperture D01 sweeps, and
+        outline-macro D03 flashes and D01 sweeps, rectangular linear-aperture
+        D01 sweeps, and
         solid regular-polygon D01
         sweeps are exact. Circular/obround
         D03 flashes plus
@@ -3979,7 +3980,7 @@ class GerberRS274XParser:
                 "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY",
                 (
                     "clear Gerber layer polarity supports G36/G37 regions, "
-                    "C/R/O/P D03 flashes, valid Code-4 outline-macro D03 flashes, "
+                    "C/R/O/P D03 flashes, valid Code-4 outline-macro D03 flashes and D01 sweeps, "
                     "linear C/R/O/P D01 aperture sweeps, and circular-aperture "
                     "G02/G03 tessellation; unsupported track forms or Edge.Cuts outline "
                     "geometry remain outside the bounded polygon-composition subset"
