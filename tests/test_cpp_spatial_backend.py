@@ -2,6 +2,7 @@ import pytest
 
 from photonx_eda_pcb.spatial_connectivity import AABB, SpatialHashIndex, candidate_pairs
 from photonx_eda_pcb.spatial_connectivity import native_backend
+from photonx_eda_pcb.spatial_connectivity.points import radius_query, radius_queries
 from photonx_eda_pcb.spatial_connectivity.native_backend import (
     NativeBackendLoadError,
     native_available,
@@ -144,3 +145,39 @@ def test_cpp_backend_matches_python_at_asymmetric_float_tolerance_boundary():
     expected = candidate_pairs(index, tolerance, backend="python")
     assert expected == [("a", "b")]
     assert candidate_pairs(index, tolerance, backend="native") == expected
+
+def test_radius_query_backend_selector_preserves_reference_contract():
+    index = SpatialHashIndex(0.5)
+    index.insert("z", AABB(-1.0, 0.0, -1.0, 0.0))
+    index.insert("a", AABB(0.0, 0.0, 0.0, 0.0))
+    index.insert("m", AABB(0.3, 0.4, 0.3, 0.4))
+
+    queries = ((0.0, 0.0, 0.5), (-1.0, 0.0, -0.1))
+    expected = radius_queries(index, queries, backend="python")
+    assert expected == [[(0.0, "a"), (0.5, "m")], []]
+    assert radius_queries(index, queries, backend="auto") == expected
+    assert radius_query(index, 0.0, 0.0, 0.5, backend="python") == expected[0]
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_radius_batch_matches_python_reference():
+    index = SpatialHashIndex(0.35)
+    for i in range(80):
+        x = (i % 10) * 0.17 - 0.8
+        y = (i // 10) * 0.19 - 0.6
+        index.insert(
+            f"p-{79 - i:03d}",
+            AABB(x - 0.02, y - 0.01, x + 0.02, y + 0.01),
+        )
+
+    queries = (
+        (0.0, 0.0, 0.0),
+        (0.0, 0.0, 0.2),
+        (-0.31, 0.17, 0.55),
+        (0.52, -0.25, 1.1),
+        (0.0, 0.0, -0.1),
+    )
+    assert radius_queries(index, queries, backend="native") == radius_queries(
+        index, queries, backend="python"
+    )
+
