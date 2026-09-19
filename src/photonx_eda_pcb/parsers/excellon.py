@@ -26,9 +26,12 @@ from ..provenance import Evidence, Provenance, SourceRef
 from ..units import CoordinateFormat, to_mm
 from .excellon_parts.slots import parse_slot_command
 
-_TOOL_DEF = re.compile(r"^T(\d+)C([0-9.]+)(?:F[0-9.]+)?(?:S[0-9.]+)?$")
+_TOOL_DEF = re.compile(
+    r"^T(\d+)(?:(?:F[0-9.]+)?(?:S[0-9.]+)?C([0-9.]+)|C([0-9.]+)(?:F[0-9.]+)?(?:S[0-9.]+)?)$"
+)
 _TOOL_SEL = re.compile(r"^T(\d+)$")
 _HIT = re.compile(r"^(?:X([+-]?[0-9.]+))?(?:Y([+-]?[0-9.]+))?$")
+_FILE_FORMAT = re.compile(r"^;FILE_FORMAT=([0-9]):([0-9])$")
 
 _ROUTE_ARC_MAX_CHORD_ERROR_MM = 0.005
 _ROUTE_ARC_MAX_SEGMENTS = 4096
@@ -51,6 +54,8 @@ class ExcellonParser:
     def __init__(self, strict: bool = True):
         self.strict = strict; self.units = "mm"; self.zero = "L"; self.units_declared = False; self.incremental = False
         self.fmt = CoordinateFormat(2, 4, "L"); self.tools = {}; self.tool = None; self.current = Point(0.0, 0.0)
+        self._declared_file_format: tuple[int, int] | None = None
+        self._coordinate_data_seen = False
         self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
         self.geometry_enabled=True
 
@@ -58,6 +63,12 @@ class ExcellonParser:
         self.geometry_enabled=False
         out.drills.clear();out.slots.clear();out.routes.clear()
         self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
+
+    def _reject_file_format(self,out:ExcellonResult,p:Path,line_no:int,line:str,code:str,message:str):
+        if self.strict:
+            raise ParseError(f"{p}:{line_no}: {message}: {line}")
+        out.diagnostics.append(ParseDiagnostic("warning",code,message,str(p),line_no))
+        self._disable_geometry(out)
 
     def _decode(self, raw):
         if raw is None:return None
@@ -278,11 +289,52 @@ class ExcellonParser:
         p=Path(path);out=ExcellonResult()
         for line_no,raw in enumerate(p.read_text(encoding="utf-8-sig",errors="strict").splitlines(),1):
             line=raw.strip().upper()
-            if not line or line in {"M48","%","M30","M95"} or line.startswith(";"):continue
+            if not line:
+                continue
+            if line.startswith(";FILE_FORMAT"):
+                match=_FILE_FORMAT.fullmatch(line)
+                if match is None:
+                    self._reject_file_format(
+                        out,p,line_no,line,"INVALID_EXCELLON_FILE_FORMAT",
+                        "malformed ;FILE_FORMAT hint; expected ;FILE_FORMAT=<digit>:<digit>",
+                    )
+                    continue
+                declared=(int(match.group(1)),int(match.group(2)))
+                if declared == (0,0):
+                    self._reject_file_format(
+                        out,p,line_no,line,"INVALID_EXCELLON_FILE_FORMAT",
+                        "Excellon file format must contain at least one coordinate digit",
+                    )
+                    continue
+                if self._coordinate_data_seen:
+                    self._reject_file_format(
+                        out,p,line_no,line,"LATE_EXCELLON_FILE_FORMAT",
+                        ";FILE_FORMAT must precede coordinate-bearing statements",
+                    )
+                    continue
+                if self._declared_file_format is not None and self._declared_file_format != declared:
+                    self._reject_file_format(
+                        out,p,line_no,line,"CONFLICTING_EXCELLON_FILE_FORMAT",
+                        (
+                            "conflicting ;FILE_FORMAT hint "
+                            f"{declared[0]}:{declared[1]} after "
+                            f"{self._declared_file_format[0]}:{self._declared_file_format[1]}"
+                        ),
+                    )
+                    continue
+                self._declared_file_format=declared
+                self.fmt=CoordinateFormat(declared[0],declared[1],self.zero)
+                continue
+            if line in {"M48","%","M30","M95"} or line.startswith(";"):
+                continue
             if line.startswith("METRIC") or line == "M71":
-                self.units="mm";self.units_declared=True;self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(3,3,self.zero);continue
+                self.units="mm";self.units_declared=True;self.zero="T" if "TZ" in line else "L"
+                digits=self._declared_file_format or (3,3)
+                self.fmt=CoordinateFormat(digits[0],digits[1],self.zero);continue
             if line.startswith("INCH") or line == "M72":
-                self.units="inch";self.units_declared=True;self.zero="T" if "TZ" in line else "L";self.fmt=CoordinateFormat(2,4,self.zero);continue
+                self.units="inch";self.units_declared=True;self.zero="T" if "TZ" in line else "L"
+                digits=self._declared_file_format or (2,4)
+                self.fmt=CoordinateFormat(digits[0],digits[1],self.zero);continue
             if line.startswith(("FMAT,", "VER,")):
                 continue
             if line == "G90":
@@ -306,6 +358,7 @@ class ExcellonParser:
             if not self.geometry_enabled:
                 continue
             if "G85" in line:
+                self._coordinate_data_seen=True
                 if self.route.tool_down:
                     if self.strict:raise ParseError(f"{p}:{line_no}: G85 encountered while route tool is down")
                     out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","G85 while route active",str(p),line_no))
@@ -340,8 +393,10 @@ class ExcellonParser:
                 out.slots.append(SlotFeature(slot_id,(x1,y1),(x2,y2),self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],evidence)))
                 self.current=Point(x2,y2);continue
             if line.startswith(("G02","G03")):
+                self._coordinate_data_seen=True
                 self._route_arc(p,out,line_no,line);continue
             if line.startswith(("G00","G01")):
+                self._coordinate_data_seen=True
                 cmd, xraw, yraw = None, None, None
                 try:cmd,xraw,yraw=parse_linear_route_command(line)
                 except ValueError:
@@ -407,7 +462,8 @@ class ExcellonParser:
                     )
                     self._disable_geometry(out)
                     continue
-                tool,diameter=m.groups()
+                tool=m.group(1)
+                diameter=m.group(2) or m.group(3)
                 diameter_value=float(diameter)
                 if diameter_value <= 0:
                     message="Excellon tool diameter must be positive"
@@ -435,6 +491,7 @@ class ExcellonParser:
                 self.tool=m.group(1);continue
             m=_HIT.match(line)
             if m and (m.group(1) is not None or m.group(2) is not None):
+                self._coordinate_data_seen=True
                 if self.route.tool_down:
                     if self.strict:raise ParseError(f"{p}:{line_no}: drill hit while route tool is down")
                     out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","drill hit while route active",str(p),line_no))
