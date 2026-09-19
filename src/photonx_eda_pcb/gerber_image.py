@@ -343,8 +343,10 @@ def trace_polygon_operation_contributions(
             image = before.union(geometry)
         elif operation.polarity == "clear":
             after = before.difference(geometry)
-            clear_boundaries[operation.sequence] = after.boundary.difference(
-                before.boundary
+            after_boundary = _safe_boundary(after)
+            before_boundary = _safe_boundary(before)
+            clear_boundaries[operation.sequence] = after_boundary.difference(
+                before_boundary
             )
             for sequence, surviving in tuple(dark_material.items()):
                 if surviving.is_empty:
@@ -424,6 +426,14 @@ def compose_polygon_operations(
         image,
         error_prefix="Gerber polygon composition",
     )
+
+
+def _safe_boundary(geometry: BaseGeometry) -> BaseGeometry:
+    """Return an empty geometry instead of Shapely's None empty boundary."""
+    if geometry.is_empty:
+        return GeometryCollection()
+    boundary = geometry.boundary
+    return boundary if boundary is not None else GeometryCollection()
 
 
 def _normalize_polygonal_image(
