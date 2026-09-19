@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from photonx_eda_pcb.errors import UnsupportedFeatureError
+from photonx_eda_pcb.geometry_kernel import region_shape
 from photonx_eda_pcb.parsers.gerber_rs274x import GerberRS274XParser
 from photonx_eda_pcb.preflight import preflight
 
@@ -205,7 +206,7 @@ def test_vector_line_macro_non_exact_cases_fail_closed(
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
-def test_vector_line_rectangle_macro_draw_remains_fail_closed(tmp_path: Path):
+def test_vector_line_rectangle_macro_draw_uses_exact_rectangular_sweep(tmp_path: Path):
     path = _write(
         tmp_path,
         "%FSLAX24Y24*%\n"
@@ -218,8 +219,17 @@ def test_vector_line_rectangle_macro_draw_remains_fail_closed(tmp_path: Path):
         "M02*\n",
     )
 
-    with pytest.raises(UnsupportedFeatureError):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    assert region_shape(result.regions[0]).area == pytest.approx(0.6)
+    assert any(
+        evidence.kind == "gerber_track_polygonization"
+        and "aperture_shape=R" in evidence.detail
+        and "method=convex_sweep_exact" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
 
 
 def test_center_line_rectangle_macro_flash_is_supported(tmp_path: Path):
@@ -267,7 +277,7 @@ def test_center_line_rectangle_macro_orthogonal_rotation_swaps_dimensions(
     assert pad.size_y == pytest.approx(1.0)
 
 
-def test_center_line_rectangle_macro_draw_remains_fail_closed(tmp_path: Path):
+def test_center_line_rectangle_macro_draw_uses_exact_rectangular_sweep(tmp_path: Path):
     path = _write(
         tmp_path,
         "%FSLAX24Y24*%\n"
@@ -280,8 +290,17 @@ def test_center_line_rectangle_macro_draw_remains_fail_closed(tmp_path: Path):
         "M02*\n",
     )
 
-    with pytest.raises(UnsupportedFeatureError):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    assert region_shape(result.regions[0]).area == pytest.approx(4.0)
+    assert any(
+        evidence.kind == "gerber_track_polygonization"
+        and "aperture_shape=R" in evidence.detail
+        and "method=convex_sweep_exact" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
 
 
 def test_center_line_rectangle_macro_respects_active_inch_units(tmp_path: Path):
@@ -494,7 +513,7 @@ def test_invalid_lower_left_rectangle_macro_preflight_blocks(tmp_path: Path):
     )
 
 
-def test_lower_left_rectangle_macro_draw_remains_fail_closed(tmp_path: Path):
+def test_lower_left_rectangle_macro_draw_uses_exact_rectangular_sweep(tmp_path: Path):
     path = _write(
         tmp_path,
         "%FSLAX24Y24*%\n"
@@ -507,8 +526,17 @@ def test_lower_left_rectangle_macro_draw_remains_fail_closed(tmp_path: Path):
         "M02*\n",
     )
 
-    with pytest.raises(UnsupportedFeatureError):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    assert region_shape(result.regions[0]).area == pytest.approx(3.0)
+    assert any(
+        evidence.kind == "gerber_track_polygonization"
+        and "aperture_shape=R" in evidence.detail
+        and "method=convex_sweep_exact" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
 
 
 def test_permissive_invalid_lower_left_macro_skips_and_recovers(tmp_path: Path):

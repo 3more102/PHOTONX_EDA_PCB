@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from photonx_eda_pcb.gerber_image import polygonize_track
+from photonx_eda_pcb.gerber_image import polygonize_aperture_track, polygonize_track
 
 
 def test_horizontal_track_polygonization_has_bounded_round_caps():
@@ -51,3 +51,45 @@ def test_track_polygonization_is_deterministic():
     assert first.length_mm == second.length_mm
     assert first.curved_segments == second.curved_segments
     assert first.geometry.equals_exact(second.geometry, tolerance=0.0)
+
+
+def test_rectangular_aperture_track_sweep_is_exact():
+    result = polygonize_aperture_track(
+        0.0, 0.0, 1.0, 0.0, 0.6, 0.3, "R"
+    )
+
+    assert result.shape == "R"
+    assert not result.approximated
+    assert result.curved_segments == 0
+    assert result.max_chord_error_mm == 0.0
+    assert result.length_mm == pytest.approx(1.0)
+    assert result.geometry.bounds == pytest.approx((-0.3, -0.15, 1.3, 0.15))
+    assert result.geometry.area == pytest.approx(0.48)
+
+
+def test_obround_aperture_track_sweep_is_bounded_and_deterministic():
+    first = polygonize_aperture_track(
+        0.0, 0.0, 1.0, 0.0, 0.6, 0.3, "O"
+    )
+    second = polygonize_aperture_track(
+        0.0, 0.0, 1.0, 0.0, 0.6, 0.3, "O"
+    )
+
+    exact_area = 1.3 * 0.3 + math.pi * 0.15**2
+    assert first.approximated
+    assert first.max_chord_error_mm == pytest.approx(0.005)
+    assert first.geometry.is_valid
+    assert first.geometry.area < exact_area
+    assert first.geometry.area > exact_area - 0.01
+    assert first.geometry.equals_exact(second.geometry, tolerance=0.0)
+
+
+def test_circular_aperture_track_wrapper_matches_capsule_polygonizer():
+    generic = polygonize_aperture_track(
+        0.0, 0.0, 3.0, 4.0, 2.0, 2.0, "C"
+    )
+    circular = polygonize_track(0.0, 0.0, 3.0, 4.0, 2.0)
+
+    assert generic.length_mm == circular.length_mm
+    assert generic.curved_segments == circular.curved_segments
+    assert generic.geometry.equals_exact(circular.geometry, tolerance=0.0)
