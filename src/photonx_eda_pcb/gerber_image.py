@@ -685,6 +685,68 @@ def polygonize_regular_polygon_flash(
     )
 
 
+def polygonize_regular_polygon_track(
+    start_x: float,
+    start_y: float,
+    end_x: float,
+    end_y: float,
+    outer_diameter: float,
+    vertices: int,
+    *,
+    base_rotation_deg: float = 0.0,
+    mirror: str = "N",
+    object_rotation_deg: float = 0.0,
+) -> ApertureTrackPolygonization:
+    """Return the exact linear sweep of a solid regular-polygon aperture."""
+
+    x0 = float(start_x)
+    y0 = float(start_y)
+    x1 = float(end_x)
+    y1 = float(end_y)
+    diameter = float(outer_diameter)
+
+    start_flash = polygonize_regular_polygon_flash(
+        x0,
+        y0,
+        diameter,
+        vertices,
+        base_rotation_deg=base_rotation_deg,
+        mirror=mirror,
+        object_rotation_deg=object_rotation_deg,
+    )
+    length = hypot(x1 - x0, y1 - y0)
+    if length <= 1e-15:
+        geometry = start_flash.geometry
+    else:
+        end_flash = polygonize_regular_polygon_flash(
+            x1,
+            y1,
+            diameter,
+            vertices,
+            base_rotation_deg=base_rotation_deg,
+            mirror=mirror,
+            object_rotation_deg=object_rotation_deg,
+        )
+        geometry = start_flash.geometry.union(end_flash.geometry).convex_hull
+
+    if not isinstance(geometry, Polygon):
+        raise ValueError("Gerber polygon track sweep produced non-polygonal geometry")
+    if geometry.is_empty or float(geometry.area) <= 0.0 or not geometry.is_valid:
+        raise ValueError("Gerber polygon track sweep produced invalid geometry")
+
+    return ApertureTrackPolygonization(
+        geometry=geometry,
+        shape="P",
+        size_x=diameter,
+        size_y=diameter,
+        rotation_deg=float(object_rotation_deg) % 360.0,
+        length_mm=length,
+        curved_segments=0,
+        max_chord_error_mm=0.0,
+        approximated=False,
+    )
+
+
 def _circle_points(
     cx: float,
     cy: float,
