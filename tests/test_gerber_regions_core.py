@@ -753,7 +753,7 @@ def test_simple_cut_in_hole_follows_image_transform(tmp_path: Path):
     assert max(point.y for point in region.points) == pytest.approx(0.0)
 
 
-def test_multiple_cut_in_pairs_remain_fail_closed(tmp_path: Path):
+def test_multiple_same_axis_cut_ins_reconstruct_multiple_holes(tmp_path: Path):
     path = _write(
         tmp_path,
         "two_cut_ins.gtl",
@@ -782,10 +782,131 @@ def test_multiple_cut_in_pairs_remain_fail_closed(tmp_path: Path):
         ),
     )
 
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert len(result.regions) == 1
+    region = result.regions[0]
+    assert len(region.holes) == 2
+    assert region_shape(region).area == pytest.approx(136.0)
+    cutins = [
+        event for event in region.provenance.evidence
+        if event.kind == "gerber_region_cut_in"
+    ]
+    assert len(cutins) == 2
+    assert all("bridge_orientation=horizontal" in event.detail for event in cutins)
+    assert any("cut_in=1/2" in event.detail for event in cutins)
+    assert any("cut_in=2/2" in event.detail for event in cutins)
+
+
+def test_multiple_vertical_cut_ins_are_supported(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "two_vertical_cut_ins.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X120000Y000000D01*\n"
+            "X120000Y120000D01*\n"
+            "X090000Y120000D01*\n"
+            "X090000Y100000D01*\n"
+            "X110000Y100000D01*\n"
+            "X110000Y080000D01*\n"
+            "X090000Y080000D01*\n"
+            "X090000Y100000D01*\n"
+            "X090000Y120000D01*\n"
+            "X030000Y120000D01*\n"
+            "X030000Y100000D01*\n"
+            "X050000Y100000D01*\n"
+            "X050000Y080000D01*\n"
+            "X030000Y080000D01*\n"
+            "X030000Y100000D01*\n"
+            "X030000Y120000D01*\n"
+            "X000000Y120000D01*\n"
+            "X000000Y000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    region = result.regions[0]
+    assert len(region.holes) == 2
+    assert region_shape(region).area == pytest.approx(136.0)
+    cutins = [
+        event for event in region.provenance.evidence
+        if event.kind == "gerber_region_cut_in"
+    ]
+    assert all("bridge_orientation=vertical" in event.detail for event in cutins)
+
+
+def test_mixed_cut_in_directions_are_rejected(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "mixed_cut_in_directions.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X120000Y000000D01*\n"
+            "X120000Y120000D01*\n"
+            "X080000Y120000D01*\n"
+            "X080000Y100000D01*\n"
+            "X100000Y100000D01*\n"
+            "X100000Y080000D01*\n"
+            "X080000Y080000D01*\n"
+            "X080000Y100000D01*\n"
+            "X080000Y120000D01*\n"
+            "X000000Y120000D01*\n"
+            "X000000Y030000D01*\n"
+            "X020000Y030000D01*\n"
+            "X020000Y050000D01*\n"
+            "X040000Y050000D01*\n"
+            "X040000Y030000D01*\n"
+            "X020000Y030000D01*\n"
+            "X000000Y030000D01*\n"
+            "X000000Y000000D01*\n"
+            "G37*"
+        ),
+    )
+
     with pytest.raises(
-        UnsupportedFeatureError,
-        match="only one fully-coincident cut-in bridge pair",
+        ParseError,
+        match="all cut-ins in one Gerber contour must have the same direction",
     ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+
+def test_cut_in_bridge_may_not_cross_another_hole_boundary(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "bridge_crosses_hole.gtl",
+        _region_file(
+            "G36*\n"
+            "X000000Y000000D02*\n"
+            "X120000Y000000D01*\n"
+            "X120000Y120000D01*\n"
+            "X000000Y120000D01*\n"
+            "X000000Y060000D01*\n"
+            "X080000Y060000D01*\n"
+            "X080000Y080000D01*\n"
+            "X100000Y080000D01*\n"
+            "X100000Y040000D01*\n"
+            "X080000Y040000D01*\n"
+            "X080000Y060000D01*\n"
+            "X000000Y060000D01*\n"
+            "X000000Y030000D01*\n"
+            "X090000Y030000D01*\n"
+            "X090000Y050000D01*\n"
+            "X110000Y050000D01*\n"
+            "X110000Y010000D01*\n"
+            "X090000Y010000D01*\n"
+            "X090000Y030000D01*\n"
+            "X000000Y030000D01*\n"
+            "X000000Y000000D01*\n"
+            "G37*"
+        ),
+    )
+
+    with pytest.raises(ParseError):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
