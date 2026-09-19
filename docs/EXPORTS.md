@@ -33,14 +33,15 @@ The bundle and individual flags are additive and may be combined. They do not al
 
 ## KiCad export audit artifacts
 
-When `photonx reconstruct ... --kicad` is requested, the CLI writes four KiCad-facing artifacts:
+When `photonx reconstruct ... --kicad` is requested, the CLI writes five KiCad-facing artifacts:
 
 - `reconstructed.kicad_pcb` — the experimental editable board representation;
 - `kicad_export_report.json` — the complete current `KicadExportReport`, including counts, exported/skipped IDs, structured issues, and `ok`;
 - `kicad_omissions.json` — the stable omission-manifest view covering slots, copper regions, tracks, and arbitrary routed paths;
+- `kicad_connectivity_roundtrip.json` — an immediate export/reload comparison of the net table, exported track bindings, and recovered-pad bindings, with explicit connectivity-loss accounting for skipped tracks and unresolved pad nets;
 - `kicad_validation.txt` — the independent native `kicad-cli pcb drc` result when the validator is available.
 
-Exporter warnings remain warnings and do not change reconstruction exit-code semantics. The audit files make conservative omissions, defaulted zone rules, omitted fill caches, and unresolved references visible instead of discarding that evidence in the normal CLI workflow.
+Exporter warnings and round-trip findings do not change reconstruction exit-code semantics. The connectivity artifact separates `roundtrip_equal` (the re-read KiCad file matches the exporter policy) from `source_equivalent` (no tracked source connectivity was lost). Its current scope is the net table, board track segments, and `PHOTONX:RecoveredPad` footprints; copper-zone and plated-slot connectivity remain outside this validator. The audit files make conservative omissions, defaulted zone rules, omitted fill caches, unresolved references, and export/reload mismatches visible instead of discarding that evidence in the normal CLI workflow.
 
 ## KiCad native validation
 
