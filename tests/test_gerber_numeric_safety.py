@@ -206,6 +206,8 @@ def test_preflight_blocks_non_finite_standard_aperture(tmp_path: Path):
     [
         "%SRX2Y1I.J0*%",
         "%SRX2Y1I1..0J0*%",
+        "%SRX٢Y1I10J0*%",
+        "%SRX2Y１I10J0*%",
     ],
 )
 def test_step_repeat_helper_rejects_malformed_decimals(statement: str):
