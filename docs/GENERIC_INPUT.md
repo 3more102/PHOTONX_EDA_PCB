@@ -104,6 +104,9 @@ The generic input path also handles several common real-world variations:
 - deprecated Gerber Code-22 lower-left rectangles are accepted when positive-size and
   centered on the macro origin by their lower-left coordinates, with arbitrary finite
   primitive rotation;
+- single positive Gerber Code-4 outline macros are accepted when they contain exactly four
+  vertices plus the repeated closing point and those vertices prove an origin-centered rectangle;
+  arbitrary first-edge orientation and finite primitive rotation are preserved exactly;
 - single positive Gerber Code-5 polygon macros are accepted when they have an integer
   3–12 vertex count, are centered at the macro origin, have a positive circumscribed-circle
   diameter, and use a finite rotation; they reduce exactly to the equivalent standard P aperture;
