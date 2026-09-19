@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added deterministic GUI layer visibility for reconstructed copper layers and Edge.Cuts, plus review-safe CopperRegion contour rendering with explicit hole outlines. The visibility state is toolkit-independent and covered by headless regressions.
+
 - Fixed KiCad recovered-pad surface-layer pairing: back-side SMD pads now use `B.Paste`/`B.Mask` and back silkscreen references, front-side pads keep the matching front layers, and non-surface copper pads no longer invent front/back paste or mask layers.
 
 - Hardened Gerber X2 attribute ingestion: TF/TA/TO/TD command grammar and standard-name domains are validated before metadata is preserved, while attribute fields safely decode 4- and 8-digit Unicode escapes after comma splitting. Malformed escapes, invalid Unicode scalars, raw reserved characters, invalid names/domain use, value-bearing TD commands, and malformed TO.C fail closed.
