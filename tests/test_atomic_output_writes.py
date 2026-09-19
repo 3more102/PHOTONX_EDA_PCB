@@ -27,6 +27,51 @@ def test_atomic_write_failure_preserves_existing_target_and_cleans_temp(tmp_path
     assert list(tmp_path.glob("artifact.txt.*")) == []
 
 
+def test_atomic_write_fsync_failure_preserves_existing_target_and_cleans_temp(tmp_path, monkeypatch):
+    target = tmp_path / "artifact.txt"
+    target.write_text("old", encoding="utf-8")
+
+    def fail_fsync(fd):
+        raise OSError("fsync failed")
+
+    monkeypatch.setattr(safe_write.os, "fsync", fail_fsync)
+
+    with pytest.raises(OSError, match="fsync failed"):
+        atomic_write_text(target, "new")
+
+    assert target.read_text(encoding="utf-8") == "old"
+    assert list(tmp_path.glob("artifact.txt.*")) == []
+
+
+def test_parent_directory_sync_uses_directory_descriptor(tmp_path, monkeypatch):
+    target = tmp_path / "artifact.txt"
+    calls = {"open": [], "fsync": [], "close": []}
+
+    def fake_open(path, flags):
+        calls["open"].append((Path(path), flags))
+        return 321
+
+    monkeypatch.setattr(safe_write.os, "open", fake_open)
+    monkeypatch.setattr(safe_write.os, "fsync", lambda fd: calls["fsync"].append(fd))
+    monkeypatch.setattr(safe_write.os, "close", lambda fd: calls["close"].append(fd))
+
+    safe_write._best_effort_fsync_parent_directory(target)
+
+    assert calls["open"][0][0] == tmp_path
+    assert calls["fsync"] == [321]
+    assert calls["close"] == [321]
+
+
+def test_parent_directory_sync_is_best_effort(tmp_path, monkeypatch):
+    target = tmp_path / "artifact.txt"
+
+    def fail_open(path, flags):
+        raise OSError("directory handles unsupported")
+
+    monkeypatch.setattr(safe_write.os, "open", fail_open)
+    safe_write._best_effort_fsync_parent_directory(target)
+
+
 def test_json_export_uses_atomic_replace(tmp_path, monkeypatch):
     target = tmp_path / "board.json"
     target.write_text('{"stale": true}', encoding="utf-8")
