@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added exact production support for single positive Gerber aperture-macro Outline primitives (Code 4) as D03 flashes on material layers. PHOTONX validates the 3–5000 vertex count, explicit closure, finite coordinates/rotation, non-self-intersection and non-zero area; preserves primitive rotation before LM/LR/LS and supported whole-image IR; and carries exact CopperRegion geometry through step-repeat, provenance and ordered LPD/LPC composition. Code-4 D01 sweeps, Edge.Cuts flashes, exposure-off/multi-primitive macros and invalid contours remain fail-closed.
+
 - Extended exact single-primitive rectangular Gerber aperture-macro reduction to arbitrary finite rotation. Centered Code-20/Code-2 vector lines may now use non-axis-aligned segments, while Code-21 center-line and deprecated Code-22 lower-left rectangles preserve arbitrary primitive rotation; intrinsic macro orientation composes with LM/LR/LS and supported whole-image IR, with non-orthogonal material flashes/draws emitted as exact polygonal rectangle geometry.
 
 - Added exact production reduction for single positive origin-centered Gerber aperture-macro Polygon primitives (Code 5) to standard `P` apertures. The supported subset enforces integer vertex counts 3–12, positive circumscribed diameter, finite rotation, active-unit conversion, strict/preflight fail-closed validation, and reuses the existing exact P flash/D01/transform/LPD-LPC paths.
