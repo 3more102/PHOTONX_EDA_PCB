@@ -2148,6 +2148,11 @@ class GerberRS274XParser:
             )
             return
         code = int(match.group(1))
+        self.aperture_block_code = code
+        self.aperture_block_selected = None
+        self.aperture_block_flash = None
+        self.aperture_block_start_source = SourceRef(str(path), line_no, line)
+        self.aperture_block_failed = False
 
         if not self._require_units(path, line_no, line, out):
             self.aperture_block_failed = True
