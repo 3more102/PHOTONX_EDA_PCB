@@ -47,6 +47,14 @@ Cache invalidation drops only the cache reference: a borrowed handle remains ali
 
 This stage changes only broad-phase reuse. Python still performs the authoritative Euclidean `distance <= radius` predicate and deterministic `(distance, id)` ordering.
 
+## Stage 4: persistent AABB candidate indexes
+
+Repeated `candidate_pairs()` calls now reuse an opaque C++ AABB spatial-hash handle instead of rebuilding the full native grid for every tolerance query. The handle stores only the broad-phase box snapshot and cell grid; pair generation still preserves the existing inclusive AABB semantics and deterministic string-ID ordering.
+
+`SpatialHashIndex.revision` is used as the cache invalidation contract. Any insertion causes the next native call to rebuild the handle. Cache replacement and explicit cache clears drop only weak references, so an active query can safely finish with its borrowed handle. Duck-typed indexes without a trustworthy revision contract use an ephemeral handle and are never cached.
+
+This optimization does not decide copper contact, connectivity, DRC clearance, or semantic nets. It only removes repeated native grid construction from broad-phase candidate generation.
+
 ## Safety contract
 
 The native backend:
@@ -63,9 +71,8 @@ Unsupported native inputs fall back to the Python reference path in `auto` mode.
 
 The next safe candidates are:
 
-1. persistent AABB candidate-index handles for repeated connectivity broad-phase calls;
-2. benchmark-gated connectivity candidate acceleration and crossover thresholds;
-3. cross-platform packaging of the optional native library;
-4. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
+1. benchmark-gated connectivity candidate acceleration and measured crossover thresholds;
+2. cross-platform packaging of the optional native library;
+3. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
 
 Gerber/Excellon parsing, provenance, fail-closed diagnostics, and semantic inference should not be migrated merely for language uniformity. They should move only when a measured bottleneck and a parity strategy exist.
