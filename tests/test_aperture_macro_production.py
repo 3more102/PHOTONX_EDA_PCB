@@ -494,6 +494,86 @@ def test_polygon_macro_non_exact_cases_fail_closed(
     )
 
 
+@pytest.mark.parametrize(
+    ("center_x", "center_y"),
+    [
+        ("1e309-1e309", "0"),
+        ("0", "1e309-1e309"),
+    ],
+)
+def test_polygon_macro_nonfinite_center_expression_fails_closed(
+    tmp_path: Path,
+    center_x: str,
+    center_y: str,
+):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        f"%AMPOLY*5,1,6,{center_x},{center_y},2.0,0*%\n"
+        "%ADD10POLY*%\n"
+        "D10*\n"
+        "X000000Y000000D03*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="polygon aperture macro",
+    ):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    report = preflight(path)
+    assert not report.ready_for_strict_reconstruction
+    assert any(
+        "UNSUPPORTED_GERBER_APERTURE_MACRO" in blocker
+        for blocker in report.strict_blockers
+    )
+
+
+def test_polygon_macro_composes_with_aperture_and_image_transforms(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMPOLY*5,1,5,0,0,2.0,17*%\n"
+        "%ADD10POLY*%\n"
+        "D10*\n"
+        "%LMX*%\n"
+        "%LR30*%\n"
+        "%LS1.5*%\n"
+        "%IR90*%\n"
+        "X010000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+    expected = polygonize_regular_polygon_flash(
+        -2.0,
+        1.0,
+        3.0,
+        5,
+        base_rotation_deg=17.0,
+        mirror="X",
+        object_rotation_deg=120.0,
+    ).geometry
+
+    assert len(result.regions) == 1
+    assert region_shape(result.regions[0]).symmetric_difference(
+        expected
+    ).area == pytest.approx(0.0, abs=1e-12)
+    evidence_kinds = {
+        evidence.kind
+        for evidence in result.regions[0].provenance.evidence
+    }
+    assert {
+        "gerber_aperture_mirror",
+        "gerber_aperture_rotation",
+        "gerber_aperture_scale",
+        "gerber_polygon_flash",
+    }.issubset(evidence_kinds)
+
+
 def test_lower_left_rectangle_macro_flash_is_supported(tmp_path: Path):
     path = _write(
         tmp_path,
