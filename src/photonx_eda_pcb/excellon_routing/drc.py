@@ -2,7 +2,7 @@ from photonx_eda_pcb.drc.model import DrcIssue
 from photonx_eda_pcb.geometry_kernel import object_shape
 from .geometry import route_shape
 def check_route_copper_clearance(routes,board,minimum_mm=.15):
-    out=[];copper=[*board.tracks,*board.pads]
+    out=[];copper=[*board.tracks,*board.pads,*getattr(board,"regions",())]
     for route in routes:
         rs=route_shape(route)
         for obj in copper:

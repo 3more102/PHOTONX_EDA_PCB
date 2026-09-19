@@ -4,7 +4,7 @@ from photonx_eda_pcb.mechanical_features.geometry import slot_shape,hole_shape
 from photonx_eda_pcb.mechanical_features.clearance import clearance_to_objects
 
 def check_mechanical_features(features,board,minimum_mm=.15):
-    copper=[*board.tracks,*board.pads];out=[]
+    copper=[*board.tracks,*board.pads,*getattr(board,"regions",())];out=[]
     for feature in features:
         if getattr(feature,"plated","unknown")=="plated":continue
         shape=slot_shape(feature) if hasattr(feature,"width_mm") else hole_shape(feature)
