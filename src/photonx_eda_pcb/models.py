@@ -38,6 +38,7 @@ class CopperRegion:
     layer: str
     net_id: str | None = None
     provenance: Provenance = field(default_factory=Provenance)
+    holes: tuple[tuple[Point, ...], ...] = ()
 
 @dataclass
 class DrillHit:
