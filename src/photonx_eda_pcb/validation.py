@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass,field
 from .models import BoardModel
 from .excellon_routing.validation import validate_route
+from .zones.validation import validate_zone
 
 @dataclass(frozen=True)
 class ValidationIssue:
@@ -22,7 +23,7 @@ class ValidationReport:
 
 def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationReport:
     r=ValidationReport()
-    all_objects=[*board.tracks,*board.pads,*board.drills,*board.outline,*getattr(board,"slots",()),*getattr(board,"routes",())]
+    all_objects=[*board.tracks,*board.pads,*board.drills,*board.outline,*getattr(board,"slots",()),*getattr(board,"routes",()),*getattr(board,"zones",())]
     ids=[o.id for o in all_objects]
     if len(ids)!=len(set(ids)):r.issues.append(ValidationIssue("error","DUPLICATE_OBJECT_ID","object IDs must be globally unique"))
     idx=board.object_index();net_members=set()
@@ -32,7 +33,7 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
             if member not in idx:r.issues.append(ValidationIssue("error","NET_MEMBER_MISSING",f"{net.id} references missing object {member}",(net.id,member)))
             if member in net_members:r.issues.append(ValidationIssue("error","OBJECT_IN_MULTIPLE_NETS",f"{member} appears in more than one physical net",(member,)))
             net_members.add(member)
-    for obj in [*board.tracks,*board.pads]:
+    for obj in [*board.tracks,*board.pads,*getattr(board,"zones",())]:
         if obj.net_id and obj.id not in net_members:r.issues.append(ValidationIssue("error","OBJECT_NET_BACKREF_MISMATCH",f"{obj.id} has net_id but is not listed in that net",(obj.id,)))
     pad_ids={p.id for p in board.pads}
     for comp in board.components:
@@ -47,6 +48,18 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
         for code in validate_route(route):
             sev="warning" if code=="ROUTE_ZERO_LENGTH_SEGMENT" else "error"
             r.issues.append(ValidationIssue(sev,code,code.replace("_"," ").lower(),(route.id,)))
+    for zone in getattr(board,"zones",()):
+        for code in validate_zone(zone):
+            r.issues.append(ValidationIssue("error",code,code.replace("_"," ").lower(),(zone.id,)))
+        if zone.net_id is None:
+            r.issues.append(
+                ValidationIssue(
+                    "warning",
+                    "ZONE_NET_UNRESOLVED",
+                    "zone geometry is reconstructed but its electrical net is not inferred",
+                    (zone.id,),
+                )
+            )
     if board.outline:
         degree={}
         def key(pt):return (round(pt.x/outline_tolerance_mm)*outline_tolerance_mm,round(pt.y/outline_tolerance_mm)*outline_tolerance_mm)
