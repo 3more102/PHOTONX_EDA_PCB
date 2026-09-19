@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added legacy Gerber incremental coordinate support for `G91` and FS `I` notation: X/Y values now accumulate from the preceding coordinate position, `G90`/FS `A` restore absolute notation, and arc I/J values remain center offsets from the arc start.
 - Added exact reduction of single positive origin-centered, zero-rotation Code-21 center-line Gerber macros to rectangular apertures, with active-unit conversion and fail-closed boundaries.
 - Hardened Gerber unit semantics: dimensional data now requires explicit `MO` or supported legacy `G70/G71`, and conflicting unit switches fail closed with permissive file-geometry suppression instead of defaulting to millimeters or mixing unit systems.
 - Verified merged commit `ec8383b` on Python 3.11, 3.12, and 3.13 with 824 passing tests and 2 existing collection warnings (GitHub Actions run `35427167859`).
