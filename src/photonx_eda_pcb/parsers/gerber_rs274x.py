@@ -2588,6 +2588,20 @@ class GerberRS274XParser:
                             out,
                         )
                         continue
+                    if operation == "2":
+                        if not self._require_units(p, line_no, line, out):
+                            self._abort_region()
+                            continue
+                        self._region_coordinate(
+                            p,
+                            line_no,
+                            line,
+                            out,
+                            None,
+                            None,
+                            "2",
+                        )
+                        continue
                     self.current_operation = operation
                     continue
 
