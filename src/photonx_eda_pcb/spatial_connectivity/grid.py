@@ -2,13 +2,15 @@ from math import floor
 class SpatialHashIndex:
     def __init__(self,cell_size=1.0):
         if cell_size<=0:raise ValueError("cell_size must be positive")
-        self.cell_size=float(cell_size);self._boxes={};self._cells={}
+        self.cell_size=float(cell_size);self._boxes={};self._cells={};self._revision=0
+    @property
+    def revision(self):return self._revision
     def _range(self,a,b):
         return range(floor(a/self.cell_size),floor(b/self.cell_size)+1)
     def insert(self,obj_id,box):
         oid=str(obj_id)
         if oid in self._boxes:raise ValueError("duplicate spatial id")
-        self._boxes[oid]=box
+        self._boxes[oid]=box;self._revision+=1
         for ix in self._range(box.min_x,box.max_x):
             for iy in self._range(box.min_y,box.max_y):self._cells.setdefault((ix,iy),set()).add(oid)
     def query(self,box):
