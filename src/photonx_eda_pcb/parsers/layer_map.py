@@ -34,6 +34,22 @@ _FILE_FUNCTION = re.compile(
 )
 
 
+def _side_token(tokens: list[str]) -> str | None:
+    sides = set()
+    for token in tokens:
+        if token in {"top", "front"}:
+            sides.add("top")
+        elif token in {"bot", "bottom", "back"}:
+            sides.add("bottom")
+        elif token == "inr":
+            sides.add("inner")
+    return next(iter(sides)) if len(sides) == 1 else None
+
+
+def _positive_index(token: str) -> bool:
+    return bool(re.fullmatch(r"[1-9]\d*", token))
+
+
 def _x2_file_function_layer(text: str) -> str | None:
     match = _FILE_FUNCTION.search(text or "")
     if not match:
@@ -46,37 +62,52 @@ def _x2_file_function_layer(text: str) -> str | None:
     function = parts[0].lower()
     tokens = [p.lower() for p in parts[1:]]
 
-    side = None
-    if any(t in {"top", "front"} for t in tokens):
-        side = "top"
-    elif any(t in {"bot", "bottom", "back"} for t in tokens):
-        side = "bottom"
-
     if function == "copper":
+        if len(tokens) not in {2, 3}:
+            return None
+        layer_match = re.fullmatch(r"l([1-9]\d*)", tokens[0])
+        if not layer_match:
+            return None
+        layer_number = int(layer_match.group(1))
+        side = _side_token([tokens[1]])
+        if side is None:
+            return None
+        if len(tokens) == 3 and tokens[2] not in {"plane", "signal", "mixed", "hatched"}:
+            return None
         if side == "top":
-            return "F.Cu"
-        if side == "bottom":
-            return "B.Cu"
+            return "F.Cu" if layer_number == 1 else None
+        if side == "inner":
+            return f"In{layer_number - 1}.Cu" if layer_number > 1 else None
+        return "B.Cu" if layer_number > 1 else None
 
-        layer_number = None
-        for token in tokens:
-            m = re.fullmatch(r"l(\d+)", token)
-            if m:
-                layer_number = int(m.group(1))
-                break
-        if layer_number == 1:
-            return "F.Cu"
-        if layer_number and layer_number > 1:
-            return f"In{layer_number - 1}.Cu"
-        return None
+    if function in {"soldermask", "solder_mask", "legend", "silkscreen"}:
+        if len(tokens) not in {1, 2}:
+            return None
+        side = _side_token([tokens[0]])
+        if side not in {"top", "bottom"}:
+            return None
+        if len(tokens) == 2 and not _positive_index(tokens[1]):
+            return None
+        if function in {"soldermask", "solder_mask"}:
+            return "F.Mask" if side == "top" else "B.Mask"
+        return "F.SilkS" if side == "top" else "B.SilkS"
 
-    if function in {"soldermask", "solder_mask"}:
-        return "F.Mask" if side == "top" else ("B.Mask" if side == "bottom" else None)
-    if function in {"legend", "silkscreen"}:
-        return "F.SilkS" if side == "top" else ("B.SilkS" if side == "bottom" else None)
     if function == "paste":
-        return "F.Paste" if side == "top" else ("B.Paste" if side == "bottom" else None)
-    if function in {"profile", "outline"}:
+        if len(tokens) != 1:
+            return None
+        side = _side_token(tokens)
+        if side not in {"top", "bottom"}:
+            return None
+        return "F.Paste" if side == "top" else "B.Paste"
+
+    if function == "profile":
+        if len(tokens) != 1 or tokens[0] not in {"p", "np"}:
+            return None
+        return "Edge.Cuts"
+
+    # Preserve the historical non-standard alias rather than treating it as an
+    # unrecognized FileFunction and falling back to filename inference.
+    if function == "outline":
         return "Edge.Cuts"
 
     return None
@@ -136,7 +167,10 @@ def _filename_layer(path: Path) -> str | None:
 
 def infer_layer(path: str | Path, text: str | None = None) -> str | None:
     """Infer a KiCad-like layer from X2 metadata first, then filename hints."""
-    x2 = _x2_file_function_layer(text or "")
+    source = text or ""
+    x2 = _x2_file_function_layer(source)
     if x2 is not None:
         return x2
+    if _FILE_FUNCTION.search(source):
+        return None
     return _filename_layer(Path(path))
