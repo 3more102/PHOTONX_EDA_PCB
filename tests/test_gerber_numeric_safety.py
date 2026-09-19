@@ -289,3 +289,15 @@ D10*
         "INVALID_GERBER_STEP_REPEAT" in blocker
         for blocker in report.strict_blockers
     )
+
+
+def test_step_repeat_offset_arithmetic_overflow_fails_closed(tmp_path: Path):
+    finite_increment = "1" + ("0" * 308) + ".0"
+    path = _write(
+        tmp_path,
+        f"%SRX3Y1I{finite_increment}J0*%\n"
+        "X0.0Y0.0D03*\n",
+    )
+
+    with pytest.raises(ParseError, match="step-and-repeat offset arithmetic"):
+        GerberRS274XParser("F.Cu", strict=True).parse(path)
