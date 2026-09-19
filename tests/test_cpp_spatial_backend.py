@@ -54,6 +54,30 @@ def test_broken_native_library_does_not_silently_fallback(monkeypatch):
         native_backend._load_library.cache_clear()
 
 
+def test_missing_native_library_discovery_is_cached(monkeypatch):
+    index = _sample_index()
+    expected = candidate_pairs(index, 0.1, backend="python")
+    calls = 0
+
+    native_backend._load_library.cache_clear()
+    native_backend._library_candidates.cache_clear()
+    monkeypatch.delenv("PHOTONX_NATIVE_LIBRARY", raising=False)
+
+    def fake_find_library(_name):
+        nonlocal calls
+        calls += 1
+        return None
+
+    monkeypatch.setattr(native_backend, "find_library", fake_find_library)
+    try:
+        assert candidate_pairs(index, 0.1, backend="auto") == expected
+        assert candidate_pairs(index, 0.1, backend="auto") == expected
+        assert calls == 1
+    finally:
+        native_backend._load_library.cache_clear()
+        native_backend._library_candidates.cache_clear()
+
+
 @pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
 def test_cpp_backend_matches_python_reference_across_tolerances():
     index = SpatialHashIndex(0.4)
@@ -105,3 +129,18 @@ def test_cpp_backend_preserves_reverse_direction_float_boundary_parity():
     assert expected == [("a-upper", "z-lower")]
     assert candidate_pairs(index, 0.2, backend="native") == expected
 
+
+
+@pytest.mark.skipif(not native_available(), reason="native C++ library is not built")
+def test_cpp_backend_matches_python_at_asymmetric_float_tolerance_boundary():
+    left = -15.416470322060789
+    right = -11.831664827535912
+    tolerance = 3.5848054945248764
+
+    index = SpatialHashIndex(1.0)
+    index.insert("a", AABB(left, 0.0, left, 0.0))
+    index.insert("b", AABB(right, 0.0, right, 0.0))
+
+    expected = candidate_pairs(index, tolerance, backend="python")
+    assert expected == [("a", "b")]
+    assert candidate_pairs(index, tolerance, backend="native") == expected
