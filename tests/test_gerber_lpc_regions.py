@@ -156,7 +156,7 @@ def test_lpc_with_track_remains_fail_closed(tmp_path: Path):
         "X010000Y000000D01*\n",
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="region-only files"):
+    with pytest.raises(UnsupportedFeatureError, match="tracks or outline geometry"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     permissive = GerberRS274XParser("F.Cu", strict=False).parse(path)
@@ -165,7 +165,7 @@ def test_lpc_with_track_remains_fail_closed(tmp_path: Path):
     assert permissive.regions == []
     assert any(
         diagnostic.code
-        == "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_REGION_GEOMETRY"
+        == "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY"
         for diagnostic in permissive.diagnostics
     )
 
@@ -180,7 +180,7 @@ def test_lpc_with_flash_remains_fail_closed(tmp_path: Path):
         "X050000Y050000D03*\n",
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="region-only files"):
+    with pytest.raises(UnsupportedFeatureError, match="rectangular D03 flashes|tracks or outline geometry"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
@@ -197,12 +197,12 @@ def test_lpc_mixed_dark_track_and_clear_region_fails_closed(tmp_path: Path):
         + _rectangle("030000", "030000", "070000", "070000"),
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="region-only files"):
+    with pytest.raises(UnsupportedFeatureError, match="rectangular D03 flashes|tracks or outline geometry"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
     report = preflight(path)
     assert not report.ready_for_strict_reconstruction
     assert any(
-        "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_REGION_GEOMETRY" in blocker
+        "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY" in blocker
         for blocker in report.strict_blockers
     )

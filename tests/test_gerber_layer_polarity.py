@@ -41,7 +41,7 @@ def test_clear_layer_polarity_fails_closed_in_strict_mode(tmp_path: Path):
         "X010000Y000000D01*\n",
     )
 
-    with pytest.raises(UnsupportedFeatureError, match="region-only files"):
+    with pytest.raises(UnsupportedFeatureError, match="tracks or outline geometry"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
 
@@ -61,7 +61,7 @@ def test_clear_layer_polarity_suppresses_geometry_in_permissive_mode(
     assert result.pads == []
     assert result.outline == []
     assert any(
-        diagnostic.code == "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_REGION_GEOMETRY"
+        diagnostic.code == "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY"
         for diagnostic in result.diagnostics
     )
 
@@ -128,6 +128,6 @@ def test_preflight_blocks_clear_layer_polarity(tmp_path: Path):
     assert report.discovered_files == 1
     assert not report.ready_for_strict_reconstruction
     assert any(
-        "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_REGION_GEOMETRY" in blocker
+        "UNSUPPORTED_GERBER_CLEAR_POLARITY_NON_POLYGONAL_GEOMETRY" in blocker
         for blocker in report.strict_blockers
     )
