@@ -651,7 +651,7 @@ def test_irregular_outline_macro_clear_flash_composes_with_lpc(tmp_path: Path):
     assert region_shape(result.regions[0]).area == pytest.approx(3.875)
 
 
-def test_general_outline_macro_d01_sweep_remains_fail_closed(tmp_path: Path):
+def test_general_outline_macro_d01_sweep_is_supported(tmp_path: Path):
     path = _write(
         tmp_path,
         "%FSLAX24Y24*%\n"
@@ -664,11 +664,23 @@ def test_general_outline_macro_d01_sweep_remains_fail_closed(tmp_path: Path):
         "M02*\n",
     )
 
-    with pytest.raises(
-        UnsupportedFeatureError,
-        match="D03 flashes only",
-    ):
-        GerberRS274XParser("F.Cu", strict=True).parse(path)
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    shape = region_shape(result.regions[0])
+    assert shape.is_valid
+    assert shape.area > 0.0
+    assert any(
+        evidence.kind == "gerber_outline_macro_track"
+        and "method=exact_linear_polygon_sweep" in evidence.detail
+        and "approximated=false" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+    report = preflight(path)
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
 
 
 def test_outline_macro_requires_exact_explicit_closure(tmp_path: Path):
@@ -1260,3 +1272,128 @@ def test_permissive_unsupported_macro_skips_geometry_and_continues(tmp_path: Pat
         d.code == "GERBER_APERTURE_GEOMETRY_SKIPPED"
         for d in result.diagnostics
     )
+
+def test_irregular_concave_outline_macro_d01_sweep_is_exact(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,8,0,0,3,0,3,3,2,3,2,1,1,1,1,3,0,3,0,0,0*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D02*\n"
+        "X005000Y000000D01*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks == []
+    assert len(result.regions) == 1
+    shape = region_shape(result.regions[0])
+    assert shape.area == pytest.approx(9.5)
+    assert shape.bounds == pytest.approx((0.0, 0.0, 3.5, 3.0))
+    assert shape.convex_hull.area == pytest.approx(10.5)
+    assert shape.area < shape.convex_hull.area
+    assert any(
+        evidence.kind == "gerber_outline_macro_track"
+        and "vertices=8" in evidence.detail
+        and "method=exact_linear_polygon_sweep" in evidence.detail
+        and "approximated=false" in evidence.detail
+        for evidence in result.regions[0].provenance.evidence
+    )
+
+    report = preflight(path)
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_outline_macro_d01_sweep_preserves_transforms_and_step_repeat(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%IR90*%\n"
+        "%AMOUTLINE*4,1,5,0,0,2,0,2,1,1,0.4,0,1,0,0,30*%\n"
+        "%ADD10OUTLINE*%\n"
+        "%LMX*%\n"
+        "%LR15*%\n"
+        "%LS2*%\n"
+        "D10*\n"
+        "%SRX2Y1I5J0*%\n"
+        "X000000Y000000D02*\n"
+        "X005000Y000000D01*\n"
+        "%SR*%\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.tracks == []
+    assert len(result.regions) == 2
+    for region in result.regions:
+        shape = region_shape(region)
+        assert shape.is_valid
+        assert shape.area > 0.0
+        evidence = region.provenance.evidence
+        assert any(
+            item.kind == "gerber_outline_macro_track"
+            and "primitive_rotation_deg_ccw=30" in item.detail
+            and "mirror=X" in item.detail
+            and "aperture_scale=2" in item.detail
+            and "object_rotation_deg_ccw=105" in item.detail
+            for item in evidence
+        )
+        assert {
+            "gerber_aperture_mirror",
+            "gerber_aperture_rotation",
+            "gerber_aperture_scale",
+            "gerber_step_repeat",
+        }.issubset({item.kind for item in evidence})
+
+
+def test_outline_macro_d01_sweep_participates_in_lpc_composition(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10R,6X4*%\n"
+        "%AMOUTLINE*4,1,5,0,0,2,0,2,1,1,0.4,0,1,0,0,0*%\n"
+        "%ADD11OUTLINE*%\n"
+        "D10*\n"
+        "X030000Y020000D03*\n"
+        "%LPC*%\n"
+        "D11*\n"
+        "X020000Y015000D02*\n"
+        "X025000Y015000D01*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert result.regions
+    assert all(region_shape(region).is_valid for region in result.regions)
+    report = preflight(path)
+    assert report.ready_for_strict_reconstruction
+    assert not report.strict_blockers
+
+
+def test_outline_macro_d01_sweep_remains_fail_closed_on_edge_cuts(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%AMOUTLINE*4,1,5,0,0,2,0,2,1,1,0.4,0,1,0,0,0*%\n"
+        "%ADD10OUTLINE*%\n"
+        "D10*\n"
+        "X000000Y000000D02*\n"
+        "X005000Y000000D01*\n"
+        "M02*\n",
+    )
+
+    with pytest.raises(
+        UnsupportedFeatureError,
+        match="supported only on material layers",
+    ):
+        GerberRS274XParser("Edge.Cuts", strict=True).parse(path)
+
