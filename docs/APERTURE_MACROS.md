@@ -15,6 +15,6 @@ The high-level Gerber parser reduces an aperture macro to a standard aperture on
 
 For these centered rectangular reductions, intrinsic macro rotation is applied before modal LM/LR and supported whole-image IR. Orthogonal results may remain `PadCandidate` objects; non-orthogonal material flashes and D01 sweeps are represented by exact polygonal rectangle geometry.
 
-Macro modifiers may be parameterized and are evaluated before these constraints are checked. Active Gerber units are applied when the primitive is reduced.
+Macro modifiers may be parameterized and are evaluated before these constraints are checked. Calling `AD` parameters seed `$1..$n`; ordered `$n=expression` statements may define new variables, undefined variables evaluate as zero, and any attempt to redefine an existing variable is rejected. Variable substitution is token-aware (`$1` cannot alias `$10`), and non-finite evaluated values fail closed. Active Gerber units are applied when the primitive is reduced.
 
 Multiple primitives, subtraction/exposure-off geometry, non-centered rectangles/vector lines/Code-5 polygons, zero-size primitives, invalid Code-4 contours, general Code-4 D01 sweeps, Edge.Cuts Code-4 flashes, thermals, moirés, and aperture blocks remain outside the supported production path unless a later implementation can preserve their geometry safely.
