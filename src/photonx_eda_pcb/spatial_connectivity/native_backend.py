@@ -395,13 +395,13 @@ def native_radius_queries(index, queries):
     results = [[] for _ in query_specs]
     for i in range(written.value):
         query_index = int(out[i].query)
-        point_index = int(out[i].point)
-        if query_index >= len(query_specs) or point_index >= len(ids):
+        point_id = int(out[i].point)
+        if query_index >= len(query_specs) or point_id >= len(ids):
             raise NativeBackendUnavailable(
                 "native backend returned an out-of-range radius candidate"
             )
         x, y, radius = query_specs[query_index]
-        obj_id = ids[point_index]
+        obj_id = ids[point_id]
         box = index.box(obj_id)
         center_x = (float(box.min_x) + float(box.max_x)) / 2.0
         center_y = (float(box.min_y) + float(box.max_y)) / 2.0
