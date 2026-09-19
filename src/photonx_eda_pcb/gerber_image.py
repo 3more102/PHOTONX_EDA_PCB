@@ -64,6 +64,16 @@ class HoledFlashPolygonization:
 
 
 @dataclass(frozen=True)
+class RectangularHoleSubtraction:
+    """Exact centered rectangular hole subtracted from aperture geometry."""
+
+    geometry: Polygon
+    hole_size_x: float
+    hole_size_y: float
+    hole_rotation_deg: float
+
+
+@dataclass(frozen=True)
 class RegularPolygonFlashPolygonization:
     """Exact regular-polygon flash with optional bounded round hole."""
 
@@ -582,6 +592,88 @@ def polygonize_holed_flash(
             hole_poly.max_chord_error_mm,
         ),
         approximated=outer.approximated or hole_poly.approximated,
+    )
+
+
+def subtract_rectangular_aperture_hole(
+    outer_geometry: Polygon,
+    center_x: float,
+    center_y: float,
+    hole_size_x: float,
+    hole_size_y: float,
+    *,
+    hole_rotation_deg: float = 0.0,
+) -> RectangularHoleSubtraction:
+    """Subtract one exact centered legacy rectangular aperture hole.
+
+    Historic Gerber rectangular holes do not rotate with the aperture itself.
+    Callers therefore pass only whole-image rotation here, not LR or aperture
+    template rotation.
+    """
+
+    if not isinstance(outer_geometry, Polygon):
+        raise ValueError("Gerber rectangular hole requires polygonal outer geometry")
+    if outer_geometry.is_empty or not outer_geometry.is_valid:
+        raise ValueError("Gerber rectangular hole requires valid outer geometry")
+
+    cx = float(center_x)
+    cy = float(center_y)
+    hx = float(hole_size_x)
+    hy = float(hole_size_y)
+    rotation = float(hole_rotation_deg)
+    if not all(isfinite(value) for value in (cx, cy, hx, hy, rotation)):
+        raise ValueError("Gerber rectangular aperture hole values must be finite")
+    if hx <= 0.0 or hy <= 0.0:
+        raise ValueError("Gerber rectangular aperture hole dimensions must be positive")
+
+    half_x = hx / 2.0
+    half_y = hy / 2.0
+    hole = Polygon(
+        (
+            (cx - half_x, cy - half_y),
+            (cx + half_x, cy - half_y),
+            (cx + half_x, cy + half_y),
+            (cx - half_x, cy + half_y),
+        )
+    )
+    rotation %= 360.0
+    if not isclose(rotation, 0.0, rel_tol=0.0, abs_tol=1e-15):
+        hole = rotate(
+            hole,
+            rotation,
+            origin=(cx, cy),
+            use_radians=False,
+        )
+    _validate_flash_polygon(hole)
+
+    if (
+        not outer_geometry.contains(hole)
+        or not outer_geometry.boundary.disjoint(hole.boundary)
+    ):
+        raise ValueError(
+            "Gerber rectangular aperture hole must strictly fit within aperture"
+        )
+
+    geometry = outer_geometry.difference(hole)
+    if not isinstance(geometry, Polygon):
+        raise ValueError(
+            "Gerber rectangular aperture hole produced non-polygonal geometry"
+        )
+    if (
+        geometry.is_empty
+        or float(geometry.area) <= 0.0
+        or not geometry.is_valid
+        or len(geometry.interiors) != 1
+    ):
+        raise ValueError(
+            "Gerber rectangular aperture hole did not preserve one centered hole"
+        )
+
+    return RectangularHoleSubtraction(
+        geometry=geometry,
+        hole_size_x=hx,
+        hole_size_y=hy,
+        hole_rotation_deg=rotation,
     )
 
 
