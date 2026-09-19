@@ -629,7 +629,7 @@ Without independent evidence, manufacturing geometry generally cannot prove:
 
 - The production Gerber path is still a declared subset, not the full language.
 - Gerber dimensional data requires an explicit `MO` declaration or supported legacy `G70/G71`; permissive parsing suppresses the file when units are missing or later conflict instead of assuming millimeters or mixing unit systems.
-- Gerber incremental coordinates are not modeled yet, whether selected by `G91` or legacy FS `I` notation such as `%FSLIX...*%`: strict parsing rejects them, permissive parsing suppresses affected file geometry, and preflight blocks strict reconstruction rather than treating increments as absolute coordinates.
+- Legacy Gerber incremental coordinates are supported through `G91` and FS `I` notation such as `%FSLIX...*%`: X/Y values accumulate from the preceding coordinate position, `G90`/FS `A` restore absolute notation, and arc I/J values remain center offsets from the arc start.
 - X2 `.FilePolarity,Negative` is not treated as ordinary metadata: strict parsing rejects it, while permissive parsing suppresses geometry to avoid interpreting clearance as material.
 - Gerber `%LPC*%` clear layer polarity is also fail-closed: clear objects erase earlier image material, so permissive parsing suppresses that file instead of flattening clear objects into dark geometry.
 - Non-default legacy `AS/IP/MI/OF` transforms are fail-closed as well; permissive parsing suppresses affected file geometry rather than emitting coordinates or image semantics without the required transform.
