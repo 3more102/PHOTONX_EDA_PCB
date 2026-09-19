@@ -10,7 +10,7 @@
 - Hardened Excellon routed-arc failure handling so unsupported syntax, missing centers, invalid arc geometry, or invalid route state suppresses permissive file geometry instead of allowing an incomplete route to be emitted; invalid arc geometry is now a strict preflight blocker.
 - Rejected zero-diameter Excellon tools and suppressed permissive file geometry so zero-width drills, slots, or routes cannot enter reconstruction.
 - Hardened Excellon unit handling so tool definitions before explicit `METRIC/INCH/M71/M72` units no longer inherit the parser's default millimeter state; permissive parsing suppresses file geometry instead.
-- Hardened legacy Excellon incremental coordinate modes (`G91` and `ICI,ON`): strict parsing rejects them, permissive parsing clears/suppresses file geometry, and explicit absolute `G90` / `ICI,OFF` remains supported.
+- Added legacy Excellon incremental coordinate support for `G91` and `ICI,ON`: drill hits and routed endpoints now accumulate from the previous coordinate, explicit `G90` / `ICI,OFF` switches back to absolute mode, and incremental G85 canned slots remain fail-closed pending explicit two-position modeling.
 - Hardened unsupported Gerber region (`G36/G37`) and aperture-block (`AB`) handling so permissive parsing suppresses file geometry instead of leaking region/block bodies as ordinary tracks or flashes.
 - Recognized deprecated incremental FS notation (`%FSLI...*%` / `%FSTI...*%`) explicitly and routed it through the same fail-closed geometry suppression and preflight blocker used for `G91`.
 - Verified merged commit `c457cf8` on Python 3.11, 3.12, and 3.13 with 739 passing tests and 2 existing collection warnings.
