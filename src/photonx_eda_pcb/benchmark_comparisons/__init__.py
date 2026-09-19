@@ -2,8 +2,9 @@ from .connectivity import benchmark_connectivity_paths
 from .drc import benchmark_clearance_paths
 from .summary import comparison_summary
 from .spatial_native import (
+    backend_timing_summary,
     benchmark_candidate_pair_backends,
-    candidate_backend_summary,
+    benchmark_radius_query_backends,
 )
 
 __all__=[
@@ -11,5 +12,6 @@ __all__=[
     "benchmark_clearance_paths",
     "comparison_summary",
     "benchmark_candidate_pair_backends",
-    "candidate_backend_summary",
+    "benchmark_radius_query_backends",
+    "backend_timing_summary",
 ]
