@@ -311,12 +311,6 @@ class ExcellonParser:
                     out.diagnostics.append(ParseDiagnostic("warning","EXCELLON_ROUTE_STATE","G85 while route active",str(p),line_no))
                     self._disable_geometry(out)
                     continue
-                if self.incremental:
-                    message="incremental Excellon G85 slot coordinates are not yet modeled"
-                    if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: {message}: {line}")
-                    out.diagnostics.append(ParseDiagnostic("warning","UNSUPPORTED_EXCELLON_INCREMENTAL_SLOT",message,str(p),line_no))
-                    self._disable_geometry(out)
-                    continue
                 try:x1r,y1r,x2r,y2r=parse_slot_command(line)
                 except ValueError:
                     if self.strict:raise UnsupportedFeatureError(f"{p}:{line_no}: unsupported Excellon G85 slot syntax: {line}")
@@ -324,9 +318,26 @@ class ExcellonParser:
                     self._disable_geometry(out)
                     continue
                 if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: slot before valid tool selection")
-                x1,y1,x2,y2=(self._decode(v) for v in (x1r,y1r,x2r,y2r))
-                src=SourceRef(str(p),line_no,line);slot_id=stable_id("slot",p.name,line_no,x1,y1,x2,y2,self.tool)
-                out.slots.append(SlotFeature(slot_id,(x1,y1),(x2,y2),self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],[])))
+                x1v,y1v,x2v,y2v=(self._decode(v) for v in (x1r,y1r,x2r,y2r))
+                evidence=[]
+                if self.incremental:
+                    x1=self.current.x+x1v;y1=self.current.y+y1v
+                    x2=x1+x2v;y2=y1+y2v
+                    src=SourceRef(str(p),line_no,line)
+                    evidence.append(Evidence(
+                        "excellon_incremental_g85",
+                        (
+                            f"start_delta_mm=({x1v:.12g},{y1v:.12g}); "
+                            f"end_delta_from_start_mm=({x2v:.12g},{y2v:.12g})"
+                        ),
+                        1.0,
+                        src,
+                    ))
+                else:
+                    x1,y1,x2,y2=x1v,y1v,x2v,y2v
+                    src=SourceRef(str(p),line_no,line)
+                slot_id=stable_id("slot",p.name,line_no,x1,y1,x2,y2,self.tool)
+                out.slots.append(SlotFeature(slot_id,(x1,y1),(x2,y2),self.tools[self.tool],"unknown",f"T{self.tool}",Provenance([src],evidence)))
                 self.current=Point(x2,y2);continue
             if line.startswith(("G02","G03")):
                 self._route_arc(p,out,line_no,line);continue
