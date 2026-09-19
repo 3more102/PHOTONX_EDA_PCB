@@ -94,6 +94,19 @@ PHOTONX is most useful when the available evidence is **manufacturing-centric** 
 python -m pip install -e ".[test]"
 ```
 
+### Optional C++17 spatial acceleration
+
+PHOTONX can accelerate spatial broad-phase candidate generation with an optional C++17 shared library while keeping exact Python/Shapely and Euclidean predicates authoritative for connectivity, DRC, and radius acceptance.
+
+```bash
+cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
+cmake --build build/native --config Release
+export PHOTONX_NATIVE_LIBRARY="$PWD/build/native/lib/libphotonx_native.so"
+pytest -q
+```
+
+`backend="auto"` uses the native backend when a compatible library is available and otherwise falls back to the Python reference implementation. See [Native acceleration](docs/NATIVE_ACCELERATION.md) for the ABI, safety contract, platform notes, and staged roadmap.
+
 ### Inspect declared parser capabilities
 
 ```bash
