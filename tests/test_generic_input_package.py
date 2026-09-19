@@ -69,7 +69,7 @@ def test_preflight_reports_strict_blocker_without_silent_drop(tmp_path: Path):
     assert report.discovered_files == 1
     assert not report.ready_for_strict_reconstruction
     assert any(
-        "UNSUPPORTED_GERBER_CONSTRUCT" in blocker
+        "UNSUPPORTED_GERBER_APERTURE_BLOCK" in blocker
         for blocker in report.strict_blockers
     )
 
