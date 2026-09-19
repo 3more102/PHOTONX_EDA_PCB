@@ -39,6 +39,14 @@ The native ABI also supports batched point-radius candidate generation. PHOTONX 
 
 The batch path is used by drill association, footprint clustering and metrics, and component-pair inference and metrics. This reduces repeated Python-to-native transitions while preserving the previous Python result contract.
 
+## Benchmark evidence
+
+`benchmark_comparisons.benchmark_candidate_pair_backends()` measures the Python reference and native C++ candidate-pair paths on the same `SpatialHashIndex`.
+
+The helper refuses to emit timing evidence until the native result exactly matches the Python reference result for the supplied workload. The companion `candidate_backend_summary()` reports measured medians and the native/Python ratio without defining a universal crossover threshold.
+
+This evidence is intended to support a later benchmark-gated `auto` backend policy. Thresholds must be based on identified hardware, Python version, fixture size, cell size, density, and tolerance rather than inferred from implementation language.
+
 ## Safety contract
 
 The native backend:
@@ -56,7 +64,7 @@ Unsupported native inputs fall back to the Python reference path in `auto` mode.
 The next safe candidates are:
 
 1. persistent/batch AABB index handles to avoid rebuilding native grids across independent calls;
-2. benchmark-gated connectivity candidate acceleration and crossover thresholds;
+2. benchmark-gated connectivity candidate acceleration and crossover thresholds using the parity-checked benchmark evidence;
 3. cross-platform packaging of the optional native library;
 4. only after parity evidence, selected computational-geometry kernels with explicit tolerance contracts.
 
