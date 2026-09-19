@@ -4,7 +4,7 @@ import pytest
 
 from photonx_eda_pcb.aperture_macros import evaluate_macro, parse_macro_body
 from photonx_eda_pcb.aperture_macros.variables import substitute
-from photonx_eda_pcb.errors import UnsupportedFeatureError
+from photonx_eda_pcb.errors import ParseError, UnsupportedFeatureError
 from photonx_eda_pcb.gerber_geometry.macro import parse_macro_line
 from photonx_eda_pcb.parsers.gerber_parts.aperture import parse_aperture
 from photonx_eda_pcb.parsers.gerber_parts.format_spec import parse_format_spec
@@ -68,9 +68,68 @@ def test_production_parser_rejects_non_ascii_numeric_tokens(
     )
     path = _write(tmp_path, body)
 
-    with pytest.raises(UnsupportedFeatureError, match="unrecognized Gerber statement"):
+    with pytest.raises(ParseError, match="ASCII decimal digits"):
         GerberRS274XParser("F.Cu", strict=True).parse(path)
 
+
+def test_permissive_unicode_aperture_selection_suppresses_complete_file_image(
+    tmp_path: Path,
+):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "%ADD11C,1.000*%\n"
+        "D10*\n"
+        "X010000Y010000D03*\n"
+        "D١١*\n"
+        "X020000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=False).parse(path)
+
+    assert result.pads == []
+    assert result.tracks == []
+    assert result.regions == []
+    assert result.outline == []
+    assert any(
+        diagnostic.code == "INVALID_GERBER_NUMERIC_TOKEN"
+        for diagnostic in result.diagnostics
+    )
+
+
+@pytest.mark.parametrize(
+    "bad_statement",
+    ["%FSLAX٢4Y24*%", "%ADD١٠C,0.200*%", "G54D١٠*"],
+)
+def test_permissive_unicode_structured_numeric_token_fails_closed(
+    tmp_path: Path,
+    bad_statement: str,
+):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%ADD10C,0.200*%\n"
+        "D10*\n"
+        "X010000Y010000D03*\n"
+        f"{bad_statement}\n"
+        "X020000Y020000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=False).parse(path)
+
+    assert result.pads == []
+    assert result.tracks == []
+    assert result.regions == []
+    assert result.outline == []
+    assert any(
+        diagnostic.code == "INVALID_GERBER_NUMERIC_TOKEN"
+        for diagnostic in result.diagnostics
+    )
 
 @pytest.mark.parametrize("digit", ["١", "１"])
 def test_production_macro_rejects_non_ascii_variable_reference(
