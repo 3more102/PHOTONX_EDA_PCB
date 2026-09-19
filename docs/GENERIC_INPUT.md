@@ -89,6 +89,9 @@ The generic input path also handles several common real-world variations:
   origin-centered circle are accepted as exact circular apertures;
 - single positive Gerber Code-21 center-line macros are accepted as exact
   rectangular apertures only when centered at the macro origin with zero rotation;
+- deprecated Code-22 lower-left-line macros are accepted only when width/height
+  are positive, rotation is zero, and the lower-left point centers the rectangle
+  exactly on the macro origin;
 - legacy Gerber G74 single-quadrant arcs are accepted only when unsigned I/J
   distances resolve to one unambiguous center with a sweep of at most 90 degrees.
 
