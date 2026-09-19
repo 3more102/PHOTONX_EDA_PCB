@@ -11,11 +11,16 @@ _COUNT_FIELDS = (
     "diagnostics",
 )
 
-_LENGTH_FIELDS = (
-    "total_track_length_mm",
-    "route_length_mm",
-    "outline_length_mm",
-)
+_LENGTH_ISSUES = {
+    "total_track_length_mm": "STATS_NEGATIVE_TRACK_LENGTH",
+    "route_length_mm": "STATS_NEGATIVE_ROUTE_LENGTH",
+    "outline_length_mm": "STATS_NEGATIVE_OUTLINE_LENGTH",
+}
+
+_DIMENSION_ISSUES = {
+    "board_width_mm": "STATS_NEGATIVE_BOARD_WIDTH",
+    "board_height_mm": "STATS_NEGATIVE_BOARD_HEIGHT",
+}
 
 
 def validate_stats(stats):
@@ -24,13 +29,13 @@ def validate_stats(stats):
         if getattr(stats, name, 0) < 0:
             issues.append("STATS_NEGATIVE_" + name.upper())
 
-    for name in _LENGTH_FIELDS:
+    for name, code in _LENGTH_ISSUES.items():
         if getattr(stats, name, 0.0) < 0:
-            issues.append("STATS_NEGATIVE_" + name.upper().replace("_MM", ""))
+            issues.append(code)
 
-    for name in ("board_width_mm", "board_height_mm"):
+    for name, code in _DIMENSION_ISSUES.items():
         value = getattr(stats, name, None)
         if value is not None and value < 0:
-            issues.append("STATS_NEGATIVE_" + name.upper().replace("_MM", ""))
+            issues.append(code)
 
     return issues
