@@ -5,12 +5,13 @@ from .lexer import split_macro_statements
 
 
 _VARIABLE_DEFINITION = re.compile(r"^\$(\d+)\s*=\s*(.+)$")
+_PRIMITIVE_CODE = re.compile(r"^[1-9]\d*$")
 
 
 def parse_macro_body(body):
     result = []
     for statement in split_macro_statements(body):
-        if statement.startswith("0"):
+        if statement.startswith("0 "):
             continue
 
         assignment = _VARIABLE_DEFINITION.fullmatch(statement)
@@ -23,7 +24,7 @@ def parse_macro_body(body):
             continue
 
         parts = [part.strip() for part in statement.split(",")]
-        if not parts[0].isdigit():
+        if not _PRIMITIVE_CODE.fullmatch(parts[0]):
             raise ValueError(f"unsupported macro statement: {statement}")
         result.append(MacroPrimitive(int(parts[0]), tuple(parts[1:])))
     return result
