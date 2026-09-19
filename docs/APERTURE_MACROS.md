@@ -10,10 +10,11 @@ The high-level Gerber parser reduces an aperture macro to a standard aperture on
 - **Code 20 vector line** (and deprecated **Code 2** alias): exposure on, positive width, origin-centered midpoint, and a non-zero segment. Segment orientation plus arbitrary finite primitive rotation are retained as the intrinsic rotation of an exact rectangular aperture.
 - **Code 21 center line:** exposure on, positive width and height, center at the macro origin, and arbitrary finite primitive rotation. The exact centered rectangle is retained without axis-aligned approximation.
 - **Code 22 lower-left line:** exposure on, positive width and height, and a lower-left point that places the rectangle center at the macro origin. Arbitrary finite primitive rotation is retained exactly.
+- **Code 4 outline:** exposure on, explicit closure, finite coordinates/rotation, and exact origin-centered geometry. Centered rectangles reduce exactly to `R`; centered regular polygons with 3–12 vertices reduce exactly to `P`. Other valid Code-4 outlines remain fail-closed rather than being approximated.
 - **Code 5 polygon:** exposure on, integer vertex count from 3 through 12, center at the macro origin, positive circumscribed-circle diameter, and finite rotation. The primitive reduces exactly to the equivalent standard `P` aperture and reuses its flash/draw/transform/LPD-LPC paths.
 
 For these centered rectangular reductions, intrinsic macro rotation is applied before modal LM/LR and supported whole-image IR. Orthogonal results may remain `PadCandidate` objects; non-orthogonal material flashes and D01 sweeps are represented by exact polygonal rectangle geometry.
 
 Macro modifiers may be parameterized and are evaluated before these constraints are checked. Active Gerber units are applied when the primitive is reduced.
 
-Multiple primitives, subtraction/exposure-off geometry, non-centered rectangles/vector lines/polygons, zero-size primitives, unsupported polygon forms, outlines, thermals, moirés, and aperture blocks remain outside this production reduction path unless a later implementation can preserve their geometry exactly.
+Multiple primitives, subtraction/exposure-off geometry, non-centered rectangles/vector lines/polygons, zero-size primitives, irregular or non-centered Code-4 outlines, unsupported polygon forms, thermals, moirés, and aperture blocks remain outside this production reduction path unless a later implementation can preserve their geometry exactly.
