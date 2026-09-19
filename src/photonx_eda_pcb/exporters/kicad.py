@@ -100,7 +100,8 @@ def _region_lines(board,net_num,report):
                 f"copper region layer {region.layer!r} is not declared by the current KiCad exporter",
             )
             continue
-        rings=[region.points,*getattr(region,"holes",())]
+        holes=tuple(getattr(region,"holes",()))
+        rings=[region.points,*holes]
         ring_coords=[_ring_coords(ring) for ring in rings]
         if any(coords is None for coords in ring_coords):
             _record_region_skip(
@@ -146,19 +147,22 @@ def _region_lines(board,net_num,report):
             "    (hatch edge 0.500000)",
             "    (connect_pads (clearance 0.500000))",
             "    (min_thickness 0.250000)",
-            "    (fill yes (thermal_gap 0.500000) (thermal_bridge_width 0.500000) (island_removal_mode 1))",
         ]
+        if holes:
+            zone_lines.append("    (fill)")
+        else:
+            zone_lines.append("    (fill yes (thermal_gap 0.500000) (thermal_bridge_width 0.500000) (island_removal_mode 1))")
         for ring in ring_coords:
             pts=" ".join(f"(xy {x:.6f} {y:.6f})" for x,y in ring)
             zone_lines.append(f"    (polygon (pts {pts}))")
-        if not getattr(region,"holes",()):
+        if not holes:
             pts=" ".join(f"(xy {x:.6f} {y:.6f})" for x,y in coords)
             zone_lines.append(f"    (filled_polygon (layer {_q(region.layer)}) (pts {pts}))")
         zone_lines.append("  )")
         lines.extend(zone_lines)
         report.exported_regions+=1
         report.exported_region_ids.append(region.id)
-        if getattr(region,"holes",()):
+        if holes:
             report.issues.append(KicadExportIssue(
                 "warning",
                 "KICAD_COPPER_REGION_FILL_CACHE_OMITTED",
