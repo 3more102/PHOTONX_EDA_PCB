@@ -5,7 +5,8 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 ## Implemented now
 
 - strict linear Gerber draws and flashes using C/R/O apertures;
-- Gerber step-and-repeat expansion for supported linear geometry, with deterministic IDs and source provenance;
+- Gerber step-and-repeat expansion for supported linear geometry and regions, with deterministic IDs and source provenance;
+- dark single-contour linear Gerber G36/G37 regions as exact closed copper polygons, including modal/incremental coordinates, supported whole-image transforms, step-repeat expansion, provenance, connectivity, validation, DRC participation, and explicit KiCad-export omission reporting;
 - G75 multi-quadrant G02/G03 circular arcs with signed I/J center offsets and circular draw apertures, tessellated with explicit approximation evidence;
 - bounded legacy G74 single-quadrant G02/G03 arcs using unsigned I/J distances when one center candidate is unambiguous and the sweep is at most 90 degrees;
 - single positive origin-centered circle aperture macros, including parameterized diameters, reduced exactly to circular apertures; centered-circle rotation is geometry-invariant;
@@ -37,7 +38,7 @@ PHOTONX 0.2.0 is an engineering reconstruction scaffold, not a complete CAM repl
 
 ## Deliberately rejected instead of faked
 
-- ambiguous/invalid G74 center cases and complex aperture macros; Gerber regions and aperture blocks are rejected in strict mode and suppress file geometry in permissive mode so their bodies cannot leak as ordinary tracks/flashes;
+- ambiguous/invalid G74 center cases and complex aperture macros; unsupported Gerber region forms (arc-bounded contours, multiple contours/holes, clear-polarity regions, and Edge.Cuts regions) and aperture blocks remain fail-closed rather than being approximated or leaked as ordinary tracks/flashes;
 - standard C/R/O apertures with round-hole modifiers, because aperture-hole image subtraction is not yet represented by the reconstruction model;
 - linear D01 draws with rectangular or obround apertures, because PHOTONX does not flatten their swept geometry into an incorrect width-only track;
 - X2 `.FilePolarity,Negative` image inversion: strict mode rejects it, while permissive mode records the unsupported semantic and suppresses all geometry from that file rather than treating clearances as positive material;
