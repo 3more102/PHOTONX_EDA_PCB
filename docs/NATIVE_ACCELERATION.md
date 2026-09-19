@@ -39,6 +39,14 @@ The native ABI also supports batched point-radius candidate generation. PHOTONX 
 
 The batch path is used by drill association, footprint clustering and metrics, and component-pair inference and metrics. This reduces repeated Python-to-native transitions while preserving the previous Python result contract.
 
+## Stage 2.5: generation-aware native snapshots
+
+For the standard `SpatialHashIndex`, PHOTONX now caches the sorted object-ID tuple and marshaled ctypes AABB array used by the native ABI. The cache is keyed by the index's monotonic generation and cell size, so repeated candidate-pair and radius-query calls reuse the same immutable snapshot instead of rematerializing every box in Python.
+
+Each successful `insert()` increments the generation. The next native call therefore rebuilds the snapshot before use. This optimization does not cache native query results and does not change broad-phase or exact acceptance semantics.
+
+The C++ spatial hash itself is still rebuilt inside the current stateless ABI calls. Persistent native index handles remain a separate future stage.
+
 ## Safety contract
 
 The native backend:
