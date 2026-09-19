@@ -82,3 +82,48 @@ def test_stream_copy_enforces_actual_byte_budget():
         _copy_member_bounded(source, output, remaining_bytes=4)
 
     assert output.getvalue() == b""
+
+
+def test_stream_copy_rejects_more_bytes_than_member_declares_before_write():
+    source = BytesIO(b"12345")
+    output = BytesIO()
+
+    with pytest.raises(ValueError, match="member size mismatch"):
+        _copy_member_bounded(
+            source,
+            output,
+            remaining_bytes=100,
+            expected_bytes=4,
+        )
+
+    assert output.getvalue() == b""
+
+
+def test_stream_copy_rejects_fewer_bytes_than_member_declares():
+    source = BytesIO(b"123")
+    output = BytesIO()
+
+    with pytest.raises(ValueError, match="member size mismatch"):
+        _copy_member_bounded(
+            source,
+            output,
+            remaining_bytes=100,
+            expected_bytes=4,
+        )
+
+    assert output.getvalue() == b"123"
+
+
+def test_stream_copy_accepts_exact_member_size():
+    source = BytesIO(b"1234")
+    output = BytesIO()
+
+    copied = _copy_member_bounded(
+        source,
+        output,
+        remaining_bytes=100,
+        expected_bytes=4,
+    )
+
+    assert copied == 4
+    assert output.getvalue() == b"1234"
