@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added bounded linear D01 support for rectangular and obround Gerber apertures on material layers. Rectangular sweeps are materialized exactly as deterministic CopperRegion polygons; obround sweeps use the existing 0.005 mm inscribed-chord policy for curved aperture boundaries. The geometry participates in step-repeat, supported MI/SF/OF/IR and LM/LR/LS transforms, ordered LPD/LPC image composition, connectivity, DRC, validation, and component-local provenance. Non-orthogonal R/O aperture rotation and non-circular Edge.Cuts draws remain fail-closed.
+
 - Extended bounded Gerber `%LPC*%` composition to tessellated G02/G03 circular-aperture tracks. Existing 0.005 mm centerline chord-error tessellation is composed with 0.005 mm capsule-cap polygonization and recorded with a conservative <=0.010 mm combined boundary-error budget; arc and track evidence remain component-local and source-ordered. Outline geometry remains fail-closed.
 
 - Extended bounded Gerber `%LPC*%` composition to linear D01 tracks drawn with circular apertures. Linear strokes are materialized as deterministic capsule polygons with exact straight sides and 0.005 mm chord-error-bounded round end-caps, with `gerber_track_polygonization` evidence on affected output components. Source-order dark/clear semantics, step-repeat, transforms, and causal provenance are preserved; tessellated G02/G03 arc tracks and outlines remain fail-closed.
