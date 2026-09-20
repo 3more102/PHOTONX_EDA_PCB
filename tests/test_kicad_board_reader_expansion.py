@@ -100,3 +100,21 @@ def test_reader_exposes_footprint_and_pad_copper_overrides():
         "remove_unused_layer": True,
         "keep_end_layers": True,
     }
+
+
+def test_reader_preserves_footprint_net_tie_pad_groups():
+    d = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (footprint "PHOTONX:RecoveredPad"
+            (layer "F.Cu")
+            (at 0 0)
+            (uuid 00000000-0000-0000-0000-000000000091)
+            (property "Reference" "P1")
+            (net_tie_pad_groups "1,2" "3,4")
+          )
+        )
+        """
+    )
+
+    assert d["footprints"][0]["net_tie_pad_groups"] == ("1,2", "3,4")

@@ -80,6 +80,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "unexpected_copper_graphics",
         "unexpected_footprint_copper_graphics",
         "unexpected_copper_overrides",
+        "unexpected_net_tie_groups",
         "foreign_footprints",
         "recovered_drills",
         "recovered_pads",
@@ -563,6 +564,30 @@ def test_connectivity_roundtrip_rejects_pad_copper_override(tmp_path):
         "pad_number": "1",
         "overrides": {"thermal_gap": 0.2},
     }
+
+
+def test_connectivity_roundtrip_rejects_photonx_net_tie_groups(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    target = next(
+        footprint
+        for footprint in readback["footprints"]
+        if footprint["name"] == "PHOTONX:RecoveredPad"
+    )
+    target["net_tie_pad_groups"] = ("1,2",)
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["unexpected_net_tie_groups"]["equal"] is False
+    assert audit["unexpected_net_tie_groups"]["observed_count"] == 1
+    assert audit["unexpected_net_tie_groups"]["unexpected"][0]["groups"] == [
+        "1,2"
+    ]
 
 
 def test_connectivity_roundtrip_rejects_foreign_footprint(tmp_path):

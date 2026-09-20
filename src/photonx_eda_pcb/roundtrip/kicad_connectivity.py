@@ -421,6 +421,27 @@ def _observed_copper_overrides(readback):
     return out
 
 
+def _observed_net_tie_groups(readback):
+    out = []
+    for footprint in readback.get("footprints", ()):
+        if footprint.get("name") not in _PHOTONX_FOOTPRINT_NAMES:
+            continue
+        groups = tuple(
+            str(group)
+            for group in footprint.get("net_tie_pad_groups", ())
+        )
+        if not groups:
+            continue
+        out.append(
+            {
+                "footprint_name": str(footprint.get("name")),
+                "reference": footprint.get("reference"),
+                "groups": list(groups),
+            }
+        )
+    return out
+
+
 def _observed_footprint_copper_graphics(readback):
     out = []
     for footprint in readback.get("footprints", ()):
@@ -1397,6 +1418,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         _observed_copper_overrides(readback),
     )
 
+    unexpected_net_tie_groups = _compare_multiset(
+        [],
+        _observed_net_tie_groups(readback),
+    )
+
     exported_drill_ids, skipped_drill_ids = _reported_drill_sets(
         board,
         export_report,
@@ -1543,6 +1569,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and unexpected_copper_graphics["equal"]
         and unexpected_footprint_copper_graphics["equal"]
         and unexpected_copper_overrides["equal"]
+        and unexpected_net_tie_groups["equal"]
         and foreign_footprints["equal"]
         and drills["equal"]
         and pads["equal"]
@@ -1584,6 +1611,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "unexpected_copper_graphics",
             "unexpected_footprint_copper_graphics",
             "unexpected_copper_overrides",
+            "unexpected_net_tie_groups",
             "foreign_footprints",
             "recovered_drills",
             "recovered_pads",
@@ -1610,6 +1638,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "unexpected_copper_graphics": unexpected_copper_graphics,
         "unexpected_footprint_copper_graphics": unexpected_footprint_copper_graphics,
         "unexpected_copper_overrides": unexpected_copper_overrides,
+        "unexpected_net_tie_groups": unexpected_net_tie_groups,
         "foreign_footprints": foreign_footprints,
         "drills": drills,
         "pads": pads,

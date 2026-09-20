@@ -30,6 +30,13 @@ def _copper_overrides(node):
     }
 
 
+def _net_tie_pad_groups(node):
+    item = child(node, "net_tie_pad_groups")
+    if item is None:
+        return ()
+    return tuple(str(value) for value in item[1:])
+
+
 def _property_value(node, name):
     for prop in children(node, "property"):
         if len(prop) >= 3 and str(prop[1]) == name:
@@ -82,6 +89,7 @@ def read_footprints(root):
                 "layer": str(layer[1]) if layer else None,
                 "pads": read_pads(f),
                 "copper_overrides": _copper_overrides(f),
+                "net_tie_pad_groups": _net_tie_pad_groups(f),
                 "unexpected_copper_graphics": _unexpected_copper_graphics(f),
             }
         )

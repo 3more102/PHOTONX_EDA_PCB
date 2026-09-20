@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added fail-closed KiCad footprint net-tie auditing. The reader now preserves `net_tie_pad_groups`, and the main round-trip audit rejects any net-tie group attached to a PhotonX-generated recovered footprint because PhotonX never emits this semantic override and KiCad uses it to allow distinct pad nets in a group to short.
+
 - Extended KiCad board-settings round-trip auditing to optional manufacturing overrides. The reader now preserves `solder_mask_min_width`, `pad_to_paste_clearance`, `pad_to_paste_clearance_ratio`, and stack-up presence; because PhotonX does not emit these source-unproven settings, any post-export insertion is fail-visible in `board_settings` instead of silently changing solder-mask/paste or stack-up manufacturing behavior.
 
 - Hardened KiCad export against duplicate physical object IDs even when callers bypass `validate_board()`. Any repeated ID across exportable tracks, pads, point drills, outline segments, slots, or copper regions is omitted from every affected family before deterministic UUID generation, reported once as `KICAD_OBJECT_ID_DUPLICATE`, accepted by omission-manifest validation, and surfaced as `duplicate_object_ids` source-equivalence loss.
