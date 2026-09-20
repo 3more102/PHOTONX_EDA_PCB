@@ -31,3 +31,12 @@ The resolved plating state is carried into drill hits, G85 slots, and routed pat
 Explicit drill spans are not converted directly into KiCad layer names unless the copper stack order is itself ordinal-addressable. The preferred mapping source is a conflict-free Gerber X2 copper stackup with a declared bottom-layer ordinal. For legacy two-layer packages, `PTH/NPTH L1..L2` may map to `F.Cu..B.Cu` when those are the only reconstructed copper layers.
 
 Blind or buried spans never use the two-layer shortcut. If an explicit span exceeds the declared stackup or cannot be mapped safely, PhotonX suppresses vertical connectivity for that drill and emits `X2_DRILL_SPAN_UNRESOLVED`; it does not fall back to a wider geometry-derived via span.
+
+
+## KiCad blind/buried via export
+
+A proven partial plated span can be exported as a KiCad non-through via only when the Excellon X2 drill kind also proves the topology. `Blind` must terminate on exactly one outer copper side and `Buried` must remain between inner copper layers. Source kind/layer contradictions fail closed with `KICAD_PROVEN_VIA_TYPE_UNPROVEN`.
+
+KiCad's board format uses the `blind` via type token for non-micro blind/buried vias; the exact `layers` endpoints distinguish the physical span. PhotonX therefore emits `(via blind ...)` for both source-proven X2 `Blind` and `Buried` spans, preserves the exact canonical endpoint layers, and never invents `micro` semantics.
+
+Through vias remain untyped KiCad vias spanning `F.Cu` to `B.Cu`. A full-stack span carrying X2 `Blind` or `Buried` kind evidence is treated as contradictory and omitted rather than silently relabeled.
