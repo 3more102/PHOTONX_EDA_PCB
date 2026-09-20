@@ -1,5 +1,6 @@
 import pytest
 
+# KiCad net ordinals are intentionally parsed fail-closed as exact integers.
 from photonx_eda_pcb.exporters.kicad import export_kicad_with_report
 from photonx_eda_pcb.kicad_reader import read_kicad_board_text
 from photonx_eda_pcb.mechanical_features import SlotFeature
