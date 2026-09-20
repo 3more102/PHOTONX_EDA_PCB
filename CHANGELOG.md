@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Integrated existing KiCad mechanical-slot round-trip verification into the main connectivity audit. `slot_geometry` now checks canonical center/overall length/width/plating for exported NPTH and plated slots, so geometry drift fails `roundtrip_equal` while policy-skipped source slots remain source-equivalence losses rather than readback corruption.
+
 - Added exact recovered-pad geometry verification to KiCad connectivity round-trip auditing. Export and readback now share one pad export descriptor and compare footprint/pad placement, layers, type, shape, size, angle, drill shape/size/offset, UUIDs, and net binding; malformed pad geometry is fail-visible instead of raising an unchecked readback error.
 
 - Extended deterministic KiCad identity verification into recovered pad/slot child pads. The KiCad reader now preserves pad UUIDs, and connectivity round-trip checks compare both footprint UUIDs and child-pad UUIDs so nested identity drift cannot pass when geometry and net bindings remain unchanged.

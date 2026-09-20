@@ -12,7 +12,7 @@ The connectivity audit checks:
 - net bindings on track segments the exporter reported as emitted;
 - recovered-pad identity, deterministic footprint/child-pad UUIDs, emitted geometry (position, layer, type, shape, size, angle, drill semantics, and layer set), and net bindings;
 - exported copper-region identity and zone net bindings using `PHOTONX:<region-id>`;
-- recovered NPTH/plated-slot identity, kind, and net binding using the preserved `Reference` property;
+- recovered NPTH/plated-slot identity, kind, net binding, and canonical mechanical geometry using the existing slot round-trip comparator;
 - consistency between embedded KiCad net names and the board net table where the file format carries both;
 - proven plated via spans that are part of source physical connectivity but are not emitted by the current KiCad exporter.
 

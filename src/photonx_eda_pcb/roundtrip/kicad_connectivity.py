@@ -8,6 +8,7 @@ from ..exporters.kicad_policy import pad_export_descriptor, proven_via_span_omis
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
+from .mechanical import compare_mechanical_slots
 
 
 _RECOVERED_PAD_FOOTPRINT = "PHOTONX:RecoveredPad"
@@ -651,7 +652,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     With an export report, the audit covers the net table plus tracks,
     rejects unexpected KiCad vias, and compares recovered pads, copper regions,
-    and recovered slots. Proven plated via spans are tracked as explicit source
+    and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
     object identity for emitted tracks, recovered pad/slot footprints and their child pads, regions, and slots. Recovered-pad emitted geometry is compared exactly as read back.
@@ -704,6 +705,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     regions = _empty_comparison()
     slots = _empty_comparison()
+    slot_geometry = compare_mechanical_slots([], [])
     skipped_region_ids = set()
     skipped_slot_ids = set()
     unresolved_slot_ids = []
@@ -772,6 +774,14 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             expected_slots,
             _observed_slots(readback, net_lookup, issues),
         )
+        slot_geometry = compare_mechanical_slots(
+            [
+                slot
+                for slot in source_slots
+                if slot.id in exported_slot_ids
+            ],
+            readback.get("mechanical_slots", ()),
+        )
 
     roundtrip_equal = bool(
         nets["equal"]
@@ -780,6 +790,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and pads["equal"]
         and regions["equal"]
         and slots["equal"]
+        and slot_geometry["equal"]
         and not issues
     )
 
@@ -801,6 +812,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "recovered_pads",
             "copper_regions",
             "recovered_slots",
+            "slot_geometry",
         ],
         "roundtrip_equal": roundtrip_equal,
         "source_connectivity_complete": source_connectivity_complete,
@@ -813,6 +825,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "pads": pads,
         "regions": regions,
         "slots": slots,
+        "slot_geometry": slot_geometry,
         "losses": losses,
         "issues": issues,
     }

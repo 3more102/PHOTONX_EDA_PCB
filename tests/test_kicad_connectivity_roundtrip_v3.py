@@ -74,6 +74,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "recovered_pads",
         "copper_regions",
         "recovered_slots",
+        "slot_geometry",
     ]
     assert audit["roundtrip_equal"] is True
     assert audit["source_connectivity_complete"] is True
@@ -361,6 +362,32 @@ def test_connectivity_roundtrip_detects_zone_net_name_drift(tmp_path):
         and issue["object_kind"] == "zone"
         for issue in audit["issues"]
     )
+
+
+def test_connectivity_roundtrip_detects_slot_geometry_drift(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    observed = readback["mechanical_slots"][0]
+    readback["mechanical_slots"][0] = SlotFeature(
+        observed.id,
+        observed.start,
+        observed.end,
+        observed.width_mm + 0.25,
+        observed.plated,
+        observed.tool,
+    )
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["slots"]["equal"] is True
+    assert audit["slot_geometry"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+    assert audit["slot_geometry"]["expected"]
+    assert audit["slot_geometry"]["unexpected"]
 
 
 def test_connectivity_roundtrip_detects_slot_net_claim(tmp_path):
