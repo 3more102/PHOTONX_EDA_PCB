@@ -1047,7 +1047,7 @@ def _expected_pads(board, exported_pad_ids):
                 descriptor["kind"],
                 descriptor["shape"],
                 planned["at"],
-                descriptor["pad_angle"],
+                planned["angle"],
                 descriptor["size"],
                 descriptor["drill_shape"],
                 descriptor["drill_size"],
