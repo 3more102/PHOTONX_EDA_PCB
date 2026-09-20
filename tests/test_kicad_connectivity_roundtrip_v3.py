@@ -80,6 +80,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "recovered_pads",
         "copper_regions",
         "region_geometry",
+        "region_fill_state",
         "recovered_slots",
         "slot_geometry",
     ]
@@ -88,6 +89,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
     assert audit["source_equivalent"] is True
     assert audit["regions"]["equal"] is True
     assert audit["regions"]["expected_count"] == 1
+    assert audit["region_fill_state"]["equal"] is True
     assert audit["slots"]["equal"] is True
     assert audit["slots"]["expected_count"] == 1
     assert audit["issues"] == []
@@ -571,6 +573,84 @@ def test_connectivity_roundtrip_detects_region_geometry_drift(tmp_path):
     assert audit["roundtrip_equal"] is False
     assert audit["region_geometry"]["missing"]
     assert audit["region_geometry"]["unexpected"]
+
+
+def test_connectivity_roundtrip_detects_region_fill_state_drift(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    zone = readback["zones"][0]
+    assert zone["fill_enabled"] is True
+    assert len(zone["filled_polygons"]) == 1
+    zone["fill_enabled"] = False
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["regions"]["equal"] is True
+    assert audit["region_geometry"]["equal"] is True
+    assert audit["region_fill_state"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+
+
+def test_connectivity_roundtrip_detects_region_fill_cache_drift(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    zone = readback["zones"][0]
+    zone["filled_polygons"] = ()
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["regions"]["equal"] is True
+    assert audit["region_geometry"]["equal"] is True
+    assert audit["region_fill_state"]["equal"] is False
+    assert audit["region_fill_state"]["missing"][0]["filled_polygons"]
+    assert audit["roundtrip_equal"] is False
+
+
+def test_connectivity_roundtrip_preserves_holed_region_fill_policy(tmp_path):
+    board = BoardModel(
+        regions=[
+            CopperRegion(
+                "RH",
+                (
+                    Point(0, 0),
+                    Point(6, 0),
+                    Point(6, 6),
+                    Point(0, 6),
+                ),
+                "F.Cu",
+                holes=(
+                    (
+                        Point(2, 2),
+                        Point(4, 2),
+                        Point(4, 4),
+                        Point(2, 4),
+                    ),
+                ),
+            )
+        ]
+    )
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    zone = readback["zones"][0]
+    assert zone["fill_enabled"] is False
+    assert zone["filled_polygons"] == ()
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["region_geometry"]["equal"] is True
+    assert audit["region_fill_state"]["equal"] is True
+    assert audit["roundtrip_equal"] is True
 
 
 def test_connectivity_roundtrip_detects_zone_net_drift(tmp_path):

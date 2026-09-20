@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extended KiCad CopperRegion round-trip auditing beyond shell/hole geometry to the exporter’s fill/cache contract. Solid regions now verify `fill yes` plus the deterministic cached shell polygon, while holed regions verify the intentionally cache-omitted/unfilled state; fill toggles or cached-polygon drift now fail `region_fill_state` instead of passing as geometry-equivalent.
+
 - Removed speculative recovered drilled-pad export. `PadCandidate.drill` is populated by geometric drill overlap and does not itself prove plating or a through-hole copper pad stack; drilled recovered pads are therefore omitted with `KICAD_PAD_DRILL_PADSTACK_UNPROVEN` instead of being promoted to KiCad `thru_hole` pads on `*.Cu`. The omission participates in existing skipped-pad/source-equivalence accounting until a grouped evidence-backed pad-stack contract is implemented.
 
 - Removed the lossy KiCad recovered-pad shape fallback. PadCandidate shapes outside the exact C/R/O mapping are now omitted with `KICAD_PAD_SHAPE_UNSUPPORTED` and counted in the existing skipped-pad omission/source-equivalence surface instead of being silently approximated as rectangles.

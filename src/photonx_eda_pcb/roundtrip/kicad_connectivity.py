@@ -9,7 +9,7 @@ from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
 from .mechanical import compare_mechanical_slots
-from .regions import compare_kicad_copper_regions
+from .regions import canonical_ring, compare_kicad_copper_regions
 
 
 _RECOVERED_PAD_FOOTPRINT = "PHOTONX:RecoveredPad"
@@ -669,6 +669,79 @@ def _observed_pads(readback, net_lookup, issues):
     return out
 
 
+def _region_fill_item(region_id, fill_enabled, filled_polygons):
+    canonical = []
+    for item in filled_polygons:
+        canonical.append(
+            {
+                "layer": str(item["layer"]),
+                "points": [
+                    list(point)
+                    for point in canonical_ring(item["points"])
+                ],
+            }
+        )
+    canonical.sort(key=_stable)
+    return {
+        "id": str(region_id),
+        "fill_enabled": bool(fill_enabled),
+        "filled_polygons": canonical,
+    }
+
+
+def _expected_region_fill_state(board, exported_ids):
+    out = []
+    for region in getattr(board, "regions", ()):
+        if region.id not in exported_ids:
+            continue
+        holes = tuple(getattr(region, "holes", ()))
+        cached = (
+            []
+            if holes
+            else [
+                {
+                    "layer": region.layer,
+                    "points": region.points,
+                }
+            ]
+        )
+        out.append(
+            _region_fill_item(
+                region.id,
+                not holes,
+                cached,
+            )
+        )
+    return out
+
+
+def _observed_region_fill_state(readback, issues):
+    out = []
+    for index, zone in enumerate(readback.get("zones", ())):
+        name = zone.get("name")
+        if not isinstance(name, str) or not name.startswith("PHOTONX:"):
+            continue
+        region_id = name[len("PHOTONX:") :]
+        try:
+            out.append(
+                _region_fill_item(
+                    region_id,
+                    zone.get("fill_enabled", False),
+                    zone.get("filled_polygons", ()),
+                )
+            )
+        except (TypeError, ValueError, IndexError, KeyError) as exc:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_INVALID_REGION_FILL_STATE",
+                    "zone_index": index,
+                    "region_id": region_id,
+                    "detail": str(exc),
+                }
+            )
+    return out
+
+
 def _expected_regions(board, exported_ids, issues):
     out = []
     for region in getattr(board, "regions", ()):
@@ -854,7 +927,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
     With an export report, the audit covers the declared KiCad layer table, net table, and tracks,
-    rejects unexpected KiCad vias, routed track arcs, foreign footprints, and non-line Edge.Cuts graphics, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry,
+    rejects unexpected KiCad vias, routed track arcs, foreign footprints, and non-line Edge.Cuts graphics, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry plus fill/cache state,
     and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
@@ -947,6 +1020,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     regions = _empty_comparison()
     region_geometry = compare_kicad_copper_regions(board, (), region_ids=())
+    region_fill_state = _empty_comparison()
     slots = _empty_comparison()
     slot_geometry = compare_mechanical_slots([], [])
     skipped_region_ids = set()
@@ -1006,6 +1080,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             region_ids=exported_region_ids,
         )
 
+        region_fill_state = _compare_multiset(
+            _expected_region_fill_state(board, exported_region_ids),
+            _observed_region_fill_state(readback, issues),
+        )
+
         exported_slot_ids, skipped_slot_ids = _reported_sets(
             (slot.id for slot in source_slots),
             getattr(export_report, "exported_slot_ids", ()),
@@ -1043,6 +1122,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and pads["equal"]
         and regions["equal"]
         and region_geometry["equal"]
+        and region_fill_state["equal"]
         and slots["equal"]
         and slot_geometry["equal"]
         and not issues
@@ -1072,6 +1152,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "recovered_pads",
             "copper_regions",
             "region_geometry",
+            "region_fill_state",
             "recovered_slots",
             "slot_geometry",
         ],
@@ -1091,6 +1172,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "pads": pads,
         "regions": regions,
         "region_geometry": region_geometry,
+        "region_fill_state": region_fill_state,
         "slots": slots,
         "slot_geometry": slot_geometry,
         "losses": losses,
