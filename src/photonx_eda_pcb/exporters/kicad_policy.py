@@ -184,6 +184,197 @@ def pad_export_descriptor(pad):
         "layers":layers,
     },ref_layer,warning
 
+_X2_REFDES_EVIDENCE = "gerber_x2_component_refdes"
+_X2_PIN_EVIDENCE = "gerber_x2_pin_number"
+_X2_PIN_FUNCTION_EVIDENCE = "gerber_x2_pin_function"
+
+
+def _trusted_pad_evidence_values(pad, kind):
+    return tuple(
+        sorted(
+            {
+                str(item.detail)
+                for item in getattr(pad.provenance, "evidence", ())
+                if item.kind == kind and item.confidence == 1.0
+            }
+        )
+    )
+
+
+def x2_component_export_plan(board):
+    """Plan exact multi-pad KiCad footprints from source-proven Gerber X2 .P data.
+
+    Only source-proven component hypotheses with one unambiguous refdes, one
+    unique trusted pin number per pad, one surface side, and individually
+    exportable pad geometry are grouped. Anything ambiguous is returned as a
+    rejected identity group so callers can fall back to independent pad export
+    without inventing component semantics.
+    """
+    source_components = [
+        component
+        for component in getattr(board, "components", ())
+        if getattr(component, "kind", None) == "gerber_x2_component"
+    ]
+    pad_claims = Counter(
+        str(pad_id)
+        for component in source_components
+        for pad_id in getattr(component, "pad_ids", ())
+    )
+    duplicate_object_ids = set(kicad_duplicate_object_ids(board))
+    pad_by_id = {
+        str(pad.id): pad
+        for pad in getattr(board, "pads", ())
+        if str(pad.id) not in duplicate_object_ids
+    }
+
+    groups = []
+    rejected = []
+    for component in sorted(source_components, key=lambda item: str(item.id)):
+        component_id = str(component.id)
+        reference = getattr(component, "reference", None)
+        pad_ids = [str(pad_id) for pad_id in getattr(component, "pad_ids", ())]
+        reasons = []
+
+        if getattr(component, "confidence", None) != 1.0:
+            reasons.append("component confidence is not source-certain")
+        if not isinstance(reference, str) or not reference:
+            reasons.append("component reference is missing")
+        if not pad_ids:
+            reasons.append("component has no pads")
+        if len(set(pad_ids)) != len(pad_ids):
+            reasons.append("component repeats a pad ID")
+        if any(pad_claims[pad_id] != 1 for pad_id in pad_ids):
+            reasons.append("one or more pads are claimed by multiple X2 components")
+
+        missing = sorted(pad_id for pad_id in pad_ids if pad_id not in pad_by_id)
+        if missing:
+            reasons.append("missing or ambiguous pad IDs: " + ", ".join(missing))
+
+        rows = []
+        for pad_id in pad_ids:
+            pad = pad_by_id.get(pad_id)
+            if pad is None:
+                continue
+            status = pad_export_status(board, pad)
+            if status != "export":
+                reasons.append(f"{pad_id} is not exactly exportable ({status})")
+                continue
+
+            refdes_values = tuple(
+                value
+                for value in _trusted_pad_evidence_values(
+                    pad, _X2_REFDES_EVIDENCE
+                )
+                if value
+            )
+            if refdes_values != (reference,):
+                reasons.append(
+                    f"{pad_id} does not carry exactly the component refdes"
+                )
+
+            pin_values = tuple(
+                value
+                for value in _trusted_pad_evidence_values(
+                    pad, _X2_PIN_EVIDENCE
+                )
+                if value
+            )
+            if len(pin_values) != 1:
+                reasons.append(
+                    f"{pad_id} does not carry exactly one trusted pin number"
+                )
+                continue
+
+            function_values = tuple(
+                value
+                for value in _trusted_pad_evidence_values(
+                    pad, _X2_PIN_FUNCTION_EVIDENCE
+                )
+                if value
+            )
+            if len(function_values) > 1:
+                reasons.append(
+                    f"{pad_id} carries conflicting trusted pin functions"
+                )
+
+            descriptor, _ref_layer, _warning = pad_export_descriptor(pad)
+            rows.append(
+                {
+                    "pad": pad,
+                    "pad_id": pad_id,
+                    "number": pin_values[0],
+                    "function": (
+                        function_values[0]
+                        if len(function_values) == 1
+                        else None
+                    ),
+                    "descriptor": descriptor,
+                }
+            )
+
+        if len(rows) == len(pad_ids):
+            pin_numbers = [row["number"] for row in rows]
+            if len(set(pin_numbers)) != len(pin_numbers):
+                reasons.append(
+                    "trusted X2 pin numbers are not unique within the component"
+                )
+            footprint_layers = {
+                row["descriptor"]["footprint_layer"] for row in rows
+            }
+            if len(footprint_layers) != 1:
+                reasons.append("component pads do not share one surface side")
+            elif next(iter(footprint_layers)) not in {"F.Cu", "B.Cu"}:
+                reasons.append("component is not on a supported surface side")
+
+        if reasons:
+            rejected.append(
+                {
+                    "component_id": component_id,
+                    "reference": reference,
+                    "pad_ids": tuple(sorted(pad_ids)),
+                    "reasons": tuple(sorted(set(reasons))),
+                }
+            )
+            continue
+
+        rows.sort(key=lambda row: row["pad_id"])
+        origin = (
+            float(rows[0]["pad"].center.x),
+            float(rows[0]["pad"].center.y),
+        )
+        footprint_layer = rows[0]["descriptor"]["footprint_layer"]
+        planned_pads = []
+        for row in rows:
+            pad = row["pad"]
+            planned_pads.append(
+                {
+                    "pad_id": row["pad_id"],
+                    "number": row["number"],
+                    "function": row["function"],
+                    "at": (
+                        float(pad.center.x) - origin[0],
+                        float(pad.center.y) - origin[1],
+                    ),
+                    "descriptor": row["descriptor"],
+                }
+            )
+
+        groups.append(
+            {
+                "component_id": component_id,
+                "reference": reference,
+                "footprint_layer": footprint_layer,
+                "reference_layer": (
+                    "B.SilkS" if footprint_layer == "B.Cu" else "F.SilkS"
+                ),
+                "origin": origin,
+                "pads": tuple(planned_pads),
+            }
+        )
+
+    return tuple(groups), tuple(rejected)
+
+
 def track_export_status(board, track):
     try:
         sx = float(track.start.x)
