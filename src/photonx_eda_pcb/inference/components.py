@@ -25,6 +25,53 @@ def _trusted_evidence_values(pad, kind: str) -> tuple[str, ...]:
     )
 
 
+def _source_pin_conflicts(members) -> list[str]:
+    """Return trusted X2 pin evidence contradictions for one source component."""
+
+    conflicts: list[str] = []
+    pin_owners: dict[str, list[str]] = {}
+
+    for pad in sorted(members, key=lambda item: item.id):
+        pin_numbers = tuple(
+            value
+            for value in _trusted_evidence_values(pad, _X2_PIN)
+            if value
+        )
+        pin_functions = tuple(
+            value
+            for value in _trusted_evidence_values(pad, _X2_PIN_FUNCTION)
+            if value
+        )
+
+        if len(pin_numbers) > 1:
+            detail = ", ".join(repr(value) for value in pin_numbers)
+            conflicts.append(
+                f"{pad.id} has conflicting trusted Gerber X2 .P pin numbers: "
+                f"{detail}"
+            )
+            continue
+
+        if len(pin_functions) > 1:
+            detail = ", ".join(repr(value) for value in pin_functions)
+            conflicts.append(
+                f"{pad.id} has conflicting trusted Gerber X2 .P pin functions: "
+                f"{detail}"
+            )
+
+        if len(pin_numbers) == 1:
+            pin_owners.setdefault(pin_numbers[0], []).append(pad.id)
+
+    for pin_number, pad_ids in sorted(pin_owners.items()):
+        if len(pad_ids) > 1:
+            conflicts.append(
+                "trusted Gerber X2 .P pin "
+                f"{pin_number!r} assigned to multiple pads: "
+                + ", ".join(sorted(pad_ids))
+            )
+
+    return conflicts
+
+
 def _source_component_hypotheses(pads):
     """Use only source-proven X2 identity before geometric component guesses."""
 
@@ -84,6 +131,27 @@ def _source_component_hypotheses(pads):
                 f"Gerber step-repeat instance: {detail}"
                 for detail in step_repeat
             )
+
+        pin_conflicts = _source_pin_conflicts(members)
+        if pin_conflicts:
+            conflicts.append(
+                ComponentHypothesis(
+                    stable_id(
+                        "cmp",
+                        "gerber_x2_pin_conflict",
+                        refdes,
+                        *step_repeat,
+                        *pad_ids,
+                        *pin_conflicts,
+                    ),
+                    pad_ids,
+                    "gerber_x2_component_conflict",
+                    0.0,
+                    [*evidence, *pin_conflicts],
+                    reference=refdes,
+                )
+            )
+            continue
 
         pin_details = []
         for pad in members:
