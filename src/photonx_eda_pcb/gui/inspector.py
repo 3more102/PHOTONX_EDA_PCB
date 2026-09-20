@@ -4,6 +4,7 @@ import json
 import tkinter as tk
 from dataclasses import asdict, is_dataclass
 
+from ..via_review import via_review_descriptor
 from .state import ViewState
 
 
@@ -48,6 +49,12 @@ class Inspector(tk.Text):
             if obj is not None and is_dataclass(obj)
             else {"id": object_id, "status": "not found"}
         )
+
+        via = via_review_descriptor(self.state.board, object_id)
+        if via is not None:
+            payload = dict(payload)
+            payload["via_review"] = asdict(via)
+
         self._show_payload(payload)
 
     def show_review(self, item) -> None:
