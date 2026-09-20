@@ -250,3 +250,22 @@ def test_x2_source_inference_has_spatial_bruteforce_parity():
     )
 
     assert _signature(spatial) == _signature(brute)
+
+
+def test_x2_whitespace_only_pin_evidence_stays_unresolved():
+    board = BoardModel(
+        pads=[
+            _pad("P1", 0.0, refdes="U1", pin="   ", pin_function="VCC"),
+            _pad("P2", 2.0, refdes="U1", pin="2", pin_function="   "),
+        ]
+    )
+
+    component = infer_component_hypotheses(board, backend="python")[0]
+
+    assert component.reference == "U1"
+    assert component.source_pin_map == {"P2": "2"}
+    assert component.source_pin_functions == {}
+    assert any(
+        "pin identity unresolved for pads: P1" in item
+        for item in component.evidence
+    )
