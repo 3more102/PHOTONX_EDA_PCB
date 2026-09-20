@@ -12,6 +12,10 @@ class RoutedPath:
     plated:str="unknown"
     tool:str|None=None
     provenance:Provenance=field(default_factory=Provenance,compare=False)
+    layer_span:tuple[str,str]|None=None
+    span_proven:bool=False
+    x2_layer_span:tuple[int,int]|None=None
+    x2_span_kind:str|None=None
     @property
     def segments(self):
         return tuple(RouteSegment(self.points[i],self.points[i+1]) for i in range(max(0,len(self.points)-1)))
