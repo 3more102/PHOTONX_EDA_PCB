@@ -414,6 +414,7 @@ def x2_component_export_plan(board):
 
     return tuple(groups), tuple(rejected)
 
+
 def track_export_status(board, track):
     try:
         sx = float(track.start.x)
