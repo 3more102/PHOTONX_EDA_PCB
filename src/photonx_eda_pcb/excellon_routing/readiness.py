@@ -48,9 +48,20 @@ def _route_geometry(route):
     }
 
 
+def _is_backdrill(route):
+    function = str(
+        getattr(route, "x2_aperture_function", "") or ""
+    ).lower().replace("_", "").replace("-", "")
+    return function == "backdrill"
+
+
 def is_exact_npth_slot_route(route):
     plating = str(getattr(route, "plated", "unknown")).lower().replace("_", "-")
-    return plating == "non-plated" and _route_geometry(route) is not None
+    return (
+        not _is_backdrill(route)
+        and plating == "non-plated"
+        and _route_geometry(route) is not None
+    )
 
 
 def _route_slot_feature(route):
@@ -69,6 +80,7 @@ def _route_slot_feature(route):
         getattr(route, "span_proven", False) is True,
         getattr(route, "x2_layer_span", None),
         getattr(route, "x2_span_kind", None),
+        getattr(route, "x2_aperture_function", None),
     )
 
 
@@ -148,7 +160,7 @@ def _pad_shape_name(shape):
 
 def route_export_descriptor(route, board=None):
     geometry = _route_geometry(route)
-    if geometry is None:
+    if geometry is None or _is_backdrill(route):
         return None
 
     plating = str(getattr(route, "plated", "unknown")).lower().replace("_", "-")
@@ -208,7 +220,9 @@ def assess_route_export_readiness(routes, board=None):
 
         omitted.append(route.id)
         plating = str(getattr(route, "plated", "unknown")).lower().replace("_", "-")
-        if plating == "plated" and _route_geometry(route) is not None:
+        if _is_backdrill(route):
+            reasons[route.id] = "KICAD_BACKDRILL_UNSUPPORTED"
+        elif plating == "plated" and _route_geometry(route) is not None:
             _padstack, reason = _plated_route_padstack(board, route)
             reasons[route.id] = (
                 reason or "KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN"
