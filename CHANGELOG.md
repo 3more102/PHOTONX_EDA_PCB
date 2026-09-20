@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added evidence-gated KiCad export for exact straight plated Excellon routed slots. A plated route is emitted as deterministic `PHOTONX:RecoveredPlatedRoute` only when multilayer copper coverage proves one pad-stack and one unambiguous exported net; otherwise it remains an explicit omission. Round-trip verification checks route kind, geometry, net binding, and deterministic identity while keeping route footprints out of the mechanical-slot comparator.
+
 - Promoted fully trusted Gerber X2 `.P` component-reference evidence into component reconstruction before geometric pairing. Source-proven refdes groups retain pin/function evidence, repeated step-and-repeat instances stay separate, lower-confidence identity is not escalated, and conflicting trusted refdes evidence remains explicit and fail-closed instead of being reassigned by proximity.
 
 - Added exact KiCad export for straight non-plated Excellon routed paths. Two-point finite routes now become deterministic `PHOTONX:RecoveredNPTHRoute` oval NPTH footprints; route export/omission partitions are machine-readable, and KiCad round-trip verification checks recovered route identity, geometry, and unassigned-net semantics without misclassifying route footprints as component slots.
