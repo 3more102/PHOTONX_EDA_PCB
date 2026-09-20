@@ -51,6 +51,26 @@ def score_signature(features, sig):
             return 0.0
         score += 0.10
 
+    grid_rows, grid_columns = features.get("grid_shape", (0, 0))
+    if "grid_rows_min" in sig:
+        if grid_rows < sig["grid_rows_min"]:
+            return 0.0
+        score += 0.10
+    if "grid_columns_min" in sig:
+        if grid_columns < sig["grid_columns_min"]:
+            return 0.0
+        score += 0.10
+
+    if "grid_occupancy_min" in sig:
+        if features.get("grid_occupancy", 0.0) < sig["grid_occupancy_min"]:
+            return 0.0
+        score += 0.10
+
+    if "symmetry_min" in sig:
+        if features.get("symmetry_score", 0.0) < sig["symmetry_min"]:
+            return 0.0
+        score += 0.10
+
     pitch_min = features.get("pitch_min")
     if "pitch_min_mm" in sig:
         if pitch_min is None or pitch_min < sig["pitch_min_mm"]:
