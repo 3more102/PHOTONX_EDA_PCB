@@ -159,3 +159,104 @@ def test_plated_route_rejects_undeclared_inner_copper_layer():
         == "KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN"
     )
 
+def _x2_route_board(route, layers):
+    pads = [
+        PadCandidate(
+            f"P{index}",
+            Point(2.0, 0.0),
+            6.0,
+            2.0,
+            "O",
+            layer,
+            net_id="N1",
+        )
+        for index, layer in enumerate(layers)
+    ]
+    return BoardModel(
+        pads=pads,
+        routes=[route],
+        nets=[NetGroup("N1", [pad.id for pad in pads], 0.99, "SIG")],
+        metadata={
+            "x2_copper_stackup": {
+                "status": "declared",
+                "layers": ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"],
+                "declared_copper_count": 4,
+            }
+        },
+    )
+
+
+def test_x2_buried_plated_route_is_not_widened_to_through_hole(tmp_path):
+    route = RoutedPath(
+        "ROUTE_BURIED",
+        ((0.0, 0.0), (4.0, 0.0)),
+        1.0,
+        plated="plated",
+        layer_span=("In1.Cu", "In2.Cu"),
+        span_proven=True,
+        x2_layer_span=(2, 3),
+        x2_span_kind="buried",
+    )
+    board = _x2_route_board(route, ["In1.Cu", "In2.Cu"])
+
+    readiness = assess_route_export_readiness(board.routes, board)
+    assert readiness.exportable == ()
+    assert readiness.omitted == ("ROUTE_BURIED",)
+    assert (
+        readiness.reasons["ROUTE_BURIED"]
+        == "KICAD_PLATED_ROUTE_PARTIAL_SPAN_UNSUPPORTED"
+    )
+
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "buried-route.kicad_pcb",
+    )
+    assert "RecoveredPlatedRoute" not in path.read_text(encoding="utf-8")
+    manifest = omission_manifest(report)
+    assert manifest["omitted_routes"] == ["ROUTE_BURIED"]
+    assert validate_omission_manifest(manifest) == []
+
+
+def test_unresolved_x2_plated_route_span_fails_closed():
+    route = RoutedPath(
+        "ROUTE_UNRESOLVED",
+        ((0.0, 0.0), (4.0, 0.0)),
+        1.0,
+        plated="plated",
+        span_proven=False,
+        x2_layer_span=(2, 3),
+        x2_span_kind="buried",
+    )
+    board = _x2_route_board(route, ["In1.Cu", "In2.Cu"])
+
+    readiness = assess_route_export_readiness(board.routes, board)
+    assert readiness.exportable == ()
+    assert (
+        readiness.reasons["ROUTE_UNRESOLVED"]
+        == "KICAD_PLATED_ROUTE_SPAN_UNPROVEN"
+    )
+
+
+def test_full_stack_route_rejects_blind_buried_kind_conflict():
+    route = RoutedPath(
+        "ROUTE_KIND_CONFLICT",
+        ((0.0, 0.0), (4.0, 0.0)),
+        1.0,
+        plated="plated",
+        layer_span=("F.Cu", "B.Cu"),
+        span_proven=True,
+        x2_layer_span=(1, 4),
+        x2_span_kind="buried",
+    )
+    board = _x2_route_board(
+        route,
+        ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"],
+    )
+
+    readiness = assess_route_export_readiness(board.routes, board)
+    assert readiness.exportable == ()
+    assert (
+        readiness.reasons["ROUTE_KIND_CONFLICT"]
+        == "KICAD_PLATED_ROUTE_X2_KIND_MISMATCH"
+    )
+
