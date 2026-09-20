@@ -29,7 +29,7 @@ def _source_pin_conflicts(members) -> list[str]:
     """Return trusted X2 pin evidence contradictions for one source component."""
 
     conflicts: list[str] = []
-    pin_owners: dict[str, list[str]] = {}
+    pin_functions_by_number: dict[str, set[str]] = {}
 
     for pad in sorted(members, key=lambda item: item.id):
         pin_numbers = tuple(
@@ -58,15 +58,18 @@ def _source_pin_conflicts(members) -> list[str]:
                 f"{detail}"
             )
 
-        if len(pin_numbers) == 1:
-            pin_owners.setdefault(pin_numbers[0], []).append(pad.id)
+        if len(pin_numbers) == 1 and len(pin_functions) == 1:
+            pin_functions_by_number.setdefault(pin_numbers[0], set()).add(
+                pin_functions[0]
+            )
 
-    for pin_number, pad_ids in sorted(pin_owners.items()):
-        if len(pad_ids) > 1:
+    for pin_number, functions in sorted(pin_functions_by_number.items()):
+        if len(functions) > 1:
+            detail = ", ".join(repr(value) for value in sorted(functions))
             conflicts.append(
                 "trusted Gerber X2 .P pin "
-                f"{pin_number!r} assigned to multiple pads: "
-                + ", ".join(sorted(pad_ids))
+                f"{pin_number!r} has conflicting functions across flashes: "
+                f"{detail}"
             )
 
     return conflicts
