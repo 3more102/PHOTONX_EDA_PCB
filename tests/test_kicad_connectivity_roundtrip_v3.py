@@ -246,8 +246,8 @@ def test_connectivity_roundtrip_detects_paper_value_drift(tmp_path):
     audit = compare_kicad_connectivity(board, readback, report)
 
     assert audit["file_structure"]["equal"] is False
-    assert audit["file_structure"]["expected"]["paper"] == "A4"
-    assert audit["file_structure"]["observed"]["paper"] == "A3"
+    assert audit["file_structure"]["missing"][0]["paper"] == "A4"
+    assert audit["file_structure"]["unexpected"][0]["paper"] == "A3"
     assert audit["roundtrip_equal"] is False
 
 
