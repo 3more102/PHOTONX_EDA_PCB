@@ -132,7 +132,7 @@ def test_legacy_slot_only_manifest_remains_valid():
     assert validate_omission_manifest(data) == []
 
 
-def test_manifest_records_proven_via_span_connectivity_omission(tmp_path):
+def test_manifest_records_unresolved_proven_via_span_omission(tmp_path):
     board = BoardModel(
         pads=[
             PadCandidate("P_F", Point(0, 0), 1.0, 1.0, "C", "F.Cu"),
@@ -155,9 +155,10 @@ def test_manifest_records_proven_via_span_connectivity_omission(tmp_path):
     )
     _, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
     data = omission_manifest(report)
+    assert data["exported_via_spans"] == []
     assert data["omitted_via_spans"] == ["D1"]
     assert any(
-        item["code"] == "KICAD_PROVEN_VIA_SPAN_UNSUPPORTED"
+        item["code"] == "KICAD_PROVEN_VIA_NET_UNRESOLVED"
         and item["object_id"] == "D1"
         for item in data["issues"]
     )
