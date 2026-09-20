@@ -2151,6 +2151,10 @@ class GerberRS274XParser:
         """Apply X2 TA/TD dictionary semantics for future aperture definitions."""
 
         if command == "TA":
+            # X2 uses one name-keyed dictionary: changing a user attribute's
+            # domain replaces the previous entry instead of duplicating it.
+            self.object_attributes.pop(name, None)
+            self.object_attribute_sources.pop(name, None)
             self.aperture_attributes[name] = tuple(values)
             self.aperture_attribute_sources[name] = source
             return
@@ -2186,6 +2190,9 @@ class GerberRS274XParser:
         """Apply X2 TO/TD dictionary semantics for future graphical objects."""
 
         if command == "TO":
+            # X2 attribute names are unique across aperture/object domains.
+            self.aperture_attributes.pop(name, None)
+            self.aperture_attribute_sources.pop(name, None)
             self.object_attributes[name] = tuple(values)
             self.object_attribute_sources[name] = source
             return
