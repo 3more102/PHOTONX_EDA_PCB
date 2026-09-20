@@ -214,6 +214,9 @@ def x2_component_export_plan(board):
         for component in getattr(board, "components", ())
         if getattr(component, "kind", None) == "gerber_x2_component"
     ]
+    component_id_counts = Counter(
+        str(component.id) for component in source_components
+    )
     pad_claims = Counter(
         str(pad_id)
         for component in source_components
@@ -236,6 +239,8 @@ def x2_component_export_plan(board):
         pin_functions = getattr(component, "source_pin_functions", {})
         reasons = []
 
+        if component_id_counts[component_id] != 1:
+            reasons.append("component ID is duplicated across X2 hypotheses")
         if getattr(component, "confidence", None) != 1.0:
             reasons.append("component confidence is not source-certain")
         if not isinstance(reference, str) or not reference:
@@ -360,19 +365,24 @@ def x2_component_export_plan(board):
         )
         footprint_layer = rows[0]["descriptor"]["footprint_layer"]
         planned_pads = []
+        back_side = footprint_layer == "B.Cu"
         for row in rows:
             pad = row["pad"]
+            local_x = float(pad.center.x) - origin[0]
+            local_y = float(pad.center.y) - origin[1]
+            descriptor = dict(row["descriptor"])
+            if back_side:
+                local_y = 0.0 if local_y == 0.0 else -local_y
+                pad_angle = float(descriptor["pad_angle"])
+                descriptor["pad_angle"] = 0.0 if pad_angle == 0.0 else -pad_angle
             planned_pads.append(
                 {
                     "pad_id": row["pad_id"],
                     "number": row["number"],
                     "function": row["function"],
                     "net_id": getattr(pad, "net_id", None),
-                    "at": (
-                        float(pad.center.x) - origin[0],
-                        float(pad.center.y) - origin[1],
-                    ),
-                    "descriptor": row["descriptor"],
+                    "at": (local_x, local_y),
+                    "descriptor": descriptor,
                 }
             )
 
