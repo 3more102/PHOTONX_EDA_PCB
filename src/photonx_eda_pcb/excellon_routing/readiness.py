@@ -85,11 +85,22 @@ def _plated_route_padstack(board, route):
 
     # Import lazily to keep models -> excellon_routing.model free of the
     # plated-slot geometry dependency during package initialization.
+    from photonx_eda_pcb.exporters.kicad_policy import declared_copper_layer_names
     from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
     inference = infer_plated_slot_padstack(board, slot)
     padstack = inference.padstack
     if padstack is None or not _net_is_unambiguous(board, padstack.net_id):
+        return None
+
+    # A recovered pad-stack may only reference copper layers that the KiCad
+    # board layer table actually declares.  Unknown names must stay fail-closed
+    # instead of leaking into an otherwise syntactically valid footprint.
+    declared_layers = set(declared_copper_layer_names(board))
+    padstack_layers = tuple(str(layer) for layer in padstack.layers)
+    if not padstack_layers or any(
+        layer not in declared_layers for layer in padstack_layers
+    ):
         return None
     return padstack
 
