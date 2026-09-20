@@ -9,6 +9,13 @@ def _net_ordinal(node):
     return node[1]
 
 
+def _via_type(via):
+    if len(via) > 1 and isinstance(via[1], str):
+        if via[1] in {"blind", "micro"}:
+            return via[1]
+    return "through"
+
+
 def read_vias(root):
     out = []
     for via in children(root, "via"):
@@ -20,6 +27,7 @@ def read_vias(root):
         object_uuid = child(via, "uuid")
         out.append(
             {
+                "type": _via_type(via),
                 "at": (float(at[1]), float(at[2])),
                 "size": float(size[1]),
                 "drill": float(drill[1]),
