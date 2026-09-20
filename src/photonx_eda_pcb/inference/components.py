@@ -25,6 +25,62 @@ def _trusted_evidence_values(pad, kind: str) -> tuple[str, ...]:
     )
 
 
+def _source_pin_conflicts(members) -> list[str]:
+    """Return contradictory trusted X2 pin evidence for one source component.
+
+    Gerber permits one component pad to be composed from multiple flashes, so
+    repeated refdes + pin evidence across pad candidates is valid. When those
+    repeated flashes provide pin functions, however, the trusted functions must
+    agree.
+    """
+
+    conflicts: list[str] = []
+    pin_functions_by_number: dict[str, set[str]] = {}
+
+    for pad in sorted(members, key=lambda item: item.id):
+        pin_numbers = tuple(
+            value
+            for value in _trusted_evidence_values(pad, _X2_PIN)
+            if value
+        )
+        pin_functions = tuple(
+            value
+            for value in _trusted_evidence_values(pad, _X2_PIN_FUNCTION)
+            if value
+        )
+
+        if len(pin_numbers) > 1:
+            detail = ", ".join(repr(value) for value in pin_numbers)
+            conflicts.append(
+                f"{pad.id} has conflicting trusted Gerber X2 .P pin numbers: "
+                f"{detail}"
+            )
+
+        if len(pin_functions) > 1:
+            detail = ", ".join(repr(value) for value in pin_functions)
+            conflicts.append(
+                f"{pad.id} has conflicting trusted Gerber X2 .P pin functions: "
+                f"{detail}"
+            )
+
+        if len(pin_numbers) == 1 and len(pin_functions) == 1:
+            pin_functions_by_number.setdefault(
+                pin_numbers[0],
+                set(),
+            ).add(pin_functions[0])
+
+    for pin_number, functions in sorted(pin_functions_by_number.items()):
+        if len(functions) > 1:
+            detail = ", ".join(repr(value) for value in sorted(functions))
+            conflicts.append(
+                "trusted Gerber X2 .P pin "
+                f"{pin_number!r} has conflicting functions across flashes: "
+                f"{detail}"
+            )
+
+    return conflicts
+
+
 def _source_component_hypotheses(pads):
     """Use only source-proven X2 identity before geometric component guesses."""
 
@@ -84,6 +140,27 @@ def _source_component_hypotheses(pads):
                 f"Gerber step-repeat instance: {detail}"
                 for detail in step_repeat
             )
+
+        pin_conflicts = _source_pin_conflicts(members)
+        if pin_conflicts:
+            conflicts.append(
+                ComponentHypothesis(
+                    stable_id(
+                        "cmp",
+                        "gerber_x2_pin_conflict",
+                        refdes,
+                        *step_repeat,
+                        *pad_ids,
+                        *pin_conflicts,
+                    ),
+                    pad_ids,
+                    "gerber_x2_component_conflict",
+                    0.0,
+                    [*evidence, *pin_conflicts],
+                    reference=refdes,
+                )
+            )
+            continue
 
         pin_details = []
         for pad in members:
