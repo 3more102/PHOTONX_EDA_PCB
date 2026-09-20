@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened Gerber X2 `.AperFunction` provenance against malformed or unrecognized value tuples. Generic `TA` source evidence is retained, while structured `gerber_x2_aperture_function` evidence is emitted only for recognized Ucamco Gerber 2026.05 forms, including mandatory qualifiers such as `SMDPad,CuDef|SMDef`.
+
 - Preserved Gerber X2 aperture attributes as immutable source evidence. Supported `AD` apertures snapshot current `TA` attributes; D01/D03 geometry carries the frozen aperture evidence; regions snapshot `TA` state at `G36`; and `TD` changes only future tracked state. `.AperFunction` remains source evidence and is not promoted into inferred design intent.
 
 - Added evidence-gated KiCad export for exact straight plated Excellon routed slots. A plated route is emitted as deterministic `PHOTONX:RecoveredPlatedRoute` only when multilayer copper coverage proves one pad-stack and one unambiguous exported net; otherwise it remains an explicit omission. Round-trip verification checks route kind, geometry, net binding, and deterministic identity while keeping route footprints out of the mechanical-slot comparator.

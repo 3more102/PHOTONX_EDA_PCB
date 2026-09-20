@@ -41,8 +41,12 @@ snapshotted onto that aperture and remains immutable even if later `TA`, `TO`,
 or `TD` commands change the current dictionary. Geometry created with that
 aperture carries the frozen metadata in provenance as
 `gerber_x2_aperture_attribute` evidence. `.AperFunction` is additionally
-normalized as `gerber_x2_aperture_function` evidence without inferring any
-electrical, component, or design-intent semantics from the value.
+normalized as structured `gerber_x2_aperture_function` evidence only when its
+value tuple matches the recognized Ucamco Gerber 2026.05 grammar. Incomplete or
+unrecognized values remain available as generic `gerber_x2_aperture_attribute`
+source evidence but are not promoted to structured function evidence. This
+grammar check does not infer electrical/component semantics or assert that the
+function is applicable to the current layer.
 
 A `G36` region snapshots the current `TA` dictionary at region creation. It
 does not inherit aperture attributes from the currently selected aperture.

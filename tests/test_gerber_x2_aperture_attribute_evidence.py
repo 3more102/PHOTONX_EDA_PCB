@@ -24,7 +24,7 @@ def test_ta_snapshot_is_fixed_on_aperture_and_td_is_not_retroactive(
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
-        "%TA.AperFunction,SMDPad*%\n"
+        "%TA.AperFunction,SMDPad,CuDef*%\n"
         "%ADD10C,1.000*%\n"
         "%TD.AperFunction*%\n"
         "D10*\n"
@@ -36,7 +36,7 @@ def test_ta_snapshot_is_fixed_on_aperture_and_td_is_not_retroactive(
 
     assert len(result.pads) == 1
     pad = result.pads[0]
-    assert _evidence(pad, "gerber_x2_aperture_function") == ["SMDPad"]
+    assert _evidence(pad, "gerber_x2_aperture_function") == ["SMDPad,CuDef"]
     assert any(
         "name=.AperFunction" in detail and "SMDPad" in detail
         for detail in _evidence(pad, "gerber_x2_aperture_attribute")
@@ -48,7 +48,7 @@ def test_each_add_gets_its_own_ta_snapshot(tmp_path: Path):
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
-        "%TA.AperFunction,SMDPad*%\n"
+        "%TA.AperFunction,SMDPad,CuDef*%\n"
         "%ADD10C,1.000*%\n"
         "%TA.AperFunction,Conductor*%\n"
         "%ADD11C,0.200*%\n"
@@ -62,7 +62,7 @@ def test_each_add_gets_its_own_ta_snapshot(tmp_path: Path):
 
     result = GerberRS274XParser("F.Cu", strict=True).parse(path)
 
-    assert _evidence(result.pads[0], "gerber_x2_aperture_function") == ["SMDPad"]
+    assert _evidence(result.pads[0], "gerber_x2_aperture_function") == ["SMDPad,CuDef"]
     assert _evidence(result.tracks[0], "gerber_x2_aperture_function") == [
         "Conductor"
     ]
@@ -102,7 +102,7 @@ def test_td_without_name_clears_ta_and_to_state_for_future_creations(
         tmp_path,
         "%FSLAX24Y24*%\n"
         "%MOMM*%\n"
-        "%TA.AperFunction,SMDPad*%\n"
+        "%TA.AperFunction,SMDPad,CuDef*%\n"
         "%TO.N,CLK*%\n"
         "%TD*%\n"
         "%ADD10C,1.000*%\n"
@@ -152,3 +152,66 @@ def test_custom_name_switches_domain_without_rewriting_frozen_aperture(tmp_path:
         for detail in _evidence(second, "gerber_x2_object_attribute")
     )
 
+
+
+
+def test_incomplete_smdpad_function_remains_generic_evidence_only(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%TA.AperFunction,SMDPad*%\n"
+        "%ADD10C,1.000*%\n"
+        "D10*\n"
+        "X010000Y010000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    pad = result.pads[0]
+    assert _evidence(pad, "gerber_x2_aperture_function") == []
+    generic = _evidence(pad, "gerber_x2_aperture_attribute")
+    assert len(generic) == 1
+    assert "name=.AperFunction" in generic[0]
+    assert "SMDPad" in generic[0]
+
+
+def test_unknown_aperture_function_remains_generic_evidence_only(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%TA.AperFunction,MadeUpFunction*%\n"
+        "%ADD10C,1.000*%\n"
+        "D10*\n"
+        "X010000Y010000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    pad = result.pads[0]
+    assert _evidence(pad, "gerber_x2_aperture_function") == []
+    generic = _evidence(pad, "gerber_x2_aperture_attribute")
+    assert len(generic) == 1
+    assert "MadeUpFunction" in generic[0]
+
+
+def test_valid_smdpad_function_with_required_qualifier_is_structured(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%TA.AperFunction,SMDPad,SMDef*%\n"
+        "%ADD10C,1.000*%\n"
+        "D10*\n"
+        "X010000Y010000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    assert _evidence(
+        result.pads[0], "gerber_x2_aperture_function"
+    ) == ["SMDPad,SMDef"]
