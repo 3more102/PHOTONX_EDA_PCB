@@ -50,6 +50,7 @@ class DrillHit:
     provenance: Provenance = field(default_factory=Provenance)
     layer_span: tuple[int, int] | None = None
     span_proven: bool = False
+    span_kind: str | None = None
 
 @dataclass
 class OutlineSegment:
