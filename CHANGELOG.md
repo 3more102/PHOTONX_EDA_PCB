@@ -1,4 +1,4 @@
-# Changelog
+- Added fail-closed KiCad export for exactly representable proven plated via spans. PhotonX now emits a real KiCad `via` only when an explicitly plated drill has one concentric circular supporting pad of identical annular diameter on every declared copper layer in the proven span and all support resolves to one unambiguous exported net. Via position/size/drill/layers/net/UUID are round-trip verified; incomplete layer support, annulus mismatch, ambiguous identity, and net conflicts remain explicit omissions instead of being guessed.\n\n# Changelog
 
 ## Unreleased
 
