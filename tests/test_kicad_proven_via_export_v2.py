@@ -133,6 +133,7 @@ def test_exact_multilayer_proven_via_exports_through_declared_inner_layer(tmp_pa
     assert readback["vias"][0]["size"] == 1.0
     assert readback["vias"][0]["drill"] == 0.4
     assert readback["vias"][0]["net"] == 1
+    assert readback["vias"][0]["locked"] is False
     assert readback["vias"][0]["remove_unused_layers"] is False
     assert readback["vias"][0]["keep_end_layers"] is False
     assert readback["vias"][0]["free"] is False
@@ -207,10 +208,7 @@ def test_partial_layer_proven_span_is_not_mislabeled_as_through_via(tmp_path):
 def test_x2_blind_span_exports_as_kicad_blind_via(tmp_path):
     board = BoardModel(
         nets=[_net("N1", "GND")],
-        pads=[
-            _pad("P_F", "F.Cu"),
-            _pad("P_I1", "In1.Cu"),
-        ],
+        pads=[_pad("P_F", "F.Cu"), _pad("P_I1", "In1.Cu")],
         drills=[
             DrillHit(
                 "D1",
@@ -245,6 +243,7 @@ def test_x2_blind_span_exports_as_kicad_blind_via(tmp_path):
     assert len(readback["vias"]) == 1
     assert readback["vias"][0]["type"] == "blind"
     assert readback["vias"][0]["layers"] == ("F.Cu", "In1.Cu")
+    assert readback["vias"][0]["locked"] is False
     assert report.exported_via_span_ids == ["D1"]
     assert report.skipped_via_span_ids == []
     assert audit["vias"]["equal"] is True
@@ -254,10 +253,7 @@ def test_x2_blind_span_exports_as_kicad_blind_via(tmp_path):
 def test_x2_buried_span_exports_as_kicad_blind_via(tmp_path):
     board = BoardModel(
         nets=[_net("N1", "GND")],
-        pads=[
-            _pad("P_I1", "In1.Cu"),
-            _pad("P_I2", "In2.Cu"),
-        ],
+        pads=[_pad("P_I1", "In1.Cu"), _pad("P_I2", "In2.Cu")],
         drills=[
             DrillHit(
                 "D1",
@@ -298,10 +294,7 @@ def test_x2_buried_span_exports_as_kicad_blind_via(tmp_path):
 def test_partial_x2_pth_span_is_not_exported_as_blind(tmp_path):
     board = BoardModel(
         nets=[_net("N1", "GND")],
-        pads=[
-            _pad("P_F", "F.Cu"),
-            _pad("P_I1", "In1.Cu"),
-        ],
+        pads=[_pad("P_F", "F.Cu"), _pad("P_I1", "In1.Cu")],
         drills=[
             DrillHit(
                 "D1",
@@ -345,10 +338,7 @@ def test_partial_x2_pth_span_is_not_exported_as_blind(tmp_path):
 def test_full_span_with_x2_blind_kind_fails_closed(tmp_path):
     board = BoardModel(
         nets=[_net("N1", "GND")],
-        pads=[
-            _pad("P_F", "F.Cu"),
-            _pad("P_B", "B.Cu"),
-        ],
+        pads=[_pad("P_F", "F.Cu"), _pad("P_B", "B.Cu")],
         drills=[
             DrillHit(
                 "D1",
@@ -426,7 +416,7 @@ def test_roundtrip_detects_exported_via_behavior_flag_drift(tmp_path):
     path, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
     original = path.read_text(encoding="utf-8")
 
-    for flag in ("remove_unused_layers", "free"):
+    for flag in ("locked", "remove_unused_layers", "free"):
         readback = read_kicad_board_text(_add_via_flag(original, flag))
         assert readback["vias"][0][flag] is True
 
