@@ -154,6 +154,54 @@ def test_reader_preserves_duplicate_header_token_counts():
     }
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("aux_axis_origin", (10.0, 20.0)),
+        ("grid_origin", (1.5, 2.5)),
+        ("pcbplotparams_present", True),
+    ],
+)
+def test_connectivity_roundtrip_rejects_unexpected_setup_output_controls(
+    tmp_path,
+    field,
+    value,
+):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["board_settings"][field] = value
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["board_settings"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+
+
+def test_reader_preserves_setup_origins_and_plot_settings_presence():
+    readback = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (setup
+            (pad_to_mask_clearance 0)
+            (aux_axis_origin 10 20)
+            (grid_origin 1.5 2.5)
+            (pcbplotparams
+              (outputdirectory "fab")
+            )
+          )
+        )
+        """
+    )
+
+    assert readback["board_settings"]["aux_axis_origin"] == (10.0, 20.0)
+    assert readback["board_settings"]["grid_origin"] == (1.5, 2.5)
+    assert readback["board_settings"]["pcbplotparams_present"] is True
+
+
 def test_connectivity_roundtrip_detects_board_thickness_drift(tmp_path):
     board = _board_with_all_connectivity_families()
     path, report = export_kicad_with_report(

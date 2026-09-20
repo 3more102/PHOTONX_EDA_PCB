@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extended KiCad board-settings auditing to manufacturing output controls that PhotonX does not emit. The reader now preserves optional `aux_axis_origin`, `grid_origin`, and `pcbplotparams` presence; any injected origin or plot-settings block is fail-visible through `board_settings` instead of silently altering downstream plot/drill coordinate or manufacturing-output behavior.
+
 - Added fail-closed KiCad footprint/pad fabrication-override auditing. The reader now preserves footprint `solder_mask_margin`, `solder_paste_margin`, `solder_paste_ratio` and pad `solder_mask_margin`, `solder_paste_margin`, `solder_paste_margin_ratio`; any such override on PhotonX-generated recovered objects is surfaced through `unexpected_fabrication_overrides` instead of silently changing mask/paste Gerber behavior.
 
 - Added exact KiCad file-header round-trip auditing. Board export, reader, and verifier now share the PhotonX board-format version/generator contract; the reader preserves version/generator token counts, and missing, duplicated, or changed header metadata is fail-visible through `file_header` instead of letting the audit silently apply modern-format assumptions to an unverified document header.

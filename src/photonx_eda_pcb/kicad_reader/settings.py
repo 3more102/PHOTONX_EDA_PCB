@@ -3,6 +3,18 @@ from math import isfinite
 from .query import child
 
 
+def _optional_xy(node, name, *, label):
+    item = child(node, name) if node is not None else None
+    if item is None:
+        return None
+    if len(item) != 3:
+        raise ValueError(f"{label} must contain two numeric values")
+    values = (float(item[1]), float(item[2]))
+    if not all(isfinite(value) for value in values):
+        raise ValueError(f"{label} must be finite")
+    return values
+
+
 def _optional_float(node, name, *, label):
     item = child(node, name) if node is not None else None
     if item is None:
@@ -43,6 +55,19 @@ def read_board_settings(root):
             setup,
             "pad_to_paste_clearance_ratio",
             label="pad_to_paste_clearance_ratio",
+        ),
+        "aux_axis_origin": _optional_xy(
+            setup,
+            "aux_axis_origin",
+            label="aux_axis_origin",
+        ),
+        "grid_origin": _optional_xy(
+            setup,
+            "grid_origin",
+            label="grid_origin",
+        ),
+        "pcbplotparams_present": bool(
+            setup is not None and child(setup, "pcbplotparams") is not None
         ),
         "stackup_present": bool(
             setup is not None and child(setup, "stackup") is not None

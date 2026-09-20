@@ -1359,6 +1359,9 @@ def compare_kicad_connectivity(board, readback, export_report=None):
                 "solder_mask_min_width": None,
                 "pad_to_paste_clearance": None,
                 "pad_to_paste_clearance_ratio": None,
+                "aux_axis_origin": None,
+                "grid_origin": None,
+                "pcbplotparams_present": False,
                 "stackup_present": False,
             }
         ],
@@ -1405,6 +1408,34 @@ def compare_kicad_connectivity(board, readback, export_report=None):
                         readback["board_settings"][
                             "pad_to_paste_clearance_ratio"
                         ]
+                    )
+                ),
+                "aux_axis_origin": (
+                    None
+                    if readback.get("board_settings", {}).get(
+                        "aux_axis_origin"
+                    ) is None
+                    else list(
+                        _point(
+                            readback["board_settings"]["aux_axis_origin"]
+                        )
+                    )
+                ),
+                "grid_origin": (
+                    None
+                    if readback.get("board_settings", {}).get(
+                        "grid_origin"
+                    ) is None
+                    else list(
+                        _point(
+                            readback["board_settings"]["grid_origin"]
+                        )
+                    )
+                ),
+                "pcbplotparams_present": bool(
+                    readback.get("board_settings", {}).get(
+                        "pcbplotparams_present",
+                        False,
                     )
                 ),
                 "stackup_present": bool(
