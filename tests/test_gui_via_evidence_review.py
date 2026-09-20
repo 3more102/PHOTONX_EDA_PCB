@@ -32,7 +32,7 @@ def _board():
     return BoardModel(
         pads=[
             PadCandidate("P1", Point(0, 0), 0.8, 0.8, "C", "F.Cu", net_id="N1"),
-            PadCandidate("P2", Point(0, 0), 0.8, 0.8, "C", "B.Cu", net_id="N1"),
+            PadCandidate("P1I", Point(0, 0), 0.8, 0.8, "C", "In1.Cu", net_id="N1"),\n            PadCandidate("P2", Point(0, 0), 0.8, 0.8, "C", "B.Cu", net_id="N1"),
             PadCandidate("P3", Point(2, 0), 0.8, 0.8, "C", "F.Cu", net_id="N1"),
             PadCandidate("P4", Point(2, 0), 0.8, 0.8, "C", "In1.Cu", net_id="N1"),
         ],
@@ -41,7 +41,7 @@ def _board():
             DrillHit("D2", Point(2, 0), 0.4, "plated"),
             DrillHit("D3", Point(4, 0), 0.4, "unknown"),
         ],
-        nets=[NetGroup("N1", ["P1", "P2", "P3", "P4"], 1.0, "SIG")],
+        nets=[NetGroup("N1", ["P1", "P1I", "P2", "P3", "P4"], 1.0, "SIG")],
         metadata={
             "via_spans": [
                 _span(
