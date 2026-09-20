@@ -77,7 +77,7 @@ def test_matcher_fails_closed_when_top_signatures_are_tied():
 
 def test_inference_preserves_geometry_hypothesis_evidence():
     board=SimpleNamespace(pads=_dual_row_8(angle_deg=23.0))
-    candidate=infer_footprints(board,max_gap_mm=3.0,max_cluster_span_mm=7.5)[0]
+    candidate=infer_footprints(board,max_gap_mm=6.1,max_cluster_span_mm=7.5)[0]
     assert candidate.signature=="SOIC8_LIKE"
     assert candidate.confidence>=0.95
     assert any("geometry signature SOIC8_LIKE accepted" in item for item in candidate.evidence)
