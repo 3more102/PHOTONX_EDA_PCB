@@ -11,19 +11,31 @@ from photonx_eda_pcb.provenance import Evidence
 from photonx_eda_pcb.roundtrip import compare_kicad_connectivity
 
 
-def _x2_pad(pad_id, x, pin, net_id, *, function=None):
+def _x2_pad(
+    pad_id,
+    x,
+    pin,
+    net_id,
+    *,
+    function=None,
+    refdes="U1",
+    layer="F.Cu",
+    y=20.0,
+    rotation_deg=0.0,
+):
     pad = PadCandidate(
         pad_id,
-        Point(x, 20.0),
+        Point(x, y),
         1.2,
         0.8,
         "R",
-        "F.Cu",
+        layer,
         None,
         net_id,
     )
+    pad.rotation_deg = rotation_deg
     pad.provenance.add_evidence(
-        Evidence("gerber_x2_component_refdes", "U1", 1.0)
+        Evidence("gerber_x2_component_refdes", refdes, 1.0)
     )
     pad.provenance.add_evidence(
         Evidence("gerber_x2_pin_number", pin, 1.0)
@@ -202,3 +214,90 @@ def test_x2_grouping_fails_closed_when_structured_pin_function_is_stale(tmp_path
         in item.message
         for item in report.issues
     )
+
+
+
+def test_back_side_group_uses_inverse_kicad_flip_for_offsets_and_angles(tmp_path):
+    p1 = _x2_pad("P1", 10.0, "1", "N1", layer="B.Cu", y=20.0, rotation_deg=15.0)
+    p2 = _x2_pad("P2", 12.5, "2", "N2", layer="B.Cu", y=23.0, rotation_deg=30.0)
+    board = BoardModel(
+        pads=[p1, p2],
+        nets=[
+            NetGroup("N1", ["P1"], 1.0, "VCC"),
+            NetGroup("N2", ["P2"], 1.0, "GND"),
+        ],
+        components=[
+            ComponentHypothesis(
+                "CMP_U1",
+                ["P1", "P2"],
+                "gerber_x2_component",
+                1.0,
+                ["source-proven Gerber X2 .P"],
+                reference="U1",
+                source_pin_map={"P1": "1", "P2": "2"},
+                source_pin_functions={},
+            )
+        ],
+    )
+
+    path, report = export_kicad_with_report(board, tmp_path / "x2-back.kicad_pcb")
+    text = path.read_text(encoding="utf-8")
+
+    assert '(footprint "PHOTONX:RecoveredX2Component" (layer "B.Cu")' in text
+    assert '(pad "1" smd rect (at 0.000000 0.000000 -15.000000)' in text
+    assert '(pad "2" smd rect (at 2.500000 -3.000000 -30.000000)' in text
+
+    readback = read_kicad_board_text(text)
+    audit = compare_kicad_connectivity(board, readback, report)
+    assert audit["pads"]["equal"] is True
+    assert audit["roundtrip_equal"] is True
+
+
+def test_duplicate_x2_component_ids_fail_closed_to_independent_pads(tmp_path):
+    pads = [
+        _x2_pad("P1", 10.0, "1", None, refdes="U1"),
+        _x2_pad("P2", 12.0, "2", None, refdes="U1"),
+        _x2_pad("P3", 20.0, "1", None, refdes="U2"),
+        _x2_pad("P4", 22.0, "2", None, refdes="U2"),
+    ]
+    board = BoardModel(
+        pads=pads,
+        components=[
+            ComponentHypothesis(
+                "CMP_DUP",
+                ["P1", "P2"],
+                "gerber_x2_component",
+                1.0,
+                ["source-proven Gerber X2 .P"],
+                reference="U1",
+                source_pin_map={"P1": "1", "P2": "2"},
+                source_pin_functions={},
+            ),
+            ComponentHypothesis(
+                "CMP_DUP",
+                ["P3", "P4"],
+                "gerber_x2_component",
+                1.0,
+                ["source-proven Gerber X2 .P"],
+                reference="U2",
+                source_pin_map={"P3": "1", "P4": "2"},
+                source_pin_functions={},
+            ),
+        ],
+    )
+
+    path, report = export_kicad_with_report(
+        board, tmp_path / "x2-duplicate-component-id.kicad_pcb"
+    )
+    text = path.read_text(encoding="utf-8")
+
+    assert "PHOTONX:RecoveredX2Component" not in text
+    assert text.count('(footprint "PHOTONX:RecoveredPad"') == 4
+    duplicate_warnings = [
+        issue
+        for issue in report.issues
+        if issue.code == "KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED"
+        and issue.object_id == "CMP_DUP"
+        and "component ID is duplicated across X2 hypotheses" in issue.message
+    ]
+    assert len(duplicate_warnings) == 2
