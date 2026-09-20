@@ -202,3 +202,146 @@ def test_x2_grouping_fails_closed_when_structured_pin_function_is_stale(tmp_path
         in item.message
         for item in report.issues
     )
+
+
+def test_bottom_side_x2_group_uses_inverse_kicad_footprint_flip(tmp_path):
+    p1 = PadCandidate(
+        "BP1",
+        Point(10.0, 20.0),
+        1.2,
+        0.8,
+        "R",
+        "B.Cu",
+        None,
+        "N1",
+    )
+    p2 = PadCandidate(
+        "BP2",
+        Point(12.5, 21.5),
+        1.2,
+        0.8,
+        "R",
+        "B.Cu",
+        None,
+        "N2",
+    )
+    p1.rotation_deg = 15.0
+    p2.rotation_deg = 30.0
+    for pad, pin in ((p1, "1"), (p2, "2")):
+        pad.provenance.add_evidence(
+            Evidence("gerber_x2_component_refdes", "U7", 1.0)
+        )
+        pad.provenance.add_evidence(
+            Evidence("gerber_x2_pin_number", pin, 1.0)
+        )
+
+    board = BoardModel(
+        pads=[p1, p2],
+        nets=[
+            NetGroup("N1", ["BP1"], 1.0, "A"),
+            NetGroup("N2", ["BP2"], 1.0, "B"),
+        ],
+        components=[
+            ComponentHypothesis(
+                "CMP_U7",
+                ["BP1", "BP2"],
+                "gerber_x2_component",
+                1.0,
+                ["source-proven Gerber X2 .P"],
+                reference="U7",
+                source_pin_map={"BP1": "1", "BP2": "2"},
+            )
+        ],
+    )
+
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "x2-bottom.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8")
+
+    assert '(footprint "PHOTONX:RecoveredX2Component" (layer "B.Cu")' in text
+    assert '(pad "1" smd rect (at 0.000000 0.000000 -15.000000)' in text
+    assert '(pad "2" smd rect (at 2.500000 -1.500000 -30.000000)' in text
+
+    readback = read_kicad_board_text(text)
+    audit = compare_kicad_connectivity(board, readback, report)
+    assert audit["pads"]["equal"] is True
+    assert audit["roundtrip_equal"] is True
+    assert audit["source_equivalent"] is True
+
+
+def test_duplicate_x2_component_ids_fail_closed_before_uuid_generation(tmp_path):
+    def component(refdes, prefix, x_offset, net_prefix):
+        pads = []
+        pin_map = {}
+        nets = []
+        for index, dx in enumerate((0.0, 2.0), start=1):
+            pad_id = f"{prefix}{index}"
+            net_id = f"{net_prefix}{index}"
+            pad = PadCandidate(
+                pad_id,
+                Point(x_offset + dx, 10.0),
+                1.0,
+                1.0,
+                "C",
+                "F.Cu",
+                None,
+                net_id,
+            )
+            pad.provenance.add_evidence(
+                Evidence("gerber_x2_component_refdes", refdes, 1.0)
+            )
+            pad.provenance.add_evidence(
+                Evidence("gerber_x2_pin_number", str(index), 1.0)
+            )
+            pads.append(pad)
+            pin_map[pad_id] = str(index)
+            nets.append(NetGroup(net_id, [pad_id], 1.0, net_id))
+        hypothesis = ComponentHypothesis(
+            "CMP_DUPLICATE",
+            [pad.id for pad in pads],
+            "gerber_x2_component",
+            1.0,
+            ["source-proven Gerber X2 .P"],
+            reference=refdes,
+            source_pin_map=pin_map,
+        )
+        return pads, nets, hypothesis
+
+    pads_a, nets_a, component_a = component("U1", "A", 0.0, "NA")
+    pads_b, nets_b, component_b = component("U2", "B", 20.0, "NB")
+    board = BoardModel(
+        pads=[*pads_a, *pads_b],
+        nets=[*nets_a, *nets_b],
+        components=[component_a, component_b],
+    )
+
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "x2-duplicate-component-id.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8")
+
+    assert "PHOTONX:RecoveredX2Component" not in text
+    assert text.count('(footprint "PHOTONX:RecoveredPad"') == 4
+    issues = [
+        item
+        for item in report.issues
+        if item.code == "KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED"
+        and item.object_id == "CMP_DUPLICATE"
+    ]
+    assert len(issues) == 2
+    assert all(
+        "component ID is duplicated across source-proven X2 components"
+        in item.message
+        for item in issues
+    )
+
+    audit = compare_kicad_connectivity(
+        board,
+        read_kicad_board_text(text),
+        report,
+    )
+    assert audit["pads"]["equal"] is True
+    assert audit["roundtrip_equal"] is True
