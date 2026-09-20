@@ -396,11 +396,45 @@ def proven_via_span_export_plan(board):
                 "proven via span endpoint is not a declared canonical KiCad copper layer",
             )
             continue
-        if {from_layer, to_layer} != {"F.Cu", "B.Cu"}:
+        span_kind = str(getattr(drill, "x2_span_kind", "") or "").strip().lower()
+        full_through = {from_layer, to_layer} == {"F.Cu", "B.Cu"}
+        via_type = "through"
+
+        if not full_through:
+            if span_kind not in {"blind", "buried"}:
+                omit(
+                    drill_id,
+                    "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
+                    "partial-layer plated span is proven, but explicit X2 Blind/Buried drill-kind evidence is absent; via omitted instead of guessing a KiCad via type",
+                )
+                continue
+
+            touches_outer = bool(
+                {from_layer, to_layer} & {"F.Cu", "B.Cu"}
+            )
+            if span_kind == "blind" and not touches_outer:
+                omit(
+                    drill_id,
+                    "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
+                    "X2 Blind span does not terminate on an outer copper layer; via omitted because source kind and layer topology conflict",
+                )
+                continue
+            if span_kind == "buried" and touches_outer:
+                omit(
+                    drill_id,
+                    "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
+                    "X2 Buried span terminates on an outer copper layer; via omitted because source kind and layer topology conflict",
+                )
+                continue
+
+            # KiCad uses the 'blind' via token for both blind and buried
+            # non-micro vias; the exact layer endpoints distinguish them.
+            via_type = "blind"
+        elif span_kind in {"blind", "buried"}:
             omit(
                 drill_id,
                 "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
-                "partial-layer plated span is proven, but Gerber/Excellon evidence does not distinguish KiCad blind/buried via semantics from microvia manufacturing; via omitted instead of guessing a via type",
+                "X2 Blind/Buried drill-kind evidence conflicts with a full-stack F.Cu-to-B.Cu span; via omitted instead of relabeling it as through",
             )
             continue
 
@@ -515,6 +549,8 @@ def proven_via_span_export_plan(board):
                 "size": diameters[0],
                 "drill": drill_diameter,
                 "layers": (start_layer, end_layer),
+                "type": via_type,
+                "source_span_kind": span_kind or None,
                 "net_id": net_id,
                 "pad_ids": tuple(sorted(pad_ids)),
             }
