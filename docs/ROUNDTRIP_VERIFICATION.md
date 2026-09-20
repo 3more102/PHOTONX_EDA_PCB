@@ -8,6 +8,7 @@ When KiCad export is requested, PHOTONX re-reads the generated `.kicad_pcb` thro
 
 The connectivity audit checks:
 
+- board fabrication defaults emitted by PhotonX: board thickness and global pad-to-mask clearance;
 - exact declared KiCad layer-table ID/name/type identity, including the contiguous inner-copper prefix and generated user layers;
 - exact KiCad net-table code/name identity;
 - net bindings on track segments the exporter reported as emitted;

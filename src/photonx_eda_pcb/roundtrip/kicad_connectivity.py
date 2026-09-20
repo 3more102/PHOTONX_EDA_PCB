@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import declared_copper_layer_names, kicad_board_layer_rows, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status
+from ..exporters.kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, kicad_board_layer_rows, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -1016,7 +1016,7 @@ def _empty_comparison():
 def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
-    With an export report, the audit covers the declared KiCad layer table, net table, and tracks,
+    With an export report, the audit covers emitted board fabrication settings, the declared KiCad layer table, net table, and tracks,
     rejects unexpected KiCad vias, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
     and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
@@ -1039,6 +1039,35 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             }
         )
     net_lookup = _observed_net_lookup(readback, issues)
+
+    board_settings = _compare_multiset(
+        [
+            {
+                "thickness": _r(KICAD_DEFAULT_BOARD_THICKNESS_MM),
+                "pad_to_mask_clearance": _r(
+                    KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM
+                ),
+            }
+        ],
+        [
+            {
+                "thickness": (
+                    None
+                    if readback.get("board_settings", {}).get("thickness") is None
+                    else _r(readback["board_settings"]["thickness"])
+                ),
+                "pad_to_mask_clearance": (
+                    None
+                    if readback.get("board_settings", {}).get(
+                        "pad_to_mask_clearance"
+                    ) is None
+                    else _r(
+                        readback["board_settings"]["pad_to_mask_clearance"]
+                    )
+                ),
+            }
+        ],
+    )
 
     layer_table = _compare_multiset(
         _expected_layer_rows(board),
@@ -1224,7 +1253,8 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         )
 
     roundtrip_equal = bool(
-        layer_table["equal"]
+        board_settings["equal"]
+        and layer_table["equal"]
         and nets["equal"]
         and tracks["equal"]
         and vias["equal"]
@@ -1257,6 +1287,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     return {
         "scope": [
+            "board_settings",
             "layer_table",
             "net_table",
             "tracks",
@@ -1280,6 +1311,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "source_equivalent": bool(
             roundtrip_equal and source_connectivity_complete
         ),
+        "board_settings": board_settings,
         "layer_table": layer_table,
         "nets": nets,
         "tracks": tracks,

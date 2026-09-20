@@ -1,4 +1,7 @@
 import re
+
+KICAD_DEFAULT_BOARD_THICKNESS_MM = 1.6
+KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM = 0.0
 from photonx_eda_pcb.mechanical_features.measure import slot_geometry_descriptor
 _INNER_COPPER_LAYER_RE=re.compile(r"^In([1-9]|[12][0-9]|30)\.Cu$")
 

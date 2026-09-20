@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added KiCad board-fabrication setting readback and round-trip verification. Exporter and audit now share the same default board-thickness and global pad-to-mask-clearance constants, and edits to either setting fail `board_settings` even when all copper connectivity objects are otherwise unchanged.
+
 - Generalized the top-level KiCad copper guard beyond `gr_*` tokens. Any board-level object carrying a direct canonical copper layer now fails closed unless it is one of the explicitly audited electrical containers (`segment`, routed `arc`, `zone`, or `footprint`). This also catches copper-layer dimensions, targets, images, and future direct-layer item classes instead of relying on a brittle token list.
 
 - Hardened KiCad footprint readback against hidden copper additions. Footprint-local `fp_*` graphics, text properties, or nested zones placed on canonical copper layers are now preserved as `unexpected_copper_graphics` and rejected by the round-trip audit. This prevents a PhotonX recovered footprint from gaining extra fabrication copper while its pad/reference identity still appears unchanged.

@@ -33,3 +33,19 @@ def test_reader_exposes_footprint_copper_graphics():
             "child_index": 3,
         }
     ]
+
+
+
+def test_reader_exposes_board_fabrication_settings():
+    d = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (general (thickness 1.6))
+          (setup (pad_to_mask_clearance 0.15))
+        )
+        """
+    )
+    assert d["board_settings"] == {
+        "thickness": 1.6,
+        "pad_to_mask_clearance": 0.15,
+    }

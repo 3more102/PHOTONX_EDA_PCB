@@ -69,6 +69,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
     audit = compare_kicad_connectivity(board, readback, report)
 
     assert audit["scope"] == [
+        "board_settings",
         "layer_table",
         "net_table",
         "tracks",
@@ -97,6 +98,46 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
     assert audit["slots"]["equal"] is True
     assert audit["slots"]["expected_count"] == 1
     assert audit["issues"] == []
+
+
+def test_connectivity_roundtrip_detects_board_thickness_drift(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["board_settings"]["thickness"] = 2.0
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["board_settings"]["equal"] is False
+    assert audit["board_settings"]["missing"][0]["thickness"] == 1.6
+    assert audit["board_settings"]["unexpected"][0]["thickness"] == 2.0
+    assert audit["roundtrip_equal"] is False
+
+
+def test_connectivity_roundtrip_detects_pad_to_mask_clearance_drift(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["board_settings"]["pad_to_mask_clearance"] = 0.2
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["board_settings"]["equal"] is False
+    assert (
+        audit["board_settings"]["missing"][0]["pad_to_mask_clearance"]
+        == 0.0
+    )
+    assert (
+        audit["board_settings"]["unexpected"][0]["pad_to_mask_clearance"]
+        == 0.2
+    )
+    assert audit["roundtrip_equal"] is False
 
 
 def test_connectivity_roundtrip_marks_proven_via_span_as_source_loss(tmp_path):
