@@ -164,6 +164,7 @@ def test_reader_preserves_duplicate_header_token_counts():
         ("paper_count", 0),
         ("layers_count", 2),
         ("setup_count", 0),
+        ("paper", "A3"),
     ],
 )
 def test_connectivity_roundtrip_detects_singleton_section_drift(
@@ -204,6 +205,7 @@ def test_reader_preserves_singleton_board_section_counts():
         "paper_count": 1,
         "layers_count": 2,
         "setup_count": 1,
+        "paper": "A4",
     }
 
 
