@@ -43,6 +43,7 @@ _REASON_CODES={
     "omitted_routes":{
         "KICAD_OBJECT_ID_DUPLICATE",
         "KICAD_ARBITRARY_ROUTE_UNSUPPORTED",
+        "KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN",
     },
     "omitted_via_spans":{
         "KICAD_PROVEN_VIA_SPAN_UNSUPPORTED",
