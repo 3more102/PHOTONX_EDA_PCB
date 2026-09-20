@@ -1072,6 +1072,7 @@ def test_connectivity_roundtrip_separates_export_losses(tmp_path):
     assert audit["source_equivalent"] is False
     assert audit["losses"] == {
         "ambiguous_net_ids": [],
+        "duplicate_object_ids": [],
         "skipped_drill_ids": [],
         "skipped_outline_ids": [],
         "skipped_pad_ids": [],
@@ -1175,6 +1176,52 @@ def test_connectivity_roundtrip_marks_drilled_pad_as_source_loss(tmp_path):
     assert audit["source_connectivity_complete"] is False
     assert audit["source_equivalent"] is False
     assert audit["losses"]["skipped_pad_ids"] == ["P_DRILLED"]
+
+
+def test_duplicate_track_ids_are_omitted_before_uuid_generation(
+    tmp_path,
+):
+    board = BoardModel(
+        tracks=[
+            Track(
+                "T_DUP",
+                Point(0, 0),
+                Point(2, 0),
+                0.25,
+                "F.Cu",
+            ),
+            Track(
+                "T_DUP",
+                Point(0, 1),
+                Point(2, 1),
+                0.25,
+                "F.Cu",
+            ),
+        ]
+    )
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert readback["segments"] == []
+    assert report.exported_track_ids == []
+    assert report.skipped_tracks == 2
+    assert report.skipped_track_ids == ["T_DUP"]
+    assert report.ok is False
+    assert any(
+        issue.code == "KICAD_OBJECT_ID_DUPLICATE"
+        and issue.object_id == "T_DUP"
+        for issue in report.issues
+    )
+    assert audit["tracks"]["equal"] is True
+    assert audit["roundtrip_equal"] is True
+    assert audit["source_connectivity_complete"] is False
+    assert audit["source_equivalent"] is False
+    assert audit["losses"]["duplicate_object_ids"] == ["T_DUP"]
+    assert audit["losses"]["skipped_track_ids"] == ["T_DUP"]
 
 
 def test_duplicate_source_net_ids_fail_closed_without_last_one_wins(

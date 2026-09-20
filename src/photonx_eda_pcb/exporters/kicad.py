@@ -6,7 +6,7 @@ from ..models import BoardModel
 from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
-from .kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,kicad_net_export_rows,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,track_export_status,proven_via_span_omissions
+from .kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,kicad_duplicate_object_ids,kicad_net_export_rows,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,track_export_status,proven_via_span_omissions
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
@@ -39,9 +39,15 @@ def _board_layer_lines(board):
     return lines
 
 
-def _outline_lines(board, report):
+def _outline_lines(board, report, duplicate_object_ids=()):
     lines = []
+    duplicate_object_ids=set(duplicate_object_ids)
     for segment in board.outline:
+        if segment.id in duplicate_object_ids:
+            report.skipped_outline += 1
+            if segment.id not in report.skipped_outline_ids:
+                report.skipped_outline_ids.append(segment.id)
+            continue
         status = outline_export_status(segment)
         if status != "export":
             report.skipped_outline += 1
@@ -98,9 +104,15 @@ def _record_drill_skip(report, drill, code, message):
     )
 
 
-def _drill_lines(board, report):
+def _drill_lines(board, report, duplicate_object_ids=()):
     lines = []
+    duplicate_object_ids=set(duplicate_object_ids)
     for drill in board.drills:
+        if drill.id in duplicate_object_ids:
+            report.skipped_drills += 1
+            if drill.id not in report.skipped_drill_ids:
+                report.skipped_drill_ids.append(drill.id)
+            continue
         status = drill_export_status(drill)
         if status != "export-npth":
             if status == "skip-unknown-plating":
@@ -155,9 +167,15 @@ def _drill_lines(board, report):
     return lines
 
 
-def _pad_lines(board,net_num,report):
+def _pad_lines(board,net_num,report,duplicate_object_ids=()):
     lines=[]
+    duplicate_object_ids=set(duplicate_object_ids)
     for pad in board.pads:
+        if pad.id in duplicate_object_ids:
+            report.skipped_pads+=1
+            if pad.id not in report.skipped_pad_ids:
+                report.skipped_pad_ids.append(pad.id)
+            continue
         status=pad_export_status(board,pad)
         if status!="export":
             report.skipped_pads+=1
@@ -271,10 +289,16 @@ def _ring_coords(points):
 def _region_points(region):
     return _ring_coords(region.points)
 
-def _region_lines(board,net_num,report):
+def _region_lines(board,net_num,report,duplicate_object_ids=()):
     lines=[]
     declared_copper_layers=declared_copper_layer_names(board)
+    duplicate_object_ids=set(duplicate_object_ids)
     for region in getattr(board,"regions",()):
+        if region.id in duplicate_object_ids:
+            report.skipped_regions+=1
+            if region.id not in report.skipped_region_ids:
+                report.skipped_region_ids.append(region.id)
+            continue
         if region.layer not in declared_copper_layers:
             _record_region_skip(
                 report,
@@ -398,18 +422,30 @@ def _record_route_skips(board,report):
         ))
 
 
-def _slot_lines(board,net_num,report):
+def _slot_lines(board,net_num,report,duplicate_object_ids=()):
     lines=[]
+    duplicate_object_ids=set(duplicate_object_ids)
     for slot in getattr(board,"slots",()):
+        if slot.id in duplicate_object_ids:
+            report.skipped_slots+=1
+            if slot.id not in report.skipped_slot_ids:
+                report.skipped_slot_ids.append(slot.id)
+            continue
         status=slot_export_status(slot)
         if status=="export-npth":lines.extend(_npth_slot_lines(slot,report))
         elif status=="infer-plated-padstack":lines.extend(_plated_slot_lines(board,slot,net_num,report))
         else:_record_skip(report,slot,"KICAD_SLOT_PLATING_UNKNOWN","slot plating is unknown")
     return lines
 
-def _track_lines(board,net_num,report):
+def _track_lines(board,net_num,report,duplicate_object_ids=()):
     lines=[]
+    duplicate_object_ids=set(duplicate_object_ids)
     for trk in board.tracks:
+        if trk.id in duplicate_object_ids:
+            report.skipped_tracks+=1
+            if trk.id not in report.skipped_track_ids:
+                report.skipped_track_ids.append(trk.id)
+            continue
         status=track_export_status(board,trk)
         if status!="export":
             if status=="skip-layer":
@@ -451,7 +487,15 @@ def _track_lines(board,net_num,report):
 def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadExportReport]:
     p=Path(path);p.parent.mkdir(parents=True,exist_ok=True);report=KicadExportReport()
     net_rows,duplicate_net_ids=kicad_net_export_rows(board)
+    duplicate_object_ids=kicad_duplicate_object_ids(board)
     net_num={row["id"]:row["code"] for row in net_rows}
+    for object_id in duplicate_object_ids:
+        report.issues.append(KicadExportIssue(
+            "error",
+            "KICAD_OBJECT_ID_DUPLICATE",
+            str(object_id),
+            "duplicate source physical-object ID is ambiguous; every exportable object with this ID is omitted before deterministic KiCad UUID generation",
+        ))
     for net_id in duplicate_net_ids:
         report.issues.append(KicadExportIssue(
             "error",
@@ -470,8 +514,8 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
         '  (net 0 "")',
     ]
     for row in net_rows:lines.append(f'  (net {row["code"]} {_q(row["name"])})')
-    lines.extend(_drill_lines(board,report));lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));lines.extend(_region_lines(board,net_num,report));lines.extend(_track_lines(board,net_num,report));_record_via_span_skips(board,report);_record_route_skips(board,report)
-    lines.extend(_outline_lines(board,report))
+    lines.extend(_drill_lines(board,report,duplicate_object_ids));lines.extend(_pad_lines(board,net_num,report,duplicate_object_ids));lines.extend(_slot_lines(board,net_num,report,duplicate_object_ids));lines.extend(_region_lines(board,net_num,report,duplicate_object_ids));lines.extend(_track_lines(board,net_num,report,duplicate_object_ids));_record_via_span_skips(board,report);_record_route_skips(board,report)
+    lines.extend(_outline_lines(board,report,duplicate_object_ids))
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
 def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]
 def validate_with_kicad_cli(path:str|Path,*,timeout_s:float=30.0)->tuple[bool|None,str]:

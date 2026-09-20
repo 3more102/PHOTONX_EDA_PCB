@@ -191,3 +191,26 @@ def test_manifest_records_unsupported_pad_layer_omission(tmp_path):
         for item in data["issues"]
     )
     assert validate_omission_manifest(data) == []
+
+
+def test_duplicate_track_identity_omission_manifest_is_valid(tmp_path):
+    board = BoardModel(
+        tracks=[
+            Track("T_DUP", Point(0, 0), Point(1, 0), 0.2, "F.Cu"),
+            Track("T_DUP", Point(0, 1), Point(1, 1), 0.2, "F.Cu"),
+        ]
+    )
+    _, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    data = omission_manifest(report)
+
+    assert report.skipped_tracks == 2
+    assert data["skipped_tracks"] == ["T_DUP"]
+    assert any(
+        item["code"] == "KICAD_OBJECT_ID_DUPLICATE"
+        and item["object_id"] == "T_DUP"
+        for item in data["issues"]
+    )
+    assert validate_omission_manifest(data) == []

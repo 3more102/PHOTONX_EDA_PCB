@@ -8,6 +8,7 @@ When KiCad export is requested, PHOTONX re-reads the generated `.kicad_pcb` thro
 
 The connectivity audit checks:
 - fail-closed source-net identity handling: duplicate physical `net.id` values are omitted from KiCad ordinal assignment instead of using dictionary last-one-wins semantics; dependent objects become explicit export losses/unresolved net claims;
+- fail-closed source-object identity handling: any duplicate physical object ID among tracks, pads, point drills, outline segments, slots, or copper regions is omitted from every affected export family before deterministic UUID generation; the collision appears as `duplicate_object_ids` source loss;
 
 - board fabrication defaults emitted by PhotonX: board thickness and global pad-to-mask clearance;
 - exact declared KiCad layer-table ID/name/type identity, including the contiguous inner-copper prefix and generated user layers;

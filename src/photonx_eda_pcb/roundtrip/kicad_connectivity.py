@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status, track_export_status
+from ..exporters.kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status, track_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -1236,6 +1236,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     issues = []
     _net_rows, ambiguous_net_ids = kicad_net_export_rows(board)
+    duplicate_object_ids = kicad_duplicate_object_ids(board)
     source_via_span_ids, via_span_metadata_problems = proven_via_span_omissions(board)
     for object_id, message in via_span_metadata_problems:
         issues.append(
@@ -1517,6 +1518,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     losses = {
         "ambiguous_net_ids": [str(net_id) for net_id in ambiguous_net_ids],
+        "duplicate_object_ids": [str(object_id) for object_id in duplicate_object_ids],
         "skipped_drill_ids": sorted(skipped_drill_ids),
         "skipped_outline_ids": sorted(skipped_outline_ids),
         "skipped_pad_ids": sorted(skipped_pad_ids),

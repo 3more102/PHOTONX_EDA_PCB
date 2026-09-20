@@ -6,6 +6,28 @@ KICAD_DEFAULT_BOARD_THICKNESS_MM = 1.6
 KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM = 0.0
 
 
+def kicad_duplicate_object_ids(board):
+    objects = [
+        *board.tracks,
+        *board.pads,
+        *board.drills,
+        *board.outline,
+        *getattr(board, "slots", ()),
+        *getattr(board, "regions", ()),
+    ]
+    counts = Counter(obj.id for obj in objects)
+    return tuple(
+        sorted(
+            (
+                object_id
+                for object_id, count in counts.items()
+                if count > 1
+            ),
+            key=str,
+        )
+    )
+
+
 def kicad_net_export_rows(board):
     counts = Counter(net.id for net in board.nets)
     duplicate_ids = {
