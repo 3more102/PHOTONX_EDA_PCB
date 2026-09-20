@@ -11,19 +11,31 @@ For the supported XNC-compatible subset, `M30` is terminal: non-comment data aft
 Tool identifiers use ASCII decimal digits only. Unicode digit lookalikes and malformed `T...` selections/definitions are rejected. Permissive parsing suppresses file geometry and reports an `INVALID_EXCELLON_TOOL_*` diagnostic rather than accepting a visually similar identifier.
 
 
-## X2-compatible plating evidence
+## X2/XNC drill evidence
 
-PhotonX recognizes the bounded KiCad-style X2-compatible structured comments used in Excellon drill files:
+PhotonX recognizes the bounded XNC file-function comment used to carry plating and copper-span evidence:
 
 - `; #@! TF.FileFunction,Plated|NonPlated|MixedPlating,<start-layer>,<end-layer>,PTH|NPTH|Blind|Buried[,Drill|Rout|Mixed]`
-- `; #@! TA.AperFunction,Plated|NonPlated,PTH|NPTH|Blind|Buried,ViaDrill|ComponentDrill`
-- `; #@! TD` to clear the modal aperture-function evidence.
+
+It also recognizes the standard XNC modal tool functions:
+
+- `; #@! TA.AperFunction,ViaDrill[,<IPC-4761 type>]`
+- `; #@! TA.AperFunction,BackDrill`
+- `; #@! TA.AperFunction,ComponentDrill[,PressFit]`
+- `; #@! TA.AperFunction,MechanicalDrill[,Tooling|Breakout|Other]`
+- `; #@! TD` clears the modal tool-function evidence.
 
 The file-level copper-layer ordinals are preserved on point drills, G85 slots, and routed paths as normalized raw evidence in `x2_layer_span` plus `x2_span_kind`. Layer numbers are one-based and a span must reference two distinct copper layers. Reversed from/to order is normalized because the Gerber FileFunction definition treats that order as insignificant. The canonical `layer_span` and `span_proven` fields are populated only after those ordinals are safely mapped onto the reconstructed copper stack.
 
-A specific file-level `Plated` or `NonPlated` claim applies when a tool has no stronger tool-level claim. `MixedPlating` deliberately resolves to `unknown` unless a tool-level `TA.AperFunction` proves the tool's plating. Conflicting specific file/tool claims, conflicting file claims, and malformed recognized plating attributes fail closed; permissive mode emits `INVALID_EXCELLON_X2_PLATING` and suppresses file geometry.
+Tool function is preserved separately as `x2_aperture_function` with source provenance. In particular, `BackDrill` is not treated as an ordinary non-plated through hole: KiCad point-drill, G85-slot, and routed-slot export fail closed with explicit omission reasons rather than widening the partial-span plating-removal operation into a through NPTH.
 
-The resolved plating state is carried into drill hits, G85 slots, and routed paths with provenance evidence. Unrelated structured comments remain metadata-only and do not create plating claims.
+For compatibility with older PhotonX fixtures, the previous enriched form `; #@! TA.AperFunction,Plated|NonPlated,PTH|NPTH|Blind|Buried,ViaDrill|ComponentDrill` remains accepted. In that legacy form only, the modal attribute can provide tool-level plating. Standard XNC `TA.AperFunction` never overrides plating from `TF.FileFunction`.
+
+A specific file-level `Plated` or `NonPlated` claim applies when a tool has no stronger legacy tool-level claim. `MixedPlating` deliberately resolves to `unknown` unless legacy tool-level evidence proves the tool's plating. Conflicting specific file/tool claims, conflicting file claims, and malformed recognized plating attributes fail closed; malformed recognized standard tool functions emit `INVALID_EXCELLON_X2_TOOL_FUNCTION` in permissive mode and suppress file geometry.
+
+The resolved plating, span, and tool-function states are carried into drill hits, G85 slots, and routed paths with provenance evidence. Unrelated structured comments remain metadata-only and do not create plating or tool-function claims.
+
+Reference: Ucamco XNC specification, https://www.ucamco.com/files/downloads/file/126/the_xnc_file_format_specification.pdf
 
 
 ## X2 layer-span resolution
