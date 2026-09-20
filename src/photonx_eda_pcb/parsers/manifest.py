@@ -6,7 +6,7 @@ import re
 
 from ..format_detection import detect_format
 from ..io.walk import DEFAULT_MAX_RECURSIVE_ENTRIES, bounded_regular_files
-from .layer_map import infer_layer
+from .layer_map import infer_layer, x2_file_function_fields
 
 
 _GERBER_SUFFIXES = {
@@ -25,6 +25,7 @@ class ManufacturingFile:
     format_confidence: float = 0.0
     detection_reasons: tuple[str, ...] = ()
     plating_hint: str | None = None
+    x2_file_function: tuple[str, ...] = ()
 
 
 def _candidate_files(source: Path, *, max_entries: int):
@@ -93,6 +94,7 @@ def discover_manufacturing_files(
         guess = detect_format(p.name, text)
         suffix = p.suffix.lower()
         lower_name = p.name.lower()
+        x2_file_function = x2_file_function_fields(text) or ()
 
         is_drill = (
             guess.format == "excellon"
@@ -114,6 +116,7 @@ def discover_manufacturing_files(
                     confidence,
                     tuple(reasons),
                     infer_drill_plating_hint(p.name),
+                    x2_file_function,
                 )
             )
             continue
@@ -132,7 +135,15 @@ def discover_manufacturing_files(
                 0.45 if suffix in _GERBER_SUFFIXES else 0.30
             )
             result.append(
-                ManufacturingFile(p, "gerber", layer, confidence, tuple(reasons))
+                ManufacturingFile(
+                    p,
+                    "gerber",
+                    layer,
+                    confidence,
+                    tuple(reasons),
+                    None,
+                    x2_file_function,
+                )
             )
 
     return result
