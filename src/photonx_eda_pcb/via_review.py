@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import isfinite
 
-from ..exporters.kicad_policy import proven_via_span_export_plan
+from .exporters.kicad_policy import proven_via_span_export_plan
 
 
 @dataclass(frozen=True)
