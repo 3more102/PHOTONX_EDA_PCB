@@ -227,7 +227,8 @@ def test_x2_partial_span_exports_exact_kicad_via_type_end_to_end(
     assert len(readback["vias"]) == 1
     assert readback["vias"][0]["type"] == expected_type
     assert readback["vias"][0]["layers"] == expected_layers
-    assert f"(via {expected_type} " in text
+    expected_token = "blind" if expected_type == "buried" else expected_type
+    assert f"(via {expected_token} " in text
     assert report.exported_via_span_ids == [board.drills[0].id]
     assert report.skipped_via_span_ids == []
     assert audit["vias"]["equal"] is True
