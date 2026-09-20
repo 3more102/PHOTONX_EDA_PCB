@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from math import isfinite
 
+from ..drc.clearance import check_unresolved_clearance
+from ..drc.model import DrcConfig
 from ..ids import stable_id
 from ..models import BoardModel
 from .item import ReviewItem
@@ -24,13 +26,16 @@ def build_board_review_queue(
     net_confidence_below: float | None = None,
     component_confidence_below: float | None = None,
     include_unknown_plating: bool = True,
+    include_unresolved_clearance: bool = True,
     include_diagnostics: bool = True,
+    drc_config: DrcConfig | None = None,
 ) -> ReviewQueue:
     """Build a deterministic review queue from unresolved reconstruction state.
 
     Confidence thresholds are opt-in. With no thresholds supplied, the adapter
     surfaces explicit unresolved state already present in the model plus any
-    supplied validation findings.
+    supplied validation findings. Close copper pairs with unresolved net
+    identity are review warnings, never fabricated cross-net DRC errors.
     """
 
     net_threshold = _review_threshold("net_confidence_below", net_confidence_below)
@@ -38,9 +43,9 @@ def build_board_review_queue(
         "component_confidence_below", component_confidence_below
     )
     queue = ReviewQueue()
+    object_index = board.object_index()
 
     if validation is not None:
-        object_index = board.object_index()
         for issue in sorted(
             getattr(validation, "issues", ()),
             key=lambda item: (
@@ -75,6 +80,38 @@ def build_board_review_queue(
                         "code": issue.code,
                         "object_ids": tuple(issue.object_ids),
                         "selectable_object_id": selectable,
+                    },
+                )
+            )
+
+    if include_unresolved_clearance:
+        cfg = drc_config or DrcConfig()
+        for issue in check_unresolved_clearance(board, cfg):
+            selectable = next(
+                (object_id for object_id in issue.object_ids if object_id in object_index),
+                None,
+            )
+            target = selectable or f"clearance:{':'.join(issue.object_ids)}"
+            queue.add(
+                ReviewItem(
+                    stable_id(
+                        "review",
+                        "clearance",
+                        issue.code,
+                        tuple(issue.object_ids),
+                        issue.message,
+                    ),
+                    "clearance",
+                    target,
+                    f"{issue.severity}: {issue.code}: {issue.message}",
+                    0.0,
+                    metadata={
+                        "confidence_available": False,
+                        "severity": issue.severity,
+                        "code": issue.code,
+                        "object_ids": tuple(issue.object_ids),
+                        "selectable_object_id": selectable,
+                        "minimum_clearance_mm": cfg.min_clearance_mm,
                     },
                 )
             )
