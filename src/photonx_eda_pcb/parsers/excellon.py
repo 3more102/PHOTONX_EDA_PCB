@@ -44,9 +44,17 @@ _X2_FILE_FUNCTION = re.compile(
     r"([1-9][0-9]*),([1-9][0-9]*),(PTH|NPTH|BLIND|BURIED)"
     r"(?:,(DRILL|ROUT|ROUTE|MIXED))?$"
 )
-_X2_APER_FUNCTION = re.compile(
+_X2_LEGACY_APER_FUNCTION = re.compile(
     r"^TA\.APERFUNCTION,(PLATED|NONPLATED),"
     r"(PTH|NPTH|BLIND|BURIED),(VIADRILL|COMPONENTDRILL)$"
+)
+_XNC_APER_FUNCTION = re.compile(
+    r"^TA\.APERFUNCTION,(?:"
+    r"VIADRILL(?:,(?:IA|IB|IIA|IIB|IIIA|IIIB|IVA|IVB|V|VI|VII|NONE))?"
+    r"|BACKDRILL"
+    r"|COMPONENTDRILL(?:,PRESSFIT)?"
+    r"|MECHANICALDRILL(?:,(?:TOOLING|BREAKOUT|OTHER))?"
+    r")$"
 )
 
 _ROUTE_ARC_MAX_CHORD_ERROR_MM = 0.005
@@ -75,8 +83,10 @@ class ExcellonParser:
         self.file_plating="unknown";self._file_plating_source=None
         self.file_layer_span=None;self._file_layer_span_source=None
         self.file_span_kind=None
-        self._x2_aperture_plating=None;self._x2_aperture_source=None
+        self._x2_aperture_plating=None;self._x2_aperture_function=None
+        self._x2_aperture_source=None
         self.tool_plating={};self._tool_plating_source={}
+        self.tool_function={};self._tool_function_source={}
 
     def _disable_geometry(self,out:ExcellonResult):
         self.geometry_enabled=False
@@ -104,6 +114,29 @@ class ExcellonParser:
             "NONPLATED": "non-plated",
             "MIXEDPLATING": "mixed",
         }[token]
+
+    @staticmethod
+    def _xnc_tool_function_name(token):
+        return {
+            "VIADRILL": "viadrill",
+            "BACKDRILL": "backdrill",
+            "COMPONENTDRILL": "componentdrill",
+            "MECHANICALDRILL": "mechanicaldrill",
+        }[token]
+
+    def _x2_function_fail(self,p,out,line_no,message):
+        if self.strict:
+            raise ParseError(f"{p}:{line_no}: {message}")
+        out.diagnostics.append(
+            ParseDiagnostic(
+                "warning",
+                "INVALID_EXCELLON_X2_TOOL_FUNCTION",
+                message,
+                str(p),
+                line_no,
+            )
+        )
+        self._disable_geometry(out)
 
     def _parse_x2_comment(self,p,out,line_no,line):
         payload=line[1:].strip()
@@ -216,26 +249,45 @@ class ExcellonParser:
                 )
             return
 
-        match=_X2_APER_FUNCTION.fullmatch(command)
+        match=_XNC_APER_FUNCTION.fullmatch(command)
+        if match:
+            fields=command.split(",")
+            self._x2_aperture_plating=None
+            self._x2_aperture_function=self._xnc_tool_function_name(fields[1])
+            self._x2_aperture_source=SourceRef(str(p),line_no,line)
+            return
+
+        match=_X2_LEGACY_APER_FUNCTION.fullmatch(command)
         if match:
             plating=self._x2_plating_name(match.group(1))
             self._x2_aperture_plating=plating
+            self._x2_aperture_function=self._xnc_tool_function_name(match.group(3))
             self._x2_aperture_source=SourceRef(str(p),line_no,line)
             return
 
         if command.startswith("TA.APERFUNCTION,"):
             fields=command.split(",")
-            if len(fields)>1 and fields[1] in {"PLATED","NONPLATED"}:
+            if len(fields)>1 and fields[1] in {
+                "VIADRILL","BACKDRILL","COMPONENTDRILL","MECHANICALDRILL"
+            }:
+                self._x2_function_fail(
+                    p,
+                    out,
+                    line_no,
+                    f"malformed XNC AperFunction tool attribute: {command}",
+                )
+            elif len(fields)>1 and fields[1] in {"PLATED","NONPLATED"}:
                 self._x2_fail(
                     p,
                     out,
                     line_no,
-                    f"malformed Excellon X2 AperFunction plating attribute: {command}",
+                    f"malformed legacy Excellon X2 AperFunction plating attribute: {command}",
                 )
             return
 
         if command=="TD":
             self._x2_aperture_plating=None
+            self._x2_aperture_function=None
             self._x2_aperture_source=None
 
     def _span_for_tool(self,tool):
@@ -280,6 +332,23 @@ class ExcellonParser:
                 )
             )
         return plating,evidence
+
+    def _function_for_tool(self,tool):
+        function=self.tool_function.get(tool)
+        if function is None:
+            return None,[]
+        source=self._tool_function_source.get(tool)
+        evidence=[]
+        if source is not None:
+            evidence.append(
+                Evidence(
+                    "excellon_xnc_tool_function",
+                    f"tool=T{tool}; function={function}",
+                    1.0,
+                    source,
+                )
+            )
+        return function,evidence
 
     def _decode(self, raw):
         if raw is None:
@@ -497,12 +566,13 @@ class ExcellonParser:
         if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: route before valid tool selection")
         rid=stable_id("route",p.name,pts,self.tool,self.tools[self.tool])
         plating,plating_evidence=self._plating_for_tool(self.tool)
+        x2_function,function_evidence=self._function_for_tool(self.tool)
         x2_layer_span,x2_span_proven,x2_span_kind,span_evidence=self._span_for_tool(self.tool)
         if not x2_span_proven:
             x2_layer_span=None
         prov=Provenance(
             list(self._route_sources),
-            [*self._route_evidence,*plating_evidence,*span_evidence],
+            [*self._route_evidence,*plating_evidence,*span_evidence,*function_evidence],
         )
         out.routes.append(
             RoutedPath(
@@ -514,6 +584,7 @@ class ExcellonParser:
                 prov,
                 x2_layer_span=x2_layer_span,
                 x2_span_kind=x2_span_kind,
+                x2_aperture_function=x2_function,
             )
         )
         self._route_sources=[];self._route_evidence=[]
@@ -608,11 +679,13 @@ class ExcellonParser:
                     src=SourceRef(str(p),line_no,line)
                 slot_id=stable_id("slot",p.name,line_no,x1,y1,x2,y2,self.tool)
                 plating,plating_evidence=self._plating_for_tool(self.tool)
+                x2_function,function_evidence=self._function_for_tool(self.tool)
                 x2_layer_span,x2_span_proven,x2_span_kind,span_evidence=self._span_for_tool(self.tool)
                 if not x2_span_proven:
                     x2_layer_span=None
                 evidence.extend(plating_evidence)
                 evidence.extend(span_evidence)
+                evidence.extend(function_evidence)
                 out.slots.append(
                     SlotFeature(
                         slot_id,
@@ -624,6 +697,7 @@ class ExcellonParser:
                         Provenance([src],evidence),
                         x2_layer_span=x2_layer_span,
                         x2_span_kind=x2_span_kind,
+                        x2_aperture_function=x2_function,
                     )
                 )
                 self.current=Point(x2,y2);continue
@@ -755,6 +829,10 @@ class ExcellonParser:
                     self.tool_plating[tool]=self._x2_aperture_plating
                     if self._x2_aperture_source is not None:
                         self._tool_plating_source[tool]=self._x2_aperture_source
+                if self._x2_aperture_function is not None:
+                    self.tool_function[tool]=self._x2_aperture_function
+                    if self._x2_aperture_source is not None:
+                        self._tool_function_source[tool]=self._x2_aperture_source
                 self.tools[tool]=diameter_mm;continue
             if line.startswith("T") and "C" in line:
                 message = f"malformed Excellon tool definition: {line}"
@@ -820,6 +898,7 @@ class ExcellonParser:
                 pt=Point(x,y)
                 src=SourceRef(str(p),line_no,line);obj_id=stable_id("drill",p.name,line_no,pt.x,pt.y,self.tool)
                 plating,plating_evidence=self._plating_for_tool(self.tool)
+                x2_function,function_evidence=self._function_for_tool(self.tool)
                 x2_layer_span,x2_span_proven,x2_span_kind,span_evidence=self._span_for_tool(self.tool)
                 if not x2_span_proven:
                     x2_layer_span=None
@@ -832,10 +911,11 @@ class ExcellonParser:
                         f"T{self.tool}",
                         Provenance(
                             [src],
-                            [*plating_evidence,*span_evidence],
+                            [*plating_evidence,*span_evidence,*function_evidence],
                         ),
                         x2_layer_span=x2_layer_span,
                         x2_span_kind=x2_span_kind,
+                        x2_aperture_function=x2_function,
                     )
                 )
                 self.current=pt;continue
