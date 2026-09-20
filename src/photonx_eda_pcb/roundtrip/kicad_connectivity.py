@@ -782,7 +782,7 @@ def _expected_vias(board, via_exportable, exported_ids, issues):
             continue
         out.append(
             _via_item(
-                "through",
+                item.get("via_type", "through"),
                 item["at"],
                 item["size"],
                 item["drill"],
