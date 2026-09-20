@@ -4,6 +4,8 @@
 
 - Added evidence-gated KiCad export for exact straight plated Excellon routed slots. A plated route is emitted as deterministic `PHOTONX:RecoveredPlatedRoute` only when multilayer copper coverage proves one pad-stack and one unambiguous exported net; otherwise it remains an explicit omission. Round-trip verification checks route kind, geometry, net binding, and deterministic identity while keeping route footprints out of the mechanical-slot comparator.
 
+- Extended KiCad via round-trip auditing to the documented optional `locked` token. PhotonX-exported vias are expected to remain unlocked, the reader now preserves lock state, and post-export locking is surfaced as deterministic via semantic drift instead of being silently ignored.
+
 - Hardened KiCad `paper` readback against malformed scalar arity. A singleton `(paper ...)` section is now accepted only when it contains exactly one value; extra trailing values fail closed as unknown and therefore fail the round-trip structure contract instead of being silently ignored.
 
 - Promoted fully trusted Gerber X2 `.P` component-reference evidence into component reconstruction before geometric pairing. Source-proven refdes groups retain pin/function evidence, repeated step-and-repeat instances stay separate, lower-confidence identity is not escalated, and conflicting trusted refdes evidence remains explicit and fail-closed instead of being reassigned by proximity.
