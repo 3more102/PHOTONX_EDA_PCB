@@ -486,7 +486,7 @@ def test_kicad_reader_preserves_optional_manufacturing_settings():
     }
 
 
-def test_connectivity_roundtrip_marks_proven_via_span_as_source_loss(tmp_path):
+def test_connectivity_roundtrip_exports_exact_proven_via_span(tmp_path):
     board = BoardModel(
         nets=[_net()],
         pads=[
@@ -513,18 +513,22 @@ def test_connectivity_roundtrip_marks_proven_via_span_as_source_loss(tmp_path):
     readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
     audit = compare_kicad_connectivity(board, readback, report)
 
-    assert readback["vias"] == []
-    assert report.skipped_via_spans == 1
-    assert report.skipped_via_span_ids == ["D1"]
-    assert any(
-        issue.code == "KICAD_PROVEN_VIA_SPAN_UNSUPPORTED"
-        and issue.object_id == "D1"
-        for issue in report.issues
-    )
+    assert len(readback["vias"]) == 1
+    assert readback["vias"][0]["at"] == (0.0, 0.0)
+    assert readback["vias"][0]["size"] == 1.0
+    assert readback["vias"][0]["drill"] == 0.4
+    assert readback["vias"][0]["layers"] == ("F.Cu", "B.Cu")
+    assert readback["vias"][0]["net"] == 1
+    assert report.exported_via_spans == 1
+    assert report.exported_via_span_ids == ["D1"]
+    assert report.skipped_via_spans == 0
+    assert report.skipped_via_span_ids == []
+    assert audit["vias"]["equal"] is True
     assert audit["roundtrip_equal"] is True
-    assert audit["source_connectivity_complete"] is False
-    assert audit["source_equivalent"] is False
-    assert audit["losses"]["omitted_proven_via_span_drill_ids"] == ["D1"]
+    assert audit["source_connectivity_complete"] is True
+    assert audit["source_equivalent"] is True
+    assert audit["losses"]["skipped_drill_ids"] == []
+    assert audit["losses"]["omitted_proven_via_span_drill_ids"] == []
 
 
 def test_invalid_proven_via_span_metadata_fails_closed(tmp_path):
