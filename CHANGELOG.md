@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Made proven plated via-span loss explicit across KiCad export reporting and round-trip source-equivalence checks. The exporter now records `KICAD_PROVEN_VIA_SPAN_UNSUPPORTED`, `kicad_omissions.json` includes `omitted_via_spans`, and connectivity audits expose `omitted_proven_via_span_drill_ids`. PhotonX still does not invent KiCad annular via geometry from drill/span evidence alone.
+
 - Centralized deterministic KiCad UUID generation in a shared identity helper used by both export and readback verification, with stable contract tests for track, pad-footprint, region, and slot-footprint identities. This removes duplicate UUID logic that could otherwise drift between emission and round-trip expectations.
 
 - Strengthened KiCad connectivity round-trip identity checks: track segment UUIDs are now read back, and deterministic PhotonX UUIDs are compared for tracks, recovered-pad footprints, copper regions, and recovered-slot footprints in addition to geometry/net semantics. UUID drift is therefore fail-visible even when electrical geometry is unchanged.
