@@ -21,6 +21,7 @@ class KicadExportReport:
     exported_plated_slots:int=0
     exported_tracks:int=0
     skipped_tracks:int=0
+    exported_routes:int=0
     skipped_routes:int=0
     skipped_via_spans:int=0
     issues:list[KicadExportIssue]=field(default_factory=list)
@@ -36,6 +37,7 @@ class KicadExportReport:
     skipped_region_ids:list[str]=field(default_factory=list)
     exported_track_ids:list[str]=field(default_factory=list)
     skipped_track_ids:list[str]=field(default_factory=list)
+    exported_route_ids:list[str]=field(default_factory=list)
     skipped_route_ids:list[str]=field(default_factory=list)
     skipped_via_span_ids:list[str]=field(default_factory=list)
     @property
