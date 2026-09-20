@@ -270,3 +270,29 @@ def test_two_layer_pth_span_can_map_without_x2_copper_ordinals(
     assert board.drills[0].layer_span == ("F.Cu", "B.Cu")
     assert board.drills[0].span_proven is True
     assert len(board.nets) == 1
+
+
+
+@pytest.mark.parametrize(
+    "file_function",
+    [
+        "Plated,1,2,NPTH,Drill",
+        "NonPlated,1,2,PTH,Drill",
+    ],
+)
+def test_x2_plating_and_span_kind_contradictions_fail_closed(
+    tmp_path: Path,
+    file_function: str,
+):
+    path = tmp_path / "contradiction.drl"
+    path.write_text(_drill(file_function), encoding="utf-8")
+
+    with pytest.raises(ParseError, match="plating/span-kind contradiction"):
+        ExcellonParser(strict=True).parse(path)
+
+    permissive = ExcellonParser(strict=False).parse(path)
+    assert permissive.drills == []
+    assert any(
+        item.code == "INVALID_EXCELLON_X2_PLATING"
+        for item in permissive.diagnostics
+    )
