@@ -48,6 +48,8 @@ class DrillHit:
     plating: str = "unknown"
     tool: str | None = None
     provenance: Provenance = field(default_factory=Provenance)
+    layer_span: tuple[int, int] | None = None
+    span_proven: bool = False
 
 @dataclass
 class OutlineSegment:
