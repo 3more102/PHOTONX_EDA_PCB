@@ -34,12 +34,23 @@ _FILE_FUNCTION = re.compile(
 )
 
 
-def _x2_file_function_layer(text: str) -> str | None:
+def x2_file_function_fields(text: str) -> tuple[str, ...] | None:
+    """Return normalized X2 FileFunction fields from the first declaration."""
+
     match = _FILE_FUNCTION.search(text or "")
     if not match:
         return None
 
-    parts = [p.strip() for p in match.group("value").split(",") if p.strip()]
+    parts = tuple(
+        part.strip()
+        for part in match.group("value").split(",")
+        if part.strip()
+    )
+    return parts or None
+
+
+def _x2_file_function_layer(text: str) -> str | None:
+    parts = x2_file_function_fields(text)
     if not parts:
         return None
 
