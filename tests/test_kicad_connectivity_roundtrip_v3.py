@@ -74,6 +74,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "board_settings",
         "layer_table",
         "net_table",
+        "electrical_connectivity_partition",
         "tracks",
         "vias",
         "track_arcs",
@@ -106,7 +107,60 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
     assert audit["region_rules"]["equal"] is True
     assert audit["slots"]["equal"] is True
     assert audit["slots"]["expected_count"] == 1
+    assert audit["electrical_connectivity_partition"]["equal"] is True
+    assert audit["electrical_connectivity_partition"]["expected_count"] == 1
     assert audit["issues"] == []
+
+
+def test_connectivity_partition_detects_cross_family_net_rebinding(tmp_path):
+    board = BoardModel(
+        nets=[
+            NetGroup("N1", [], 1.0, "GND"),
+            NetGroup("N2", [], 1.0, "VCC"),
+        ],
+        tracks=[
+            Track("T1", Point(0, 0), Point(4, 0), 0.25, "F.Cu", "N1"),
+            Track("T2", Point(0, 2), Point(4, 2), 0.25, "F.Cu", "N2"),
+        ],
+        pads=[
+            PadCandidate(
+                "P1",
+                Point(0, 0),
+                1.2,
+                1.2,
+                "C",
+                "F.Cu",
+                None,
+                "N1",
+            ),
+        ],
+    )
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    recovered_pad = next(
+        footprint
+        for footprint in readback["footprints"]
+        if footprint["name"] == "PHOTONX:RecoveredPad"
+    )
+    recovered_pad["pads"][0]["net"] = 2
+    recovered_pad["pads"][0]["net_name"] = "VCC"
+
+    audit = compare_kicad_connectivity(board, readback, report)
+    partition = audit["electrical_connectivity_partition"]
+
+    assert partition["equal"] is False
+    assert audit["roundtrip_equal"] is False
+    assert any(
+        row["net"]["name"] == "GND" and "pad:id:P1" in row["members"]
+        for row in partition["missing"]
+    )
+    assert any(
+        row["net"]["name"] == "VCC" and "pad:id:P1" in row["members"]
+        for row in partition["unexpected"]
+    )
 
 
 @pytest.mark.parametrize(
