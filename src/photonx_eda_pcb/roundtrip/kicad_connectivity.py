@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, KICAD_DEFAULT_PAPER, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_export_plan, slot_export_status, track_export_status
+from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, KICAD_DEFAULT_PAPER, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_export_plan, slot_export_status, track_export_status, x2_component_export_plan
 from ..excellon_routing import assess_route_export_readiness, route_export_descriptor
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
@@ -14,12 +14,14 @@ from .regions import canonical_ring, compare_kicad_copper_regions
 
 
 _RECOVERED_PAD_FOOTPRINT = "PHOTONX:RecoveredPad"
+_RECOVERED_X2_COMPONENT = "PHOTONX:RecoveredX2Component"
 _RECOVERED_NPTH_DRILL = "PHOTONX:RecoveredNPTHDrill"
 _RECOVERED_NPTH_SLOT = "PHOTONX:RecoveredNPTHSlot"
 _RECOVERED_PLATED_SLOT = "PHOTONX:RecoveredPlatedSlot"
 _RECOVERED_NPTH_ROUTE = "PHOTONX:RecoveredNPTHRoute"
 _PHOTONX_FOOTPRINT_NAMES = {
     _RECOVERED_PAD_FOOTPRINT,
+    _RECOVERED_X2_COMPONENT,
     _RECOVERED_NPTH_DRILL,
     _RECOVERED_NPTH_SLOT,
     _RECOVERED_PLATED_SLOT,
@@ -1019,6 +1021,12 @@ def _observed_drills(readback, net_lookup, issues):
 def _expected_pads(board, exported_pad_ids):
     out = []
     unresolved = []
+    groups, _rejected = x2_component_export_plan(board)
+    grouped = {
+        planned["pad_id"]: (group, planned)
+        for group in groups
+        for planned in group["pads"]
+    }
     for pad in board.pads:
         if pad.id not in exported_pad_ids:
             continue
@@ -1026,6 +1034,44 @@ def _expected_pads(board, exported_pad_ids):
         if binding is None:
             unresolved.append(pad.id)
             binding = {"code": 0, "name": ""}
+
+        grouped_item = grouped.get(str(pad.id))
+        if grouped_item is not None:
+            group, planned = grouped_item
+            descriptor = planned["descriptor"]
+            geometry = _pad_geometry_item(
+                group["origin"],
+                0.0,
+                group["footprint_layer"],
+                planned["number"],
+                descriptor["kind"],
+                descriptor["shape"],
+                planned["at"],
+                descriptor["pad_angle"],
+                descriptor["size"],
+                descriptor["drill_shape"],
+                descriptor["drill_size"],
+                descriptor["drill_offset"],
+                descriptor["layers"],
+            )
+            out.append(
+                {
+                    "id": str(pad.id),
+                    "reference": str(group["reference"]),
+                    "uuid": photonx_uuid(
+                        "x2-fp:" + str(group["component_id"])
+                    ),
+                    "reference_uuid": photonx_uuid(
+                        "x2-ref:" + str(group["component_id"])
+                    ),
+                    "reference_count": 1,
+                    "pad_uuid": photonx_uuid("pad:" + str(pad.id)),
+                    "geometry": geometry,
+                    "net": binding,
+                }
+            )
+            continue
+
         out.append(
             {
                 "id": str(pad.id),
@@ -1040,10 +1086,18 @@ def _expected_pads(board, exported_pad_ids):
     return out, sorted(unresolved)
 
 
-def _observed_pads(readback, net_lookup, issues):
+def _observed_pads(readback, net_lookup, issues, board):
     out = []
+    pad_uuid_to_id = {
+        photonx_uuid("pad:" + str(pad.id)): str(pad.id)
+        for pad in board.pads
+    }
     for fp_index, footprint in enumerate(readback.get("footprints", ())):
-        if footprint.get("name") != _RECOVERED_PAD_FOOTPRINT:
+        footprint_name = footprint.get("name")
+        if footprint_name not in {
+            _RECOVERED_PAD_FOOTPRINT,
+            _RECOVERED_X2_COMPONENT,
+        }:
             continue
         reference = footprint.get("reference")
         pads = list(footprint.get("pads", ()))
@@ -1055,53 +1109,137 @@ def _observed_pads(readback, net_lookup, issues):
                 }
             )
             continue
-        if len(pads) != 1:
-            issues.append(
+
+        if footprint_name == _RECOVERED_PAD_FOOTPRINT:
+            if len(pads) != 1:
+                issues.append(
+                    {
+                        "code": "KICAD_ROUNDTRIP_PAD_COUNT_INVALID",
+                        "pad_id": str(reference),
+                        "pad_count": len(pads),
+                    }
+                )
+                continue
+
+            try:
+                geometry = _observed_pad_geometry(footprint, pads[0])
+            except (TypeError, ValueError, IndexError, KeyError) as exc:
+                issues.append(
+                    {
+                        "code": "KICAD_ROUNDTRIP_INVALID_PAD_GEOMETRY",
+                        "pad_id": str(reference),
+                        "detail": str(exc),
+                    }
+                )
+                continue
+
+            binding = _binding_from_code(
+                pads[0].get("net"),
+                net_lookup,
+                issues,
+                "pad",
+                reference,
+            )
+            _check_embedded_net_name(
+                pads[0],
+                binding,
+                issues,
+                "pad",
+                reference,
+            )
+            out.append(
                 {
-                    "code": "KICAD_ROUNDTRIP_PAD_COUNT_INVALID",
-                    "pad_id": str(reference),
-                    "pad_count": len(pads),
+                    "id": str(reference),
+                    "uuid": footprint.get("uuid"),
+                    "reference_uuid": footprint.get("reference_uuid"),
+                    "reference_count": int(
+                        footprint.get("reference_count", 0)
+                    ),
+                    "pad_uuid": pads[0].get("uuid"),
+                    "geometry": geometry,
+                    "net": binding,
                 }
             )
             continue
 
-        try:
-            geometry = _observed_pad_geometry(footprint, pads[0])
-        except (TypeError, ValueError, IndexError, KeyError) as exc:
+        if not pads:
             issues.append(
                 {
-                    "code": "KICAD_ROUNDTRIP_INVALID_PAD_GEOMETRY",
-                    "pad_id": str(reference),
-                    "detail": str(exc),
+                    "code": "KICAD_ROUNDTRIP_X2_COMPONENT_HAS_NO_PADS",
+                    "reference": str(reference),
+                    "footprint_index": fp_index,
                 }
             )
             continue
 
-        binding = _binding_from_code(
-            pads[0].get("net"),
-            net_lookup,
-            issues,
-            "pad",
-            reference,
-        )
-        _check_embedded_net_name(
-            pads[0],
-            binding,
-            issues,
-            "pad",
-            reference,
-        )
-        out.append(
-            {
-                "id": str(reference),
-                "uuid": footprint.get("uuid"),
-                "reference_uuid": footprint.get("reference_uuid"),
-                "reference_count": int(footprint.get("reference_count", 0)),
-                "pad_uuid": pads[0].get("uuid"),
-                "geometry": geometry,
-                "net": binding,
-            }
-        )
+        seen_ids = set()
+        for pad_index, observed_pad in enumerate(pads):
+            pad_uuid = observed_pad.get("uuid")
+            pad_id = pad_uuid_to_id.get(str(pad_uuid))
+            if pad_id is None:
+                issues.append(
+                    {
+                        "code": "KICAD_ROUNDTRIP_X2_PAD_IDENTITY_UNKNOWN",
+                        "reference": str(reference),
+                        "pad_index": pad_index,
+                        "pad_uuid": pad_uuid,
+                    }
+                )
+                continue
+            if pad_id in seen_ids:
+                issues.append(
+                    {
+                        "code": "KICAD_ROUNDTRIP_X2_PAD_IDENTITY_DUPLICATE",
+                        "reference": str(reference),
+                        "pad_id": pad_id,
+                    }
+                )
+                continue
+            seen_ids.add(pad_id)
+
+            try:
+                geometry = _observed_pad_geometry(
+                    footprint,
+                    observed_pad,
+                )
+            except (TypeError, ValueError, IndexError, KeyError) as exc:
+                issues.append(
+                    {
+                        "code": "KICAD_ROUNDTRIP_INVALID_PAD_GEOMETRY",
+                        "pad_id": pad_id,
+                        "detail": str(exc),
+                    }
+                )
+                continue
+
+            binding = _binding_from_code(
+                observed_pad.get("net"),
+                net_lookup,
+                issues,
+                "pad",
+                pad_id,
+            )
+            _check_embedded_net_name(
+                observed_pad,
+                binding,
+                issues,
+                "pad",
+                pad_id,
+            )
+            out.append(
+                {
+                    "id": pad_id,
+                    "reference": str(reference),
+                    "uuid": footprint.get("uuid"),
+                    "reference_uuid": footprint.get("reference_uuid"),
+                    "reference_count": int(
+                        footprint.get("reference_count", 0)
+                    ),
+                    "pad_uuid": pad_uuid,
+                    "geometry": geometry,
+                    "net": binding,
+                }
+            )
     return out
 
 
@@ -1895,7 +2033,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     )
     pads = _compare_multiset(
         expected_pads,
-        _observed_pads(readback, net_lookup, issues),
+        _observed_pads(readback, net_lookup, issues, board),
     )
 
     regions = _empty_comparison()
