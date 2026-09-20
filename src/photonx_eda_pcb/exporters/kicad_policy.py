@@ -396,13 +396,29 @@ def proven_via_span_export_plan(board):
                 "proven via span endpoint is not a declared canonical KiCad copper layer",
             )
             continue
-        if {from_layer, to_layer} != {"F.Cu", "B.Cu"}:
-            omit(
-                drill_id,
-                "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
-                "partial-layer plated span is proven, but Gerber/Excellon evidence does not distinguish KiCad blind/buried via semantics from microvia manufacturing; via omitted instead of guessing a via type",
-            )
-            continue
+        full_through_span = {from_layer, to_layer} == {"F.Cu", "B.Cu"}
+        x2_span_kind = str(
+            getattr(drill, "x2_span_kind", "") or ""
+        ).lower()
+
+        if full_through_span:
+            if x2_span_kind in {"blind", "buried"}:
+                omit(
+                    drill_id,
+                    "KICAD_PROVEN_VIA_TYPE_CONFLICT",
+                    "explicit X2 blind/buried span conflicts with a full F.Cu..B.Cu through-board span; via omitted instead of relabeling source evidence",
+                )
+                continue
+            via_type = "through"
+        else:
+            if x2_span_kind not in {"blind", "buried"}:
+                omit(
+                    drill_id,
+                    "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
+                    "partial-layer plated span is proven, but exact KiCad blind/buried export requires explicit X2 Blind or Buried drill-span evidence; via omitted instead of guessing a via type",
+                )
+                continue
+            via_type = "blind"
 
         start_index, end_index = sorted(
             (layer_index[from_layer], layer_index[to_layer])
@@ -515,6 +531,7 @@ def proven_via_span_export_plan(board):
                 "size": diameters[0],
                 "drill": drill_diameter,
                 "layers": (start_layer, end_layer),
+                "type": via_type,
                 "net_id": net_id,
                 "pad_ids": tuple(sorted(pad_ids)),
             }
