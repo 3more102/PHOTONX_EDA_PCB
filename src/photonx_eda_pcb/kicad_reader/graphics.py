@@ -47,7 +47,7 @@ def read_unexpected_edge_graphics(root):
         if not isinstance(item, list) or not item:
             continue
         token = str(item[0])
-        if not token.startswith("gr_") or token == "gr_line":
+        if token == "gr_line":
             continue
         layer = child(item, "layer")
         if not layer or len(layer) < 2 or str(layer[1]) != "Edge.Cuts":
