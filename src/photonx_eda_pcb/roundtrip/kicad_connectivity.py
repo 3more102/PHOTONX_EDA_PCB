@@ -87,6 +87,7 @@ def _expected_file_structure():
     return {
         "general_count": 1,
         "paper_count": 1,
+        "paper": "A4",
         "layers_count": 1,
         "setup_count": 1,
     }
@@ -97,6 +98,7 @@ def _observed_file_structure(readback):
     return {
         "general_count": int(structure.get("general_count", 0)),
         "paper_count": int(structure.get("paper_count", 0)),
+        "paper": structure.get("paper"),
         "layers_count": int(structure.get("layers_count", 0)),
         "setup_count": int(structure.get("setup_count", 0)),
     }
