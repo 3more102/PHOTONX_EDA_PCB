@@ -34,3 +34,14 @@ reconstructed geometry.
 This inference establishes copper count/order only. It does not infer
 dielectric materials, dielectric thicknesses, copper weights, impedance
 targets, or missing copper geometry.
+
+The same validated declared layer order is part of the KiCad export contract.
+Geometry-empty X2-declared inner layers are still emitted in the KiCad layer
+table, so a partial CAM package cannot collapse a known four-layer board into
+a two-layer editable board. Exactly proven through-via export also uses that
+declared layer set: if compatible annular support is absent on any declared
+inner copper layer, the via remains an explicit
+`KICAD_PROVEN_VIA_LAYER_SUPPORT_INCOMPLETE` omission instead of being
+promoted from only the visible outer-layer pads. Malformed or non-declared X2
+metadata is not promoted by the KiCad policy and falls back to reconstructed
+geometry.
