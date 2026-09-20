@@ -68,6 +68,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
     audit = compare_kicad_connectivity(board, readback, report)
 
     assert audit["scope"] == [
+        "layer_table",
         "net_table",
         "tracks",
         "vias",
@@ -170,6 +171,39 @@ def test_invalid_proven_via_span_metadata_fails_closed(tmp_path):
         and issue["object_id"] == "D1"
         for issue in audit["issues"]
     )
+
+
+def test_connectivity_roundtrip_detects_layer_table_drift(tmp_path):
+    board = BoardModel(
+        tracks=[
+            Track(
+                "T_IN2",
+                Point(0, 0),
+                Point(2, 0),
+                0.25,
+                "In2.Cu",
+            )
+        ]
+    )
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["layers"] = [
+        row
+        for row in readback["layers"]
+        if row["name"] != "In1.Cu"
+    ]
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["tracks"]["equal"] is True
+    assert audit["layer_table"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+    assert audit["layer_table"]["missing"] == [
+        {"id": 1, "name": "In1.Cu", "type": "signal"}
+    ]
 
 
 def test_connectivity_roundtrip_detects_unexpected_via(tmp_path):

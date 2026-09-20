@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import pad_export_descriptor, proven_via_span_omissions, slot_export_status
+from ..exporters.kicad_policy import declared_copper_layer_names, kicad_board_layer_rows, pad_export_descriptor, proven_via_span_omissions, slot_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -52,6 +52,53 @@ def _compare_multiset(expected, observed):
         "missing": missing,
         "unexpected": unexpected,
     }
+
+
+def _expected_layer_rows(board):
+    return kicad_board_layer_rows(board)
+
+
+def _observed_layer_rows(readback, issues):
+    out=[]
+    id_counts=Counter()
+    name_counts=Counter()
+    for index,row in enumerate(readback.get("layers", ())):
+        layer_id=row.get("id")
+        if isinstance(layer_id,bool) or not isinstance(layer_id,int):
+            issues.append(
+                {
+                    "code":"KICAD_ROUNDTRIP_INVALID_LAYER_ID",
+                    "layer_index":index,
+                    "layer_id":layer_id,
+                }
+            )
+            continue
+        item={
+            "id":layer_id,
+            "name":str(row.get("name")),
+            "type":str(row.get("type")),
+        }
+        out.append(item)
+        id_counts[layer_id]+=1
+        name_counts[item["name"]]+=1
+
+    duplicate_ids=sorted(layer_id for layer_id,count in id_counts.items() if count>1)
+    duplicate_names=sorted(name for name,count in name_counts.items() if count>1)
+    if duplicate_ids:
+        issues.append(
+            {
+                "code":"KICAD_ROUNDTRIP_DUPLICATE_LAYER_IDS",
+                "layer_ids":duplicate_ids,
+            }
+        )
+    if duplicate_names:
+        issues.append(
+            {
+                "code":"KICAD_ROUNDTRIP_DUPLICATE_LAYER_NAMES",
+                "layer_names":duplicate_names,
+            }
+        )
+    return out
 
 
 def _net_rows_from_board(board):
@@ -133,18 +180,7 @@ def _check_embedded_net_name(item, binding, issues, object_kind, object_id):
 
 
 def _declared_track_layers(board):
-    highest = 0
-    for obj in [*board.tracks, *board.pads, *getattr(board, "regions", ())]:
-        layer = str(getattr(obj, "layer", ""))
-        if not (layer.startswith("In") and layer.endswith(".Cu")):
-            continue
-        digits = layer[2:-3]
-        if digits.isdigit() and 1 <= int(digits) <= 30:
-            highest = max(highest, int(digits))
-    return {"F.Cu", "B.Cu"} | {
-        f"In{index}.Cu" for index in range(1, highest + 1)
-    }
-
+    return set(declared_copper_layer_names(board))
 
 def _reported_sets(source_ids, exported_ids, skipped_ids, family, issues):
     source = set(source_ids)
@@ -651,7 +687,7 @@ def _empty_comparison():
 def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
-    With an export report, the audit covers the net table plus tracks,
+    With an export report, the audit covers the declared KiCad layer table, net table, and tracks,
     rejects unexpected KiCad vias, and compares recovered pads, copper regions including canonical shell/hole geometry,
     and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
@@ -674,6 +710,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             }
         )
     net_lookup = _observed_net_lookup(readback, issues)
+
+    layer_table = _compare_multiset(
+        _expected_layer_rows(board),
+        _observed_layer_rows(readback, issues),
+    )
 
     nets = _compare_multiset(
         _net_rows_from_board(board),
@@ -791,7 +832,8 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         )
 
     roundtrip_equal = bool(
-        nets["equal"]
+        layer_table["equal"]
+        and nets["equal"]
         and tracks["equal"]
         and vias["equal"]
         and pads["equal"]
@@ -814,6 +856,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     return {
         "scope": [
+            "layer_table",
             "net_table",
             "tracks",
             "vias",
@@ -828,6 +871,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "source_equivalent": bool(
             roundtrip_equal and source_connectivity_complete
         ),
+        "layer_table": layer_table,
         "nets": nets,
         "tracks": tracks,
         "vias": vias,

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added structural KiCad layer-table round-trip verification. Export and readback now share one board-layer specification for `F.Cu`, contiguous canonical `In1.Cu..InN.Cu`, `B.Cu`, silks, and `Edge.Cuts`; missing/renumbered/retagged rows plus duplicate layer IDs or names are fail-visible even when track/zone layer strings themselves still match.
+
 - Integrated canonical KiCad CopperRegion shell/hole verification into the main connectivity audit. `region_geometry` now applies the existing start-point/winding-invariant comparator to exported regions only, so zone geometry drift fails `roundtrip_equal` while policy-skipped source regions remain source-equivalence losses.
 
 - Integrated existing KiCad mechanical-slot round-trip verification into the main connectivity audit. `slot_geometry` now checks canonical center/overall length/width/plating for exported NPTH and plated slots, so geometry drift fails `roundtrip_equal` while policy-skipped source slots remain source-equivalence losses rather than readback corruption.

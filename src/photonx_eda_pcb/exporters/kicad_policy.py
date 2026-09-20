@@ -1,4 +1,47 @@
+import re
 from photonx_eda_pcb.mechanical_features.measure import slot_geometry_descriptor
+_INNER_COPPER_LAYER_RE=re.compile(r"^In([1-9]|[12][0-9]|30)\\.Cu$")
+
+
+def inner_copper_layers(board):
+    observed={
+        str(getattr(obj,"layer",""))
+        for obj in [*board.tracks,*board.pads,*getattr(board,"regions",())]
+    }
+    indices=[]
+    for name in observed:
+        match=_INNER_COPPER_LAYER_RE.fullmatch(name)
+        if match:
+            indices.append(int(match.group(1)))
+    highest=max(indices,default=0)
+    return tuple((index,f"In{index}.Cu") for index in range(1,highest+1))
+
+
+def declared_copper_layer_names(board):
+    return {"F.Cu","B.Cu"} | {name for _,name in inner_copper_layers(board)}
+
+
+def kicad_board_layer_specs(board):
+    return (
+        {"id":0,"name":"F.Cu","type":"signal","suffix":None},
+        *(
+            {"id":index,"name":name,"type":"signal","suffix":None}
+            for index,name in inner_copper_layers(board)
+        ),
+        {"id":31,"name":"B.Cu","type":"signal","suffix":None},
+        {"id":36,"name":"B.SilkS","type":"user","suffix":"b.silkscreen"},
+        {"id":37,"name":"F.SilkS","type":"user","suffix":"f.silkscreen"},
+        {"id":44,"name":"Edge.Cuts","type":"user","suffix":None},
+    )
+
+
+def kicad_board_layer_rows(board):
+    return [
+        {"id":row["id"],"name":row["name"],"type":row["type"]}
+        for row in kicad_board_layer_specs(board)
+    ]
+
+
 def pad_shape_name(shape):
     s=str(shape or "").upper()
     if s=="C":return "circle"

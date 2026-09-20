@@ -8,6 +8,7 @@ When KiCad export is requested, PHOTONX re-reads the generated `.kicad_pcb` thro
 
 The connectivity audit checks:
 
+- exact declared KiCad layer-table ID/name/type identity, including the contiguous inner-copper prefix and generated user layers;
 - exact KiCad net-table code/name identity;
 - net bindings on track segments the exporter reported as emitted;
 - recovered-pad identity, deterministic footprint/child-pad UUIDs, emitted geometry (position, layer, type, shape, size, angle, drill semantics, and layer set), and net bindings;
