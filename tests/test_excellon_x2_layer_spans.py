@@ -85,9 +85,10 @@ def test_parser_preserves_normalized_x2_layer_span(tmp_path: Path):
     assert len(result.drills) == 1
     drill = result.drills[0]
     assert drill.plating == "plated"
-    assert drill.layer_span == (1, 2)
-    assert drill.span_proven is True
-    assert drill.span_kind == "blind"
+    assert drill.x2_layer_span == (1, 2)
+    assert drill.x2_span_kind == "blind"
+    assert drill.layer_span is None
+    assert drill.span_proven is False
     assert {
         item.kind for item in drill.provenance.evidence
     } == {
@@ -155,6 +156,9 @@ def test_x2_blind_span_limits_vertical_connectivity(tmp_path: Path):
     assert span["to_layer"] == "In1.Cu"
     assert span["layer_ids"] == ["F.Cu", "In1.Cu"]
     assert _span_pad_layers(board, span) == {"F.Cu", "In1.Cu"}
+    assert board.drills[0].x2_layer_span == (1, 2)
+    assert board.drills[0].layer_span == ("F.Cu", "In1.Cu")
+    assert board.drills[0].span_proven is True
 
     assert _net_layer_sets(board) == {
         frozenset({"F.Cu", "In1.Cu"}),
@@ -177,6 +181,9 @@ def test_x2_buried_span_connects_only_declared_inner_layers(tmp_path: Path):
     assert span["to_layer"] == "In2.Cu"
     assert span["layer_ids"] == ["In1.Cu", "In2.Cu"]
     assert _span_pad_layers(board, span) == {"In1.Cu", "In2.Cu"}
+    assert board.drills[0].x2_layer_span == (2, 3)
+    assert board.drills[0].layer_span == ("In1.Cu", "In2.Cu")
+    assert board.drills[0].span_proven is True
 
     assert _net_layer_sets(board) == {
         frozenset({"F.Cu"}),
@@ -201,6 +208,9 @@ def test_x2_span_beyond_declared_stackup_never_falls_back_to_geometry(
     assert span["to_layer"] is None
     assert span["layer_ids"] == []
     assert span["pad_ids"] == []
+    assert board.drills[0].x2_layer_span == (1, 5)
+    assert board.drills[0].layer_span is None
+    assert board.drills[0].span_proven is False
     assert len(board.nets) == 4
     assert any(
         item.code == "X2_DRILL_SPAN_UNRESOLVED"
@@ -225,6 +235,9 @@ def test_blind_span_without_ordinal_stackup_remains_unresolved(
     assert span["proven"] is False
     assert span["from_layer"] is None
     assert span["to_layer"] is None
+    assert board.drills[0].x2_layer_span == (1, 2)
+    assert board.drills[0].layer_span is None
+    assert board.drills[0].span_proven is False
     assert len(board.nets) == 2
     assert any(
         item.code == "X2_DRILL_SPAN_UNRESOLVED"
@@ -249,4 +262,6 @@ def test_two_layer_pth_span_can_map_without_x2_copper_ordinals(
     assert span["from_layer"] == "F.Cu"
     assert span["to_layer"] == "B.Cu"
     assert span["layer_ids"] == ["F.Cu", "B.Cu"]
+    assert board.drills[0].layer_span == ("F.Cu", "B.Cu")
+    assert board.drills[0].span_proven is True
     assert len(board.nets) == 1
