@@ -160,6 +160,6 @@ def test_exact_route_is_not_counted_as_recovered_slot_geometry(tmp_path):
 
     audit = validate_kicad_connectivity_roundtrip(board, path, report)
     assert audit["slot_geometry"]["equal"]
-    assert audit["slot_geometry"]["expected_count"] == 0
-    assert audit["slot_geometry"]["observed_count"] == 0
+    assert audit["slot_geometry"]["expected"] == []
+    assert audit["slot_geometry"]["observed"] == []
     assert audit["routes"]["equal"]
