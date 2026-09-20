@@ -123,8 +123,6 @@ def read_unexpected_fabrication_graphics(root):
         if not isinstance(item, list) or not item:
             continue
         token = str(item[0])
-        if not token.startswith("gr_"):
-            continue
         layer = child(item, "layer")
         if not layer or len(layer) < 2:
             continue
