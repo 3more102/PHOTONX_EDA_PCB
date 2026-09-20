@@ -71,6 +71,8 @@ The structured pin maps and `package_hint` coexist on the same component object 
 
 ### KiCad grouping authority
 
-When PhotonX groups a source-proven X2 component into `PHOTONX:RecoveredX2Component`, the exporter consumes `ComponentHypothesis.source_pin_map` and `source_pin_functions` as the canonical machine-readable pin identity produced by reconstruction. It does not independently re-derive pin numbers from pad provenance during export.
+When PhotonX groups a source-proven X2 component into `PHOTONX:RecoveredX2Component`, the exporter consumes `ComponentHypothesis.source_pin_map` and `source_pin_functions` as the canonical machine-readable identity produced by reconstruction. It does not construct a second pin map.
 
-Grouping remains fail-closed: the pin map must be a dictionary, cover every component pad exactly once by membership, contain non-empty string pin numbers, keep function entries bound to mapped pads, use unique pin numbers within the component, and retain matching trusted X2 refdes evidence on every grouped pad. Any violation falls back to independent recovered pads with an explicit `KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED` issue.
+Before grouping, the exporter independently cross-checks that canonical identity against the original confidence-1.0 Gerber X2 provenance retained on each pad. The structured pin number must match the trusted X2 pin-number evidence exactly after whitespace normalization. A retained structured pin function must likewise match its trusted X2 function evidence; missing, stale, conflicting, or newly introduced structured identity is rejected rather than repaired.
+
+Grouping remains fail-closed: the pin map must be a dictionary, cover every component pad exactly once by membership, contain non-empty string pin numbers, keep function entries bound to mapped pads, use unique pin numbers within the component, and retain matching trusted X2 refdes/pin provenance on every grouped pad. Any violation falls back to independent recovered pads with an explicit `KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED` issue.
