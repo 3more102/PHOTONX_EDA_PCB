@@ -9,13 +9,58 @@ from .inference import infer_component_hypotheses
 from .input_package import prepare_input
 from .models import BoardModel, ParseDiagnostic
 from .parsers import discover_manufacturing_files, GerberRS274XParser, ExcellonParser
+from .stackup import infer_stackup
 from .validation import ValidationReport, validate_board
+from .via_span import resolve_via_spans
 
 
 @dataclass
 class ReconstructionResult:
     board: BoardModel
     validation: ValidationReport
+
+
+def _serialize_via_spans(spans):
+    return [
+        {
+            "drill_id": span.drill_id,
+            "from_layer": span.from_layer,
+            "to_layer": span.to_layer,
+            "confidence": span.confidence,
+            "proven": span.proven,
+            "pad_ids": list(span.pad_ids),
+            "evidence": list(span.evidence),
+        }
+        for span in spans
+    ]
+
+
+def _report_unproven_multilayer_spans(board: BoardModel, spans) -> None:
+    drill_by_id = {drill.id: drill for drill in board.drills}
+    source_path = str(board.metadata.get("source_input", ""))
+    for span in spans:
+        if (
+            span.proven
+            or span.from_layer is None
+            or span.to_layer is None
+            or span.from_layer == span.to_layer
+        ):
+            continue
+        drill = drill_by_id.get(span.drill_id)
+        if drill is None or drill.plating != "unknown":
+            continue
+        board.diagnostics.append(
+            ParseDiagnostic(
+                "warning",
+                "MULTILAYER_SPAN_UNKNOWN",
+                (
+                    f"{span.drill_id} overlaps copper on "
+                    f"{span.from_layer}..{span.to_layer}, but plating evidence "
+                    "is unknown; no vertical electrical connection was created"
+                ),
+                source_path,
+            )
+        )
 
 
 def reconstruct(
@@ -43,11 +88,11 @@ def reconstruct(
 
         for item in files:
             if item.kind == "drill":
-                r = ExcellonParser(strict=cfg.strict_parsing).parse(item.path)
-                board.drills.extend(r.drills)
-                board.slots.extend(r.slots)
-                board.routes.extend(r.routes)
-                board.diagnostics.extend(r.diagnostics)
+                result = ExcellonParser(strict=cfg.strict_parsing).parse(item.path)
+                board.drills.extend(result.drills)
+                board.slots.extend(result.slots)
+                board.routes.extend(result.routes)
+                board.diagnostics.extend(result.diagnostics)
                 continue
 
             layer = item.layer
@@ -65,15 +110,33 @@ def reconstruct(
                 )
                 continue
 
-            r = GerberRS274XParser(layer, strict=cfg.strict_parsing).parse(item.path)
-            board.tracks.extend(r.tracks)
-            board.pads.extend(r.pads)
-            board.regions.extend(r.regions)
-            board.outline.extend(r.outline)
-            board.diagnostics.extend(r.diagnostics)
+            result = GerberRS274XParser(
+                layer,
+                strict=cfg.strict_parsing,
+            ).parse(item.path)
+            board.tracks.extend(result.tracks)
+            board.pads.extend(result.pads)
+            board.regions.extend(result.regions)
+            board.outline.extend(result.outline)
+            board.diagnostics.extend(result.diagnostics)
 
         attach_drills(board, cfg.drill_attach_tolerance_mm)
-        graph = build_physical_graph(board, cfg.connectivity_tolerance_mm)
+
+        stackup = infer_stackup(board)
+        via_spans = resolve_via_spans(
+            board,
+            stackup,
+            cfg.drill_attach_tolerance_mm,
+        )
+        board.metadata["stackup"] = stackup.to_dict()
+        board.metadata["via_spans"] = _serialize_via_spans(via_spans)
+        _report_unproven_multilayer_spans(board, via_spans)
+
+        graph = build_physical_graph(
+            board,
+            cfg.connectivity_tolerance_mm,
+            via_spans=via_spans,
+        )
         assign_physical_nets(board, graph)
         infer_component_hypotheses(board, cfg.component_pair_distance_mm)
         return ReconstructionResult(board, validate_board(board))
