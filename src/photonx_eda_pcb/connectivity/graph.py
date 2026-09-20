@@ -62,6 +62,11 @@ def _add_proven_via_edges(
             span_layers = tuple(dict.fromkeys((from_layer, to_layer)))
         span_layer_set = set(span_layers)
 
+        drill_id = str(getattr(span, "drill_id", ""))
+        drill = _barrel_contact_drill(board, drill_id)
+        if drill is None:
+            continue
+
         pad_ids = {
             pad_id
             for pad_id in getattr(span, "pad_ids", ())
@@ -69,16 +74,21 @@ def _add_proven_via_edges(
         }
         contact_ids = set(pad_ids)
 
-        drill_id = str(getattr(span, "drill_id", ""))
-        drill = _barrel_contact_drill(board, drill_id)
-        if drill is not None:
-            barrel = drill_shape(drill)
+        barrel_wall = drill_shape(drill).boundary
+        tolerance = max(0.0, float(tolerance_mm))
+        contact_geometry = (
+            barrel_wall.buffer(tolerance)
+            if tolerance
+            else barrel_wall
+        )
+        if not contact_geometry.is_empty:
             for object_id, obj in index.items():
                 if obj.layer not in span_layer_set:
                     continue
-                if shapes[object_id].buffer(tolerance_mm).intersects(barrel):
+                if shapes[object_id].intersects(contact_geometry):
                     contact_ids.add(object_id)
 
+        barrel_contact_ids = contact_ids - pad_ids
         ordered_ids = sorted(contact_ids)
         for i, left_id in enumerate(ordered_ids):
             left = index[left_id]
@@ -100,6 +110,8 @@ def _add_proven_via_edges(
                         if left_id in pad_ids and right_id in pad_ids
                         else "barrel_touch"
                     ),
+                    evidence_pad_ids=tuple(sorted(pad_ids)),
+                    barrel_contact_ids=tuple(sorted(barrel_contact_ids)),
                 )
 
 

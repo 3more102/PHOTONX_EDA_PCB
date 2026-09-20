@@ -29,6 +29,7 @@ def _serialize_via_spans(spans):
             "confidence": span.confidence,
             "proven": span.proven,
             "pad_ids": list(span.pad_ids),
+            "layer_ids": list(span.layer_ids),
             "evidence": list(span.evidence),
         }
         for span in spans
