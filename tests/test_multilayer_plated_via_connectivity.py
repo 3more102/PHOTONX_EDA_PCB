@@ -8,7 +8,7 @@ from photonx_eda_pcb.connectivity.graph import (
 )
 from photonx_eda_pcb.connectivity.nets import assign_physical_nets
 from photonx_eda_pcb.copper_solver.layer_rules import vertical_connection_allowed
-from photonx_eda_pcb.models import BoardModel, DrillHit, PadCandidate, Point
+from photonx_eda_pcb.models import (\n    BoardModel,\n    CopperRegion,\n    DrillHit,\n    PadCandidate,\n    Point,\n    Track,\n)
 from photonx_eda_pcb.pipeline import _report_unproven_multilayer_spans
 from photonx_eda_pcb.stackup import infer_stackup
 from photonx_eda_pcb.via_span import resolve_via_spans
@@ -148,3 +148,65 @@ def test_vertical_contact_requires_both_plating_and_proven_span():
     assert not vertical_connection_allowed(
         NS(plating="unknown", span_proven=True)
     )
+
+
+def test_proven_plated_via_barrel_connects_touching_inner_layer_copper():
+    board = _board("plated")
+    board.tracks.append(
+        Track(
+            "T_I1",
+            Point(9.7, 10.0),
+            Point(10.3, 10.0),
+            0.12,
+            "In1.Cu",
+        )
+    )
+    board.regions.append(
+        CopperRegion(
+            "R_I2",
+            (
+                Point(9.8, 9.8),
+                Point(10.2, 9.8),
+                Point(10.2, 10.2),
+                Point(9.8, 10.2),
+            ),
+            "In2.Cu",
+        )
+    )
+    spans = _spans(board)
+
+    assert spans[0].proven is True
+    assert spans[0].layer_ids == ("F.Cu", "In1.Cu", "In2.Cu", "B.Cu")
+
+    graph = build_physical_graph(board, via_spans=spans)
+    brute = build_physical_graph_bruteforce(board, via_spans=spans)
+
+    assert _edges(graph) == _edges(brute)
+    assert graph.has_edge("P_F", "T_I1")
+    assert graph.has_edge("T_I1", "R_I2")
+    assert graph.has_edge("R_I2", "P_B")
+    assert graph["P_F"]["T_I1"]["contact"] == "barrel_touch"
+
+    nets = assign_physical_nets(board, graph)
+    assert len(nets) == 1
+    assert set(nets[0].members) == {"P_F", "P_B", "T_I1", "R_I2"}
+
+
+def test_unproven_via_never_connects_touching_inner_layer_copper():
+    board = _board("unknown")
+    board.tracks.append(
+        Track(
+            "T_I1",
+            Point(9.7, 10.0),
+            Point(10.3, 10.0),
+            0.12,
+            "In1.Cu",
+        )
+    )
+    spans = _spans(board)
+
+    assert spans[0].proven is False
+
+    graph = build_physical_graph(board, via_spans=spans)
+    assert graph.has_edge("P_F", "T_I1") is False
+    assert graph.has_edge("P_B", "T_I1") is False
