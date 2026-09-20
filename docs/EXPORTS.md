@@ -46,3 +46,6 @@ Exporter warnings and round-trip findings do not change reconstruction exit-code
 ## KiCad native validation
 
 `validate_with_kicad_cli()` runs `kicad-cli pcb drc` with a 30-second timeout by default. Callers may override this with the keyword-only `timeout_s` argument. Missing executables, launch failures, and timeouts return an indeterminate `None` validation result with a diagnostic string instead of being reported as successful validation or hanging the reconstruction workflow. Non-positive or non-finite timeout values are rejected.
+
+
+KiCad via export is fail-closed: full F.Cu..B.Cu proven plated spans may export as through vias, while partial spans require explicit Excellon X2 Blind/Buried evidence and export with KiCad's blind via type. Unknown or PTH-only partial spans remain omissions rather than being relabeled.
