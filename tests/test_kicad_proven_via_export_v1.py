@@ -161,3 +161,64 @@ def test_roundtrip_detects_exported_via_geometry_drift(tmp_path):
     assert audit["vias"]["unexpected"]
     assert audit["roundtrip_equal"] is False
     assert audit["source_equivalent"] is False
+
+
+
+def test_partial_layer_proven_span_is_not_mislabeled_as_through_via(tmp_path):
+    board = BoardModel(
+        nets=[_net("N1", "GND")],
+        pads=[
+            _pad("P_F", "F.Cu"),
+            _pad("P_I1", "In1.Cu"),
+        ],
+        drills=[DrillHit("D1", Point(0, 0), 0.4, "plated")],
+        metadata={
+            "via_spans": [
+                {
+                    "drill_id": "D1",
+                    "from_layer": "F.Cu",
+                    "to_layer": "In1.Cu",
+                    "confidence": 0.95,
+                    "proven": True,
+                    "pad_ids": ["P_F", "P_I1"],
+                    "evidence": ["partial plated span"],
+                }
+            ]
+        },
+    )
+
+    path, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+
+    assert readback["vias"] == []
+    assert report.exported_via_span_ids == []
+    assert report.skipped_via_span_ids == ["D1"]
+    assert any(
+        issue.code == "KICAD_PROVEN_VIA_TYPE_UNPROVEN"
+        and issue.object_id == "D1"
+        for issue in report.issues
+    )
+    assert validate_omission_manifest(omission_manifest(report)) == []
+
+
+def test_roundtrip_detects_exported_via_type_drift(tmp_path):
+    board = BoardModel(
+        nets=[_net("N1", "GND")],
+        pads=[
+            _pad("P_F", "F.Cu"),
+            _pad("P_B", "B.Cu"),
+        ],
+        drills=[DrillHit("D1", Point(0, 0), 0.4, "plated")],
+        metadata={"via_spans": [_span("P_F", "P_B")]},
+    )
+
+    path, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    assert readback["vias"][0]["type"] == "through"
+    readback["vias"][0]["type"] = "blind"
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["vias"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+    assert audit["source_equivalent"] is False
