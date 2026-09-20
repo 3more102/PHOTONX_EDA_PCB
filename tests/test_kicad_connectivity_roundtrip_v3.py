@@ -202,9 +202,53 @@ def test_reader_preserves_singleton_board_section_counts():
     assert readback["file_structure"] == {
         "general_count": 2,
         "paper_count": 1,
+        "paper": "A4",
         "layers_count": 2,
         "setup_count": 1,
     }
+
+
+def test_reader_preserves_exact_paper_value():
+    readback = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (paper "A3")
+        )
+        """
+    )
+
+    assert readback["file_structure"]["paper_count"] == 1
+    assert readback["file_structure"]["paper"] == "A3"
+
+
+def test_reader_fails_closed_on_malformed_paper_scalar():
+    readback = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (paper "A4" "extra")
+        )
+        """
+    )
+
+    assert readback["file_structure"]["paper_count"] == 1
+    assert readback["file_structure"]["paper"] is None
+
+
+def test_connectivity_roundtrip_detects_paper_value_drift(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["file_structure"]["paper"] = "A3"
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["file_structure"]["equal"] is False
+    assert audit["file_structure"]["missing"][0]["paper"] == "A4"
+    assert audit["file_structure"]["unexpected"][0]["paper"] == "A3"
+    assert audit["roundtrip_equal"] is False
 
 
 def test_reader_exposes_board_and_footprint_fabrication_graphics():
