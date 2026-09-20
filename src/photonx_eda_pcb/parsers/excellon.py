@@ -74,6 +74,7 @@ class ExcellonParser:
         self.geometry_enabled=True
         self.file_plating="unknown";self._file_plating_source=None
         self.file_layer_span=None;self._file_layer_span_source=None
+        self.file_span_kind=None
         self._x2_aperture_plating=None;self._x2_aperture_source=None
         self.tool_plating={};self._tool_plating_source={}
 
@@ -114,6 +115,7 @@ class ExcellonParser:
         if match:
             plating=self._x2_plating_name(match.group(1))
             declared_span=tuple(sorted((int(match.group(2)),int(match.group(3)))))
+            declared_kind=match.group(4).lower()
             if declared_span[0]==declared_span[1]:
                 self._x2_fail(
                     p,
@@ -137,6 +139,17 @@ class ExcellonParser:
                         "conflicting Excellon X2 file layer-span evidence: "
                         f"L{self.file_layer_span[0]}..L{self.file_layer_span[1]} "
                         f"vs L{declared_span[0]}..L{declared_span[1]}"
+                    ),
+                )
+                return
+            if self.file_span_kind is not None and self.file_span_kind!=declared_kind:
+                self._x2_fail(
+                    p,
+                    out,
+                    line_no,
+                    (
+                        "conflicting Excellon X2 file span-kind evidence: "
+                        f"{self.file_span_kind} vs {declared_kind}"
                     ),
                 )
                 return
@@ -169,6 +182,7 @@ class ExcellonParser:
             self._file_plating_source=source
             self.file_layer_span=declared_span
             self._file_layer_span_source=source
+            self.file_span_kind=declared_kind
             return
 
         if command.startswith("TF.FILEFUNCTION,"):
@@ -208,7 +222,7 @@ class ExcellonParser:
 
     def _span_for_tool(self,tool):
         if self.file_layer_span is None:
-            return None,False,[]
+            return None,False,None,[]
         source=self._file_layer_span_source
         evidence=[]
         if source is not None:
@@ -217,13 +231,14 @@ class ExcellonParser:
                     "excellon_x2_file_span",
                     (
                         f"tool=T{tool}; copper_span="
-                        f"L{self.file_layer_span[0]}..L{self.file_layer_span[1]}"
+                        f"L{self.file_layer_span[0]}..L{self.file_layer_span[1]}; "
+                        f"kind={self.file_span_kind}"
                     ),
                     1.0,
                     source,
                 )
             )
-        return self.file_layer_span,True,evidence
+        return self.file_layer_span,True,self.file_span_kind,evidence
 
     def _plating_for_tool(self,tool):
         if tool in self.tool_plating:
@@ -757,7 +772,7 @@ class ExcellonParser:
                 pt=Point(x,y)
                 src=SourceRef(str(p),line_no,line);obj_id=stable_id("drill",p.name,line_no,pt.x,pt.y,self.tool)
                 plating,plating_evidence=self._plating_for_tool(self.tool)
-                layer_span,span_proven,span_evidence=self._span_for_tool(self.tool)
+                layer_span,span_proven,span_kind,span_evidence=self._span_for_tool(self.tool)
                 out.drills.append(
                     DrillHit(
                         obj_id,
@@ -771,6 +786,7 @@ class ExcellonParser:
                         ),
                         layer_span=layer_span,
                         span_proven=span_proven,
+                        span_kind=span_kind,
                     )
                 )
                 self.current=pt;continue
