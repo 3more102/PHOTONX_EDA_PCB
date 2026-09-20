@@ -1,4 +1,6 @@
-import pytest\n\nfrom photonx_eda_pcb.exporters.kicad import export_kicad_with_report
+import pytest
+
+from photonx_eda_pcb.exporters.kicad import export_kicad_with_report
 from photonx_eda_pcb.kicad_reader import read_kicad_board_text
 from photonx_eda_pcb.mechanical_features import SlotFeature
 from photonx_eda_pcb.models import (
