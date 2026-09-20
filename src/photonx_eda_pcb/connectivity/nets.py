@@ -34,12 +34,21 @@ def _plated_via_evidence(
             drill_id,
             {
                 "pads": set(),
+                "barrel_contacts": set(),
                 "from_layer": data.get("from_layer"),
                 "to_layer": data.get("to_layer"),
                 "confidence": float(data.get("confidence", 0.0)),
             },
         )
-        entry["pads"].update((left_id, right_id))
+        evidence_pad_ids = tuple(data.get("evidence_pad_ids", ()) or ())
+        barrel_contact_ids = tuple(data.get("barrel_contact_ids", ()) or ())
+        if evidence_pad_ids:
+            entry["pads"].update(evidence_pad_ids)
+        elif data.get("contact") == "barrel_touch":
+            entry["barrel_contacts"].update((left_id, right_id))
+        else:
+            entry["pads"].update((left_id, right_id))
+        entry["barrel_contacts"].update(barrel_contact_ids)
         entry["confidence"] = min(
             float(entry["confidence"]),
             float(data.get("confidence", 0.0)),
@@ -59,14 +68,18 @@ def _plated_via_evidence(
                 sources.append(source)
 
         pads = ",".join(sorted(entry["pads"]))
+        detail = (
+            f"drill={drill_id}; "
+            f"span={entry['from_layer']}->{entry['to_layer']}; "
+            f"pads={pads}"
+        )
+        barrel_contacts = ",".join(sorted(entry["barrel_contacts"]))
+        if barrel_contacts:
+            detail += f"; barrel_contacts={barrel_contacts}"
         evidence.append(
             Evidence(
                 "plated_via_span",
-                (
-                    f"drill={drill_id}; "
-                    f"span={entry['from_layer']}->{entry['to_layer']}; "
-                    f"pads={pads}"
-                ),
+                detail,
                 float(entry["confidence"]),
                 source,
             )
