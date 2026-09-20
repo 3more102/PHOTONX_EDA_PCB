@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 
 from ..format_detection import detect_format
 from ..io.walk import DEFAULT_MAX_RECURSIVE_ENTRIES, bounded_regular_files
@@ -23,6 +24,7 @@ class ManufacturingFile:
     layer: str | None = None
     format_confidence: float = 0.0
     detection_reasons: tuple[str, ...] = ()
+    plating_hint: str | None = None
 
 
 def _candidate_files(source: Path, *, max_entries: int):
@@ -50,6 +52,31 @@ def _sniff_text(path: Path, limit: int = 256 * 1024) -> str:
         return raw.decode("utf-8-sig", errors="ignore")
     except OSError:
         return ""
+
+
+def infer_drill_plating_hint(filename: str) -> str | None:
+    """Infer explicit PTH/NPTH intent from a manufacturing filename.
+
+    This is deliberately conservative: only standalone/common plating tokens
+    are accepted. Ambiguous drill filenames keep plating unresolved.
+    """
+    stem = Path(filename).stem.lower()
+    tokens = tuple(
+        token for token in re.split(r"[^a-z0-9]+", stem) if token
+    )
+    compact = "".join(tokens)
+
+    if (
+        "npth" in tokens
+        or "nonplated" in compact
+        or "unplated" in tokens
+    ):
+        return "non-plated"
+
+    if "pth" in tokens or "plated" in tokens:
+        return "plated"
+
+    return None
 
 
 def discover_manufacturing_files(
@@ -80,7 +107,14 @@ def discover_manufacturing_files(
                 0.45 if suffix in _DRILL_SUFFIXES else 0.30
             )
             result.append(
-                ManufacturingFile(p, "drill", None, confidence, tuple(reasons))
+                ManufacturingFile(
+                    p,
+                    "drill",
+                    None,
+                    confidence,
+                    tuple(reasons),
+                    infer_drill_plating_hint(p.name),
+                )
             )
             continue
 
