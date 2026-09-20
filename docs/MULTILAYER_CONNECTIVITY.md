@@ -6,6 +6,8 @@ The reconstruction pipeline resolves via-span candidates after drill-to-pad asso
 
 A resolved span retains its complete traversed copper-layer path in `ViaSpanCandidate.layer_ids`. The normal reconstruction metadata serializes that path so downstream audits can see exactly which copper layers were considered inside the proven span.
 
+When an Excellon X2-compatible `TF.FileFunction` explicitly declares drill ordinals, that source span takes precedence over geometry-derived outermost overlap. PhotonX maps the ordinals only against a declared X2 copper stack order, except for the bounded two-layer `PTH/NPTH L1..L2` case. Blind and buried spans without a trustworthy ordinal stack remain unresolved and cannot silently widen to `F.Cu..B.Cu`.
+
 The pad candidates that prove a span remain connected as `pad_span` contacts. Tracks, pads, and `CopperRegion` objects on layers inside that span may additionally participate as `barrel_touch` contacts, but only when reconstructed copper reaches the finished drill wall within the configured connectivity tolerance.
 
 The barrel-contact predicate uses the drill boundary, not the complete drilled-hole disk. Copper that lies entirely inside the removed hole volume without reaching the wall therefore remains electrically separate. XY coincidence with the drill center is not sufficient evidence.
