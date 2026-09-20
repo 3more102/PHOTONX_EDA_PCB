@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added evidence-gated KiCad export for exact full-stack plated Excellon routed slots. Export requires complete copper pad-stack support and one unambiguous net; source-proven partial X2 Blind/Buried spans and unresolved X2 spans remain explicit omissions rather than being widened into KiCad `thru_hole` pads.
+
 - Extended KiCad via round-trip auditing to the documented optional `locked` token. PhotonX-exported vias are expected to remain unlocked, the reader now preserves lock state, and post-export locking is surfaced as deterministic via semantic drift instead of being silently ignored.
 
 - Hardened KiCad `paper` readback against malformed scalar arity. A singleton `(paper ...)` section is now accepted only when it contains exactly one value; extra trailing values fail closed as unknown and therefore fail the round-trip structure contract instead of being silently ignored.
