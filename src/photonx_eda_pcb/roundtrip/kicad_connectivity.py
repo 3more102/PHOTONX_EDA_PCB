@@ -2072,7 +2072,6 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "skipped_drill_ids": sorted(skipped_drill_ids),
         "skipped_outline_ids": sorted(skipped_outline_ids),
         "skipped_pad_ids": sorted(skipped_pad_ids),
-        "represented_via_pad_ids": sorted(represented_via_pad_ids),
         "skipped_track_ids": sorted(skipped_track_ids),
         "skipped_region_ids": sorted(skipped_region_ids),
         "skipped_slot_ids": sorted(skipped_slot_ids),
@@ -2115,6 +2114,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         ],
         "roundtrip_equal": roundtrip_equal,
         "source_connectivity_complete": source_connectivity_complete,
+        "represented_via_pad_ids": sorted(represented_via_pad_ids),
         "source_equivalent": bool(
             roundtrip_equal and source_connectivity_complete
         ),
