@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a canonical electrical-connectivity partition to KiCad round-trip auditing. Emitted tracks, recovered pads, copper regions, plated slots, and exactly proven vias are grouped by exported net using stable PhotonX identities; any cross-family net split, merge, duplicate identity, or rebinding now fails `roundtrip_equal` through `electrical_connectivity_partition` instead of appearing only as separate object-level mismatches.
+
 - Added exact KiCad export for straight non-plated Excellon routed paths. Two-point finite routes now become deterministic `PHOTONX:RecoveredNPTHRoute` oval NPTH footprints; route export/omission partitions are machine-readable, and KiCad round-trip verification checks recovered route identity, geometry, and unassigned-net semantics without misclassifying route footprints as component slots.
 
 - Added expected-empty KiCad fabrication-graphics auditing for direct F/B.Mask and F/B.Paste artwork. Top-level `gr_*` objects and footprint `fp_*`/property/zone graphics on mask/paste layers are now surfaced through `unexpected_fabrication_graphics` and fail round-trip verification instead of bypassing copper-only guards.
