@@ -2,16 +2,16 @@
 
 PHOTONX keeps XY overlap and vertical electrical connectivity as separate claims.
 
-The reconstruction pipeline now resolves via-span candidates after drill-to-pad association and stack-up inference. A cross-layer PhysicalGraph edge is created only when all of the following are true:
+The reconstruction pipeline resolves via-span candidates after drill-to-pad association and stack-up inference. A cross-layer PhysicalGraph edge is created only when the via span is proven and the matching source drill still carries explicit `plated` evidence.
 
-- the drill has explicit `plated` evidence;
-- the via span is proven from copper-pad observations on at least two copper layers;
-- the connected pad IDs are the exact candidates retained by the span resolver.
+A resolved span retains its complete traversed copper-layer path in `ViaSpanCandidate.layer_ids`. The normal reconstruction metadata serializes that path so downstream audits can see exactly which copper layers were considered inside the proven span.
 
-A proven span therefore produces `plated_via_span` graph edges between overlapping pad candidates on different layers. The edge records the drill ID, inferred span endpoints, confidence, and evidence strings. Physical-net provenance carries that same evidence, and the net confidence is bounded by the weakest via-span confidence used by the connected component.
+The pad candidates that prove a span remain connected as `pad_span` contacts. Tracks, pads, and `CopperRegion` objects on layers inside that span may additionally participate as `barrel_touch` contacts, but only when reconstructed copper reaches the finished drill wall within the configured connectivity tolerance.
 
-Unknown plating never creates a vertical electrical bridge. When a drill overlaps copper on multiple layers but its plating remains unknown, the normal reconstruction path emits `MULTILAYER_SPAN_UNKNOWN` and leaves the layers electrically separate. Explicit non-plated holes also remain separate, without being mislabeled as unknown.
+The barrel-contact predicate uses the drill boundary, not the complete drilled-hole disk. Copper that lies entirely inside the removed hole volume without reaching the wall therefore remains electrically separate. XY coincidence with the drill center is not sufficient evidence.
 
-Same-layer copper contact still uses the existing geometry predicates. Cross-layer connectivity is never inferred from XY coincidence alone.
+Unknown and explicitly non-plated drills never create vertical electrical bridges. A caller-supplied `proven=True` span cannot override the plating state stored on the source `DrillHit`.
 
-Current scope is intentionally conservative: the vertical bridge is established through observed pad candidates used to prove the via span. Region-only or track-only barrel contact without pad evidence remains unresolved rather than guessed.
+Physical-net provenance distinguishes the pad IDs that proved the span from additional barrel-contact object IDs. Net confidence remains bounded by the weakest participating plated-via span confidence.
+
+Same-layer copper contact continues to use the normal geometry predicates. Cross-layer connectivity is never inferred from XY overlap alone.
