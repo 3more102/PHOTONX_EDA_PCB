@@ -5,8 +5,11 @@ import pytest
 
 from photonx_eda_pcb.copper_solver.barrel import barrel_is_electrical, barrel_layers
 from photonx_eda_pcb.errors import ParseError
+from photonx_eda_pcb.exporters.kicad import export_kicad_with_report
+from photonx_eda_pcb.kicad_reader import read_kicad_board_text
 from photonx_eda_pcb.parsers.excellon import ExcellonParser
 from photonx_eda_pcb.pipeline import reconstruct
+from photonx_eda_pcb.roundtrip.kicad_connectivity import compare_kicad_connectivity
 
 
 GERBER_BODY = """%FSLAX24Y24*%
@@ -195,6 +198,41 @@ def test_x2_buried_span_connects_only_declared_inner_layers(tmp_path: Path):
         frozenset({"In1.Cu", "In2.Cu"}),
         frozenset({"B.Cu"}),
     }
+
+
+@pytest.mark.parametrize(
+    ("drill_function", "expected_type", "expected_layers"),
+    [
+        ("Plated,1,2,Blind,Drill", "blind", ("F.Cu", "In1.Cu")),
+        ("Plated,2,3,Buried,Drill", "buried", ("In1.Cu", "In2.Cu")),
+    ],
+)
+def test_x2_partial_span_exports_exact_kicad_via_semantics_end_to_end(
+    tmp_path: Path,
+    drill_function: str,
+    expected_type: str,
+    expected_layers: tuple[str, str],
+):
+    _write_four_layer_board(tmp_path, drill_function)
+
+    board = reconstruct(tmp_path).board
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "recovered.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8")
+    readback = read_kicad_board_text(text)
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert len(readback["vias"]) == 1
+    assert readback["vias"][0]["type"] == expected_type
+    assert readback["vias"][0]["layers"] == expected_layers
+    assert "(via blind " in text
+    assert "(via buried " not in text
+    assert report.exported_via_span_ids == [board.drills[0].id]
+    assert report.skipped_via_span_ids == []
+    assert audit["vias"]["equal"] is True
+    assert audit["losses"]["omitted_proven_via_span_drill_ids"] == []
 
 
 def test_x2_span_beyond_declared_stackup_never_falls_back_to_geometry(

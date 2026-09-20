@@ -472,7 +472,8 @@ def _via_span_lines(board,net_num,report,exportable,omitted,problems):
         x,y=item["at"]
         from_layer,to_layer=item["layers"]
         via_type=str(item.get("via_type","through"))
-        via_type_token="" if via_type=="through" else f" {via_type}"
+        serialized_via_type="blind" if via_type in {"blind","buried"} else via_type
+        via_type_token="" if serialized_via_type=="through" else f" {serialized_via_type}"
         lines.append(
             f'  (via{via_type_token} (at {x:.6f} {y:.6f}) '
             f'(size {item["size"]:.6f}) '

@@ -747,7 +747,7 @@ def proven_via_span_export_plan(board):
             # KiCad serializes both blind and buried vias with the blind
             # via type; endpoint layers distinguish surface-reaching
             # blind vias from fully internal buried vias.
-            via_type = "blind"
+            via_type = x2_span_kind
 
         support = [pad_by_id[pad_id] for pad_id in pad_ids]
         by_layer = {}

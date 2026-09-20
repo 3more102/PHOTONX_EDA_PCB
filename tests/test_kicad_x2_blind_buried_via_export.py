@@ -83,7 +83,7 @@ def test_x2_blind_span_exports_as_kicad_blind_via(tmp_path: Path):
     assert audit["source_equivalent"] is True
 
 
-def test_x2_buried_span_exports_as_kicad_blind_via(tmp_path: Path):
+def test_x2_buried_span_serializes_blind_token_and_reads_back_buried(tmp_path: Path):
     board = BoardModel(
         nets=[_net()],
         pads=[
@@ -101,11 +101,14 @@ def test_x2_buried_span_exports_as_kicad_blind_via(tmp_path: Path):
     )
 
     path, report = export_kicad_with_report(board, tmp_path / "buried.kicad_pcb")
-    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8")
+    readback = read_kicad_board_text(text)
     audit = compare_kicad_connectivity(board, readback, report)
 
+    assert "(via blind " in text
+    assert "(via buried " not in text
     assert len(readback["vias"]) == 1
-    assert readback["vias"][0]["type"] == "blind"
+    assert readback["vias"][0]["type"] == "buried"
     assert readback["vias"][0]["layers"] == ("In1.Cu", "In2.Cu")
     assert report.exported_via_span_ids == ["D1"]
     assert report.skipped_via_span_ids == []
