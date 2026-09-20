@@ -36,5 +36,25 @@ validation findings remain inspectable without inventing object identity.
 Diagnostic, validation, and unknown-plating rows display confidence as
 unavailable rather than presenting an invented probability.
 
+The adjacent **Via Evidence** tab is a read-only audit view over reconstructed
+`board.metadata["via_spans"]`. It reuses `proven_via_span_export_plan()`, so
+the GUI and KiCad exporter share one eligibility policy instead of maintaining
+separate heuristics. Each span is classified as:
+
+- `exportable` when a proven span is exactly representable by the current KiCad
+  via policy;
+- `omitted` when the span is proven but exact export would require guessing,
+  with the KiCad omission code and reason shown directly;
+- `unproven` when reconstruction does not establish a plated vertical
+  electrical connection;
+- `invalid` when via-span metadata is malformed, contradictory, or duplicated.
+
+The tab also shows the drill plating state, reconstructed layer span, resolved
+net when unambiguous, supporting-pad IDs in the inspector, and confidence when
+the reconstruction supplied a valid value. Selecting a row selects the backing
+drill when it exists and highlights its resolved physical net. Exportability is
+presented as an audit status only; it does not mutate evidence or promote an
+unproven span.
+
 Human decisions remain explicit review metadata and do not mutate source
 evidence automatically.
