@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a model-backed via evidence review overlay to the Tkinter viewer. Reconstructed via spans are classified as exportable, conservatively omitted, unproven, or invalid using the existing KiCad via policy; the canvas exposes those states without inventing copper semantics, the inspector shows source plating/layer/pad/confidence/net evidence plus exact omission reasons, and the status bar reports deterministic via-review counts.
+
 - Promoted fully trusted Gerber X2 `.P` component-reference evidence into component reconstruction before geometric pairing. Source-proven refdes groups retain pin/function evidence, repeated step-and-repeat instances stay separate, lower-confidence identity is not escalated, and conflicting trusted refdes evidence remains explicit and fail-closed instead of being reassigned by proximity.
 
 - Added exact KiCad export for straight non-plated Excellon routed paths. Two-point finite routes now become deterministic `PHOTONX:RecoveredNPTHRoute` oval NPTH footprints; route export/omission partitions are machine-readable, and KiCad round-trip verification checks recovered route identity, geometry, and unassigned-net semantics without misclassifying route footprints as component slots.
