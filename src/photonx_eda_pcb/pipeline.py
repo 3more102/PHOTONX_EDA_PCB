@@ -239,6 +239,26 @@ def _apply_x2_copper_stackup_evidence(board: BoardModel, files) -> None:
     board.metadata["x2_copper_stackup"] = metadata
 
 
+def _report_unresolved_x2_drill_spans(board: BoardModel, spans) -> None:
+    source_path = str(board.metadata.get("source_input", ""))
+    for span in spans:
+        unresolved = [
+            item
+            for item in span.evidence
+            if str(item).startswith("X2 span unresolved:")
+        ]
+        if not unresolved:
+            continue
+        board.diagnostics.append(
+            ParseDiagnostic(
+                "warning",
+                "X2_DRILL_SPAN_UNRESOLVED",
+                f"{span.drill_id}: {unresolved[0]}",
+                source_path,
+            )
+        )
+
+
 def _report_unproven_multilayer_spans(board: BoardModel, spans) -> None:
     drill_by_id = {drill.id: drill for drill in board.drills}
     source_path = str(board.metadata.get("source_input", ""))
@@ -336,6 +356,7 @@ def reconstruct(
         )
         board.metadata["stackup"] = stackup.to_dict()
         board.metadata["via_spans"] = _serialize_via_spans(via_spans)
+        _report_unresolved_x2_drill_spans(board, via_spans)
         _report_unproven_multilayer_spans(board, via_spans)
 
         graph = build_physical_graph(
