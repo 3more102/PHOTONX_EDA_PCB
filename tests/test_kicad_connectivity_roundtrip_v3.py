@@ -184,6 +184,19 @@ def test_connectivity_roundtrip_detects_singleton_section_drift(
     assert audit["roundtrip_equal"] is False
 
 
+def test_connectivity_roundtrip_detects_paper_value_drift(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    assert readback["file_structure"]["paper"] == "A4"
+    readback["file_structure"]["paper"] = "A3"
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["file_structure"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+
+
 def test_reader_preserves_singleton_board_section_counts():
     readback = read_kicad_board_text(
         """
@@ -201,6 +214,7 @@ def test_reader_preserves_singleton_board_section_counts():
     assert readback["file_structure"] == {
         "general_count": 2,
         "paper_count": 1,
+        "paper": "A4",
         "layers_count": 2,
         "setup_count": 1,
     }
@@ -256,6 +270,45 @@ def test_reader_exposes_board_and_footprint_fabrication_graphics():
             "child_index": 4,
         }
     ]
+
+
+def test_reader_rejects_non_graphic_direct_fabrication_items():
+    readback = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (image
+            (layer "F.Mask")
+            (uuid 00000000-0000-0000-0000-000000000086)
+          )
+          (footprint "PHOTONX:RecoveredPad"
+            (layer "F.Cu")
+            (uuid 00000000-0000-0000-0000-000000000087)
+            (at 0 0)
+            (property "Reference" "P1"
+              (at 0 -2 0)
+              (layer "F.SilkS")
+              hide
+              (uuid 00000000-0000-0000-0000-000000000088)
+            )
+            (image
+              (layer "B.Mask")
+              (uuid 00000000-0000-0000-0000-000000000089)
+            )
+          )
+        )
+        """
+    )
+
+    assert readback["unexpected_fabrication_graphics"][0]["type"] == "image"
+    assert readback["unexpected_fabrication_graphics"][0]["layer"] == "F.Mask"
+    assert (
+        readback["footprints"][0]["unexpected_fabrication_graphics"][0]["type"]
+        == "image"
+    )
+    assert (
+        readback["footprints"][0]["unexpected_fabrication_graphics"][0]["layer"]
+        == "B.Mask"
+    )
 
 
 def test_connectivity_roundtrip_rejects_direct_fabrication_graphics():
@@ -485,7 +538,7 @@ def test_kicad_reader_preserves_optional_manufacturing_settings():
     }
 
 
-def test_connectivity_roundtrip_marks_proven_via_span_as_source_loss(tmp_path):
+def test_connectivity_roundtrip_exports_exact_proven_via_span(tmp_path):
     board = BoardModel(
         nets=[_net()],
         pads=[
@@ -512,18 +565,22 @@ def test_connectivity_roundtrip_marks_proven_via_span_as_source_loss(tmp_path):
     readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
     audit = compare_kicad_connectivity(board, readback, report)
 
-    assert readback["vias"] == []
-    assert report.skipped_via_spans == 1
-    assert report.skipped_via_span_ids == ["D1"]
-    assert any(
-        issue.code == "KICAD_PROVEN_VIA_SPAN_UNSUPPORTED"
-        and issue.object_id == "D1"
-        for issue in report.issues
-    )
+    assert len(readback["vias"]) == 1
+    assert readback["vias"][0]["at"] == (0.0, 0.0)
+    assert readback["vias"][0]["size"] == 1.0
+    assert readback["vias"][0]["drill"] == 0.4
+    assert readback["vias"][0]["layers"] == ("F.Cu", "B.Cu")
+    assert readback["vias"][0]["net"] == 1
+    assert report.exported_via_spans == 1
+    assert report.exported_via_span_ids == ["D1"]
+    assert report.skipped_via_spans == 0
+    assert report.skipped_via_span_ids == []
+    assert audit["vias"]["equal"] is True
     assert audit["roundtrip_equal"] is True
-    assert audit["source_connectivity_complete"] is False
-    assert audit["source_equivalent"] is False
-    assert audit["losses"]["omitted_proven_via_span_drill_ids"] == ["D1"]
+    assert audit["source_connectivity_complete"] is True
+    assert audit["source_equivalent"] is True
+    assert audit["losses"]["skipped_drill_ids"] == []
+    assert audit["losses"]["omitted_proven_via_span_drill_ids"] == []
 
 
 def test_invalid_proven_via_span_metadata_fails_closed(tmp_path):
