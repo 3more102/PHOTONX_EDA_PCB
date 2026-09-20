@@ -219,6 +219,9 @@ def x2_component_export_plan(board):
         for component in source_components
         for pad_id in getattr(component, "pad_ids", ())
     )
+    component_id_counts = Counter(
+        str(component.id) for component in source_components
+    )
     duplicate_object_ids = set(kicad_duplicate_object_ids(board))
     pad_by_id = {
         str(pad.id): pad
@@ -238,6 +241,10 @@ def x2_component_export_plan(board):
 
         if getattr(component, "confidence", None) != 1.0:
             reasons.append("component confidence is not source-certain")
+        if component_id_counts[component_id] != 1:
+            reasons.append(
+                "component ID is duplicated across source-proven X2 components"
+            )
         if not isinstance(reference, str) or not reference:
             reasons.append("component reference is missing")
         if not pad_ids:
@@ -362,16 +369,23 @@ def x2_component_export_plan(board):
         planned_pads = []
         for row in rows:
             pad = row["pad"]
+            local_x = float(pad.center.x) - origin[0]
+            local_y = float(pad.center.y) - origin[1]
+            local_angle = float(row["descriptor"]["pad_angle"])
+            if footprint_layer == "B.Cu":
+                # KiCad stores footprint children in the unflipped library
+                # frame, then mirrors the footprint across its local X axis
+                # when it is placed on B.Cu. Invert that transform here.
+                local_y = -local_y if local_y != 0.0 else 0.0
+                local_angle = -local_angle if local_angle != 0.0 else 0.0
             planned_pads.append(
                 {
                     "pad_id": row["pad_id"],
                     "number": row["number"],
                     "function": row["function"],
                     "net_id": getattr(pad, "net_id", None),
-                    "at": (
-                        float(pad.center.x) - origin[0],
-                        float(pad.center.y) - origin[1],
-                    ),
+                    "at": (local_x, local_y),
+                    "angle": local_angle,
                     "descriptor": row["descriptor"],
                 }
             )
