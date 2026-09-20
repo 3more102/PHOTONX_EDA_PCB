@@ -29,4 +29,22 @@ def read_board_settings(root):
             "pad_to_mask_clearance",
             label="pad_to_mask_clearance",
         ),
+        "solder_mask_min_width": _optional_float(
+            setup,
+            "solder_mask_min_width",
+            label="solder_mask_min_width",
+        ),
+        "pad_to_paste_clearance": _optional_float(
+            setup,
+            "pad_to_paste_clearance",
+            label="pad_to_paste_clearance",
+        ),
+        "pad_to_paste_clearance_ratio": _optional_float(
+            setup,
+            "pad_to_paste_clearance_ratio",
+            label="pad_to_paste_clearance_ratio",
+        ),
+        "stackup_present": bool(
+            setup is not None and child(setup, "stackup") is not None
+        ),
     }

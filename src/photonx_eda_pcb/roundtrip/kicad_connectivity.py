@@ -1255,6 +1255,10 @@ def compare_kicad_connectivity(board, readback, export_report=None):
                 "pad_to_mask_clearance": _r(
                     KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM
                 ),
+                "solder_mask_min_width": None,
+                "pad_to_paste_clearance": None,
+                "pad_to_paste_clearance_ratio": None,
+                "stackup_present": False,
             }
         ],
         [
@@ -1271,6 +1275,41 @@ def compare_kicad_connectivity(board, readback, export_report=None):
                     ) is None
                     else _r(
                         readback["board_settings"]["pad_to_mask_clearance"]
+                    )
+                ),
+                "solder_mask_min_width": (
+                    None
+                    if readback.get("board_settings", {}).get(
+                        "solder_mask_min_width"
+                    ) is None
+                    else _r(
+                        readback["board_settings"]["solder_mask_min_width"]
+                    )
+                ),
+                "pad_to_paste_clearance": (
+                    None
+                    if readback.get("board_settings", {}).get(
+                        "pad_to_paste_clearance"
+                    ) is None
+                    else _r(
+                        readback["board_settings"]["pad_to_paste_clearance"]
+                    )
+                ),
+                "pad_to_paste_clearance_ratio": (
+                    None
+                    if readback.get("board_settings", {}).get(
+                        "pad_to_paste_clearance_ratio"
+                    ) is None
+                    else _r(
+                        readback["board_settings"][
+                            "pad_to_paste_clearance_ratio"
+                        ]
+                    )
+                ),
+                "stackup_present": bool(
+                    readback.get("board_settings", {}).get(
+                        "stackup_present",
+                        False,
                     )
                 ),
             }

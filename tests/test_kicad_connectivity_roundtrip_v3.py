@@ -142,6 +142,60 @@ def test_connectivity_roundtrip_detects_pad_to_mask_clearance_drift(tmp_path):
     assert audit["roundtrip_equal"] is False
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("solder_mask_min_width", 0.1),
+        ("pad_to_paste_clearance", -0.05),
+        ("pad_to_paste_clearance_ratio", 90.0),
+        ("stackup_present", True),
+    ],
+)
+def test_connectivity_roundtrip_rejects_unexpected_manufacturing_settings(
+    tmp_path,
+    field,
+    value,
+):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["board_settings"][field] = value
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["board_settings"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+    assert audit["board_settings"]["unexpected"][0][field] == value
+
+
+def test_kicad_reader_preserves_optional_manufacturing_settings():
+    text = """
+    (kicad_pcb
+      (general (thickness 1.6))
+      (setup
+        (stackup)
+        (pad_to_mask_clearance 0)
+        (solder_mask_min_width 0.1)
+        (pad_to_paste_clearance -0.05)
+        (pad_to_paste_clearance_ratio 90)
+      )
+    )
+    """
+    readback = read_kicad_board_text(text)
+
+    assert readback["board_settings"] == {
+        "thickness": 1.6,
+        "pad_to_mask_clearance": 0.0,
+        "solder_mask_min_width": 0.1,
+        "pad_to_paste_clearance": -0.05,
+        "pad_to_paste_clearance_ratio": 90.0,
+        "stackup_present": True,
+    }
+
+
 def test_connectivity_roundtrip_marks_proven_via_span_as_source_loss(tmp_path):
     board = BoardModel(
         nets=[_net()],

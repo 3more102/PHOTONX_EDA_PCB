@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extended KiCad board-settings round-trip auditing to optional manufacturing overrides. The reader now preserves `solder_mask_min_width`, `pad_to_paste_clearance`, `pad_to_paste_clearance_ratio`, and stack-up presence; because PhotonX does not emit these source-unproven settings, any post-export insertion is fail-visible in `board_settings` instead of silently changing solder-mask/paste or stack-up manufacturing behavior.
+
 - Hardened KiCad export against duplicate physical object IDs even when callers bypass `validate_board()`. Any repeated ID across exportable tracks, pads, point drills, outline segments, slots, or copper regions is omitted from every affected family before deterministic UUID generation, reported once as `KICAD_OBJECT_ID_DUPLICATE`, accepted by omission-manifest validation, and surfaced as `duplicate_object_ids` source-equivalence loss.
 
 - Hardened KiCad net-table export against duplicate physical net IDs. Duplicate `NetGroup.id` values are now validation errors and are excluded wholesale from KiCad ordinal assignment instead of silently using the last duplicate in a dictionary; unique nets are compactly renumbered, dependent tracks fail closed, pad net claims remain unresolved, and round-trip reports expose `ambiguous_net_ids` as a source-equivalence loss.

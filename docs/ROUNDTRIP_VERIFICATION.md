@@ -12,6 +12,7 @@ The connectivity audit checks:
 
 - board fabrication defaults emitted by PhotonX: board thickness and global pad-to-mask clearance;
 - exact declared KiCad layer-table ID/name/type identity, including the contiguous inner-copper prefix and generated user layers;
+- exact generated board settings plus fail-closed absence checks for optional solder-mask/paste manufacturing overrides and stack-up data that PhotonX does not emit;
 - exact KiCad net-table code/name identity;
 - net bindings and exact geometry on track segments the exporter reported as emitted; non-finite/non-numeric coordinates, non-positive/non-finite widths, zero-length segments, unsupported layers, and unresolved nets are omitted explicitly and participate in source-loss accounting;
 - fail-closed rejection of unexpected top-level KiCad routed `arc` track objects (distinct from graphical `gr_arc` / footprint `fp_arc` objects);
