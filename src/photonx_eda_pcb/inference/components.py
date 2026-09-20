@@ -124,12 +124,12 @@ def _source_component_hypotheses(pads):
             pin_numbers = tuple(
                 value
                 for value in _trusted_evidence_values(pad, _X2_PIN)
-                if value
+                if isinstance(value, str) and value.strip()
             )
             pin_functions = tuple(
                 value
                 for value in _trusted_evidence_values(pad, _X2_PIN_FUNCTION)
-                if value
+                if isinstance(value, str) and value.strip()
             )
 
             if len(pin_numbers) != 1:
