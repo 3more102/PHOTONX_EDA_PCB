@@ -115,7 +115,11 @@ def _source_component_hypotheses(pads):
                 for detail in step_repeat
             )
 
+        source_pin_map = {}
+        source_pin_functions = {}
         pin_details = []
+        unresolved_pin_pads = []
+        unresolved_function_pads = []
         for pad in members:
             pin_numbers = tuple(
                 value
@@ -127,16 +131,36 @@ def _source_component_hypotheses(pads):
                 for value in _trusted_evidence_values(pad, _X2_PIN_FUNCTION)
                 if value
             )
+
             if len(pin_numbers) != 1:
+                unresolved_pin_pads.append(pad.id)
                 continue
 
-            detail = f"{pad.id}={pin_numbers[0]}"
+            pin_number = pin_numbers[0]
+            source_pin_map[pad.id] = pin_number
+            detail = f"{pad.id}={pin_number}"
+
             if len(pin_functions) == 1:
-                detail += f" ({pin_functions[0]})"
+                pin_function = pin_functions[0]
+                source_pin_functions[pad.id] = pin_function
+                detail += f" ({pin_function})"
+            elif len(pin_functions) > 1:
+                unresolved_function_pads.append(pad.id)
+
             pin_details.append(detail)
 
         if pin_details:
             evidence.append("Gerber X2 .P pins: " + ", ".join(pin_details))
+        if unresolved_pin_pads:
+            evidence.append(
+                "Gerber X2 .P pin identity unresolved for pads: "
+                + ", ".join(unresolved_pin_pads)
+            )
+        if unresolved_function_pads:
+            evidence.append(
+                "Gerber X2 .P pin function unresolved for pads: "
+                + ", ".join(unresolved_function_pads)
+            )
 
         package_hint, package_evidence = _package_hint_from_pads(members)
         evidence.extend(package_evidence)
@@ -156,6 +180,8 @@ def _source_component_hypotheses(pads):
                 evidence,
                 reference=refdes,
                 package_hint=package_hint,
+                source_pin_map=source_pin_map,
+                source_pin_functions=source_pin_functions,
             )
         )
 
