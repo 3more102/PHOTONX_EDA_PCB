@@ -56,11 +56,13 @@ def canonical_observed_zone(zone):
     )
 
 
-def compare_kicad_copper_regions(board, observed_zones):
+def compare_kicad_copper_regions(board, observed_zones, region_ids=None):
     net_names = _expected_net_names(board)
+    selected = None if region_ids is None else {str(item) for item in region_ids}
     expected = sorted(
         canonical_expected_region(region, net_names)
         for region in getattr(board, "regions", ())
+        if selected is None or str(region.id) in selected
     )
     observed = sorted(canonical_observed_zone(zone) for zone in observed_zones)
     return {

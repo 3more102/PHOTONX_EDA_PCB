@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Integrated canonical KiCad CopperRegion shell/hole verification into the main connectivity audit. `region_geometry` now applies the existing start-point/winding-invariant comparator to exported regions only, so zone geometry drift fails `roundtrip_equal` while policy-skipped source regions remain source-equivalence losses.
+
 - Integrated existing KiCad mechanical-slot round-trip verification into the main connectivity audit. `slot_geometry` now checks canonical center/overall length/width/plating for exported NPTH and plated slots, so geometry drift fails `roundtrip_equal` while policy-skipped source slots remain source-equivalence losses rather than readback corruption.
 
 - Added exact recovered-pad geometry verification to KiCad connectivity round-trip auditing. Export and readback now share one pad export descriptor and compare footprint/pad placement, layers, type, shape, size, angle, drill shape/size/offset, UUIDs, and net binding; malformed pad geometry is fail-visible instead of raising an unchecked readback error.

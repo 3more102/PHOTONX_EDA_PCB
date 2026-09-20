@@ -73,6 +73,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "vias",
         "recovered_pads",
         "copper_regions",
+        "region_geometry",
         "recovered_slots",
         "slot_geometry",
     ]
@@ -320,6 +321,27 @@ def test_connectivity_roundtrip_detects_recovered_child_pad_uuid_drift(
         audit[comparison_key]["missing"][0]["pad_uuid"]
         != audit[comparison_key]["unexpected"][0]["pad_uuid"]
     )
+
+
+def test_connectivity_roundtrip_detects_region_geometry_drift(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    zone = readback["zones"][0]
+    outline = list(zone["outline"])
+    outline[0] = (outline[0][0] + 0.5, outline[0][1])
+    zone["outline"] = tuple(outline)
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["regions"]["equal"] is True
+    assert audit["region_geometry"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+    assert audit["region_geometry"]["missing"]
+    assert audit["region_geometry"]["unexpected"]
 
 
 def test_connectivity_roundtrip_detects_zone_net_drift(tmp_path):
