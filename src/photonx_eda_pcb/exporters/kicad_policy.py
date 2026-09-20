@@ -16,6 +16,7 @@ def kicad_duplicate_object_ids(board):
         *board.outline,
         *getattr(board, "slots", ()),
         *getattr(board, "regions", ()),
+        *getattr(board, "routes", ()),
     ]
     counts = Counter(obj.id for obj in objects)
     return tuple(
