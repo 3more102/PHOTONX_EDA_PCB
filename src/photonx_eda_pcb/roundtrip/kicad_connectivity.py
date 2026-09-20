@@ -1015,10 +1015,21 @@ def _region_fill_item(region_id, fill_enabled, filled_polygons):
 
 
 def _region_rules_item(region_id, rules):
+    def optional_number(name):
+        value = rules.get(name)
+        return None if value is None else _r(value)
+
     return {
         "id": str(region_id),
+        "hatch_style": (
+            None if rules.get("hatch_style") is None else str(rules["hatch_style"])
+        ),
+        "hatch_pitch": optional_number("hatch_pitch"),
         "priority": int(rules.get("priority", 0)),
         "keepout": bool(rules.get("keepout", False)),
+        "connect_type": (
+            None if rules.get("connect_type") is None else str(rules["connect_type"])
+        ),
         "fill_mode": (
             None
             if rules.get("fill_mode") is None
@@ -1047,12 +1058,19 @@ def _region_rules_item(region_id, rules):
             if rules.get("thermal_bridge_width") is None
             else _r(rules["thermal_bridge_width"])
         ),
-        "island_removal_mode": rules.get("island_removal_mode"),
-        "island_area_min": (
-            None
-            if rules.get("island_area_min") is None
-            else _r(rules["island_area_min"])
+        "smoothing": (
+            None if rules.get("smoothing") is None else str(rules["smoothing"])
         ),
+        "smoothing_radius": optional_number("smoothing_radius"),
+        "island_removal_mode": rules.get("island_removal_mode"),
+        "island_area_min": optional_number("island_area_min"),
+        "hatch_thickness": optional_number("hatch_thickness"),
+        "hatch_gap": optional_number("hatch_gap"),
+        "hatch_orientation": optional_number("hatch_orientation"),
+        "hatch_smoothing_level": rules.get("hatch_smoothing_level"),
+        "hatch_smoothing_value": optional_number("hatch_smoothing_value"),
+        "hatch_border_algorithm": rules.get("hatch_border_algorithm"),
+        "hatch_min_hole_area": optional_number("hatch_min_hole_area"),
     }
 
 
@@ -1066,16 +1084,28 @@ def _expected_region_rules(board, exported_ids):
             _region_rules_item(
                 region.id,
                 {
+                    "hatch_style": "edge",
+                    "hatch_pitch": 0.5,
                     "priority": 0,
                     "keepout": False,
+                    "connect_type": None,
                     "fill_mode": None,
                     "filled_areas_thickness": True,
                     "connect_clearance": 0.5,
                     "min_thickness": 0.25,
                     "thermal_gap": None if holes else 0.5,
                     "thermal_bridge_width": None if holes else 0.5,
+                    "smoothing": None,
+                    "smoothing_radius": None,
                     "island_removal_mode": None if holes else 1,
                     "island_area_min": None,
+                    "hatch_thickness": None,
+                    "hatch_gap": None,
+                    "hatch_orientation": None,
+                    "hatch_smoothing_level": None,
+                    "hatch_smoothing_value": None,
+                    "hatch_border_algorithm": None,
+                    "hatch_min_hole_area": None,
                 },
             )
         )

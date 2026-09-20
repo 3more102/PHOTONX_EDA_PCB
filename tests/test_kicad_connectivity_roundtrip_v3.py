@@ -1270,10 +1270,22 @@ def test_connectivity_roundtrip_detects_region_rule_drift(tmp_path):
     ("key", "value"),
     [
         ("priority", 4),
+        ("hatch_style", "full"),
+        ("hatch_pitch", 0.75),
         ("keepout", True),
+        ("connect_type", "full"),
         ("fill_mode", "hatched"),
         ("filled_areas_thickness", False),
+        ("smoothing", "fillet"),
+        ("smoothing_radius", 0.2),
         ("island_area_min", 1.0),
+        ("hatch_thickness", 0.2),
+        ("hatch_gap", 0.6),
+        ("hatch_orientation", 30.0),
+        ("hatch_smoothing_level", 2),
+        ("hatch_smoothing_value", 0.4),
+        ("hatch_border_algorithm", 1),
+        ("hatch_min_hole_area", 0.8),
     ],
 )
 def test_connectivity_roundtrip_detects_region_semantic_rule_drift(
