@@ -3,7 +3,7 @@ from .layer_roles import role_for_layer,is_copper
 
 def infer_stackup(board)->StackupModel:
     names=[]
-    for obj in [*board.tracks,*board.pads]:
+    for obj in [*board.tracks,*board.pads,*getattr(board, "regions", ())]:
         if getattr(obj,'layer',None) and obj.layer not in names:names.append(obj.layer)
     if board.outline and 'Edge.Cuts' not in names:names.append('Edge.Cuts')
     def key(n):
