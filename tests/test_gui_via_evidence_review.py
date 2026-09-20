@@ -87,6 +87,7 @@ def _board():
             DrillHit("D1", Point(0, 0), 0.4, "plated"),
             DrillHit("D2", Point(2, 0), 0.4, "plated"),
             DrillHit("D3", Point(4, 0), 0.4, "unknown"),
+            DrillHit("D4", Point(6, 0), 0.4, "plated"),
         ],
         nets=[
             NetGroup(
@@ -120,25 +121,34 @@ def _board():
                     proven=False,
                     confidence=0.25,
                 ),
+                _span(
+                    "D4",
+                    from_layer="F.Cu",
+                    to_layer="F.Cu",
+                    pad_ids=("P1", "P2"),
+                ),
             ]
         },
     )
 
 
-def test_via_review_classifies_exportable_omitted_and_unproven():
+def test_via_review_classifies_exportable_omitted_unproven_and_invalid():
     rows = build_via_review_descriptors(_board())
 
-    assert [row.drill_id for row in rows] == ["D1", "D2", "D3"]
+    assert [row.drill_id for row in rows] == ["D1", "D2", "D3", "D4"]
     assert [row.status for row in rows] == [
         "exportable",
         "omitted",
         "unproven",
+        "invalid",
     ]
 
     assert rows[0].net_id == "N1"
     assert rows[0].export_code is None
     assert rows[1].export_code == "KICAD_PROVEN_VIA_TYPE_UNPROVEN"
     assert rows[2].confidence == 0.25
+    assert rows[3].export_code == "KICAD_VIA_SPAN_METADATA_INVALID"
+    assert "two distinct non-empty copper layers" in rows[3].export_message
 
 
 def test_via_review_descriptor_preserves_source_evidence():
@@ -158,5 +168,5 @@ def test_via_review_summary_is_deterministic():
         "exportable": 1,
         "omitted": 1,
         "unproven": 1,
-        "invalid": 0,
+        "invalid": 1,
     }
