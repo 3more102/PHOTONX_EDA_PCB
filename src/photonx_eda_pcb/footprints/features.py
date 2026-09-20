@@ -38,6 +38,7 @@ def _principal_layout(pads,cx,cy):
     if len(pads)<2:
         return {
             'principal_angle_deg':0.0,
+            'principal_aspect':1.0,
             'primary_group_sizes':(len(pads),) if pads else (),
             'secondary_group_sizes':(len(pads),) if pads else (),
             'primary_pitch_cv':None,
@@ -64,8 +65,11 @@ def _principal_layout(pads,cx,cy):
     tolerance=max(0.05,(median(short_sizes)*0.35 if short_sizes else 0.05))
     primary_sizes,primary_centers=_cluster_axis(primary,tolerance)
     secondary_sizes,secondary_centers=_cluster_axis(secondary,tolerance)
+    primary_span=max(max(primary)-min(primary),1e-9)
+    secondary_span=max(max(secondary)-min(secondary),1e-9)
     return {
         'principal_angle_deg':angle*180.0/3.141592653589793,
+        'principal_aspect':max(primary_span/secondary_span,secondary_span/primary_span),
         'primary_group_sizes':primary_sizes,
         'secondary_group_sizes':secondary_sizes,
         'primary_pitch_cv':_pitch_cv(primary_centers),
@@ -83,6 +87,7 @@ def extract_group_features(pads):
             'drilled_fraction':0.0,
             'pitch_min':None,
             'bbox_aspect':1.0,
+            'principal_aspect':1.0,
             'pad_area_cv':None,
             'shape_uniformity':0.0,
             'layer_count':0,
