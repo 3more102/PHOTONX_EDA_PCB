@@ -2,6 +2,7 @@ from .sexpr import parse_sexpr
 from .layers import read_layers
 from .nets import read_nets
 from .segments import read_segments
+from .track_arcs import read_track_arcs
 from .vias import read_vias
 from .footprints import read_footprints
 from .graphics import read_edge_graphics
@@ -19,6 +20,7 @@ def read_kicad_board_text(text):
         "layers": read_layers(root),
         "nets": read_nets(root),
         "segments": read_segments(root),
+        "track_arcs": read_track_arcs(root),
         "vias": read_vias(root),
         "zones": read_zones(root),
         "footprints": footprints,

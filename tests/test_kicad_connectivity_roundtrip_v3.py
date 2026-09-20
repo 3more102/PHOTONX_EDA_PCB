@@ -73,6 +73,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "net_table",
         "tracks",
         "vias",
+        "track_arcs",
         "board_outline",
         "foreign_footprints",
         "recovered_pads",
@@ -303,6 +304,64 @@ def test_connectivity_roundtrip_rejects_foreign_footprint(tmp_path):
         "Vendor:InjectedPart"
     )
     assert audit["foreign_footprints"]["unexpected"][0]["pads"][0]["net"] == 1
+
+
+def test_connectivity_roundtrip_rejects_unexpected_track_arc():
+    text = """
+    (kicad_pcb
+      (layers
+        (0 "F.Cu" signal)
+        (31 "B.Cu" signal)
+        (36 "B.SilkS" user "b.silkscreen")
+        (37 "F.SilkS" user "f.silkscreen")
+        (44 "Edge.Cuts" user)
+      )
+      (net 0 "")
+      (net 1 "GND")
+      (arc
+        (start 0 0)
+        (mid 1 1)
+        (end 2 0)
+        (width 0.25)
+        (layer "F.Cu")
+        (net 1)
+        (uuid 00000000-0000-0000-0000-000000000097)
+      )
+    )
+    """
+    readback = read_kicad_board_text(text)
+    board = BoardModel(nets=[_net()])
+
+    audit = compare_kicad_connectivity(board, readback)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["track_arcs"]["equal"] is False
+    assert audit["track_arcs"]["expected_count"] == 0
+    assert audit["track_arcs"]["observed_count"] == 1
+    assert audit["track_arcs"]["unexpected"][0]["net"] == {
+        "code": 1,
+        "name": "GND",
+    }
+
+
+def test_kicad_reader_rejects_fractional_track_arc_net_ordinal():
+    text = """
+    (kicad_pcb
+      (arc
+        (start 0 0)
+        (mid 1 1)
+        (end 2 0)
+        (width 0.25)
+        (layer "F.Cu")
+        (net 1.5)
+      )
+    )
+    """
+    with pytest.raises(
+        ValueError,
+        match="track arc net ordinal must be an integer",
+    ):
+        read_kicad_board_text(text)
 
 
 def test_connectivity_roundtrip_detects_unexpected_via(tmp_path):

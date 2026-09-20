@@ -410,6 +410,51 @@ def _observed_outline(readback, issues):
     return out
 
 
+def _track_arc_item(start, mid, end, width, layer, binding, object_uuid):
+    return {
+        "start": list(_point(start)),
+        "mid": list(_point(mid)),
+        "end": list(_point(end)),
+        "width": _r(width),
+        "layer": str(layer),
+        "net": binding,
+        "uuid": None if object_uuid is None else str(object_uuid),
+    }
+
+
+def _observed_track_arcs(readback, net_lookup, issues):
+    out = []
+    for index, arc in enumerate(readback.get("track_arcs", ())):
+        try:
+            binding = _binding_from_code(
+                arc.get("net"),
+                net_lookup,
+                issues,
+                "track_arc",
+                index,
+            )
+            out.append(
+                _track_arc_item(
+                    arc.get("start"),
+                    arc.get("mid"),
+                    arc.get("end"),
+                    arc.get("width"),
+                    arc.get("layer"),
+                    binding,
+                    arc.get("uuid"),
+                )
+            )
+        except (TypeError, ValueError, IndexError, KeyError) as exc:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_INVALID_TRACK_ARC",
+                    "arc_index": index,
+                    "detail": str(exc),
+                }
+            )
+    return out
+
+
 def _via_item(at, size, drill, layers, binding):
     return {
         "at": list(_point(at)),
@@ -788,7 +833,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
     With an export report, the audit covers the declared KiCad layer table, net table, and tracks,
-    rejects unexpected KiCad vias and foreign footprints, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry,
+    rejects unexpected KiCad vias, routed track arcs, and foreign footprints, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry,
     and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
@@ -837,6 +882,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     vias = _compare_multiset(
         [],
         _observed_vias(readback, net_lookup, issues),
+    )
+
+    track_arcs = _compare_multiset(
+        [],
+        _observed_track_arcs(readback, net_lookup, issues),
     )
 
     outline = _compare_multiset(
@@ -946,6 +996,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and nets["equal"]
         and tracks["equal"]
         and vias["equal"]
+        and track_arcs["equal"]
         and outline["equal"]
         and foreign_footprints["equal"]
         and pads["equal"]
@@ -972,6 +1023,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "net_table",
             "tracks",
             "vias",
+            "track_arcs",
             "board_outline",
             "foreign_footprints",
             "recovered_pads",
@@ -989,6 +1041,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "nets": nets,
         "tracks": tracks,
         "vias": vias,
+        "track_arcs": track_arcs,
         "outline": outline,
         "foreign_footprints": foreign_footprints,
         "pads": pads,

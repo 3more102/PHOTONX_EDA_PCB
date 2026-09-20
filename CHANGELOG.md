@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added fail-closed KiCad routed-track arc readback. Top-level `arc` objects are now parsed separately from graphics/footprint arcs with strict integer net ordinals and machine-readable start/mid/end/width/layer/net/identifier fields; because the current PhotonX exporter emits no routed KiCad arcs, any observed track arc is an explicit round-trip difference instead of silently escaping the connectivity audit.
+
 - Hardened KiCad readback against injected/foreign footprints. Because the generated board is expected to contain only `PHOTONX:RecoveredPad`, `PHOTONX:RecoveredNPTHSlot`, and `PHOTONX:RecoveredPlatedSlot`, any other footprint is now surfaced in a machine-readable `foreign_footprints` comparison (including nested pad/net summaries) and fails `roundtrip_equal` instead of being silently ignored.
 
 - Added exact KiCad `Edge.Cuts` outline round-trip verification without breaking the legacy `edge_lines` reader surface. The reader now exposes structured `edge_graphics` with start/end, stroke width/type, layer, and UUID; the main audit compares undirected geometry plus deterministic `edge:<id>` UUID identity so missing, extra, moved, or identity-drifted outline segments fail visibly.
