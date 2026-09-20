@@ -32,7 +32,8 @@ def _board():
     return BoardModel(
         pads=[
             PadCandidate("P1", Point(0, 0), 0.8, 0.8, "C", "F.Cu", net_id="N1"),
-            PadCandidate("P1I", Point(0, 0), 0.8, 0.8, "C", "In1.Cu", net_id="N1"),\n            PadCandidate("P2", Point(0, 0), 0.8, 0.8, "C", "B.Cu", net_id="N1"),
+            PadCandidate("P1I", Point(0, 0), 0.8, 0.8, "C", "In1.Cu", net_id="N1"),
+            PadCandidate("P2", Point(0, 0), 0.8, 0.8, "C", "B.Cu", net_id="N1"),
             PadCandidate("P3", Point(2, 0), 0.8, 0.8, "C", "F.Cu", net_id="N1"),
             PadCandidate("P4", Point(2, 0), 0.8, 0.8, "C", "In1.Cu", net_id="N1"),
         ],
@@ -48,8 +49,8 @@ def _board():
                     "D1",
                     from_layer="F.Cu",
                     to_layer="B.Cu",
-                    pad_ids=("P1", "P2"),
-                    layer_ids=("F.Cu", "B.Cu"),
+                    pad_ids=("P1", "P1I", "P2"),
+                    layer_ids=("F.Cu", "In1.Cu", "B.Cu"),
                 ),
                 _span(
                     "D2",
@@ -90,8 +91,8 @@ def test_via_review_descriptor_preserves_source_evidence():
     assert row.plating == "plated"
     assert row.from_layer == "F.Cu"
     assert row.to_layer == "B.Cu"
-    assert row.pad_ids == ("P1", "P2")
-    assert row.layer_ids == ("F.Cu", "B.Cu")
+    assert row.pad_ids == ("P1", "P1I", "P2")
+    assert row.layer_ids == ("F.Cu", "In1.Cu", "B.Cu")
     assert row.evidence == ("test evidence",)
 
 
