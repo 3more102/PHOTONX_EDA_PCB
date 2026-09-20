@@ -48,6 +48,10 @@ def test_reader_exposes_board_fabrication_settings():
     assert d["board_settings"] == {
         "thickness": 1.6,
         "pad_to_mask_clearance": 0.15,
+        "solder_mask_min_width": None,
+        "pad_to_paste_clearance": None,
+        "pad_to_paste_clearance_ratio": None,
+        "stackup_present": False,
     }
 
 
