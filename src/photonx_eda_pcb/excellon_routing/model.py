@@ -16,6 +16,7 @@ class RoutedPath:
     span_proven:bool=False
     x2_layer_span:tuple[int,int]|None=None
     x2_span_kind:str|None=None
+    x2_aperture_function:str|None=None
     @property
     def segments(self):
         return tuple(RouteSegment(self.points[i],self.points[i+1]) for i in range(max(0,len(self.points)-1)))

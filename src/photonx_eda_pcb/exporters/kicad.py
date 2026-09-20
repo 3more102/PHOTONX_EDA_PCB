@@ -118,7 +118,14 @@ def _drill_lines(board, report, duplicate_object_ids=(), via_export_ids=()):
             continue
         status = drill_export_status(drill)
         if status != "export-npth":
-            if status == "skip-unknown-plating":
+            if status == "skip-backdrill":
+                code = "KICAD_DRILL_BACKDRILL_UNSUPPORTED"
+                message = (
+                    "source-proven XNC BackDrill removes plating over a partial "
+                    "span and cannot be represented as an ordinary through NPTH; "
+                    "drill omitted"
+                )
+            elif status == "skip-unknown-plating":
                 code = "KICAD_DRILL_PLATING_UNKNOWN"
                 message = (
                     "point-drill plating is unknown; drill omitted instead of "
@@ -534,7 +541,12 @@ def _route_lines(board,net_num,report,duplicate_object_ids=()):
         report.skipped_routes+=1
         report.skipped_route_ids.append(route.id)
         code=readiness.reasons.get(route.id,"KICAD_ARBITRARY_ROUTE_UNSUPPORTED")
-        if code=="KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN":
+        if code=="KICAD_BACKDRILL_UNSUPPORTED":
+            message=(
+                "source-proven XNC BackDrill is a partial-span plating-removal "
+                "operation and is not widened into an ordinary NPTH routed slot"
+            )
+        elif code=="KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN":
             message=(
                 "straight plated routed slot lacks a source-proven multilayer copper "
                 "pad-stack with one unambiguous exported net; route omitted"
@@ -565,6 +577,12 @@ def _slot_lines(board,net_num,report,duplicate_object_ids=()):
         status=slot_export_status(slot)
         if status=="export-npth":lines.extend(_npth_slot_lines(slot,report))
         elif status=="infer-plated-padstack":lines.extend(_plated_slot_lines(board,slot,net_num,report))
+        elif status=="skip-backdrill":_record_skip(
+            report,
+            slot,
+            "KICAD_SLOT_BACKDRILL_UNSUPPORTED",
+            "source-proven XNC BackDrill cannot be represented as an ordinary through NPTH slot",
+        )
         else:_record_skip(report,slot,"KICAD_SLOT_PLATING_UNKNOWN","slot plating is unknown")
     return lines
 
