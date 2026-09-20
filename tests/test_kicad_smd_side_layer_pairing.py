@@ -67,3 +67,23 @@ def test_noncanonical_pad_layer_is_omitted_fail_closed(tmp_path):
         and issue.object_id == "PX"
         for issue in report.issues
     )
+
+
+def test_unsupported_pad_shape_is_omitted_instead_of_rect_fallback(tmp_path):
+    text, report = _export_pad(
+        tmp_path,
+        PadCandidate("PS", Point(1, 2), 2, 1, "X", "F.Cu"),
+    )
+
+    assert "PHOTONX:RecoveredPad" not in text
+    assert report.exported_pads == 0
+    assert report.skipped_pad_ids == ["PS"]
+    assert any(
+        issue.code == "KICAD_PAD_SHAPE_UNSUPPORTED"
+        and issue.object_id == "PS"
+        for issue in report.issues
+    )
+    assert not any(
+        issue.code == "KICAD_PAD_SHAPE_FALLBACK"
+        for issue in report.issues
+    )

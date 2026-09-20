@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Removed the lossy KiCad recovered-pad shape fallback. PadCandidate shapes outside the exact C/R/O mapping are now omitted with `KICAD_PAD_SHAPE_UNSUPPORTED` and counted in the existing skipped-pad omission/source-equivalence surface instead of being silently approximated as rectangles.
+
 - Hardened recovered-pad export against undeclared/noncanonical KiCad copper layers. Pads whose source layer cannot be represented by the generated board layer table are now omitted with `KICAD_PAD_LAYER_UNSUPPORTED`; export reports and omission manifests track exported/skipped pad IDs, and connectivity audits surface `skipped_pad_ids` as source-equivalence loss instead of emitting a structurally inconsistent footprint/pad layer reference.
 
 - Closed the remaining KiCad `Edge.Cuts` shape escape hatch: the reader now records any top-level `gr_*` object on `Edge.Cuts` other than the `gr_line` family emitted by PhotonX, and the main round-trip audit treats those unexpected arcs/rectangles/circles/polygons/text graphics as expected-empty differences instead of silently ignoring contour-changing geometry.

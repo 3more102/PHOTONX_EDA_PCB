@@ -6,7 +6,7 @@ from ..models import BoardModel
 from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
-from .kicad_policy import declared_copper_layer_names,kicad_board_layer_specs,pad_export_descriptor,pad_shape_name,slot_geometry,slot_export_status,proven_via_span_omissions
+from .kicad_policy import declared_copper_layer_names,kicad_board_layer_specs,pad_export_descriptor,pad_shape_name,pad_shape_supported,slot_geometry,slot_export_status,proven_via_span_omissions
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
@@ -43,15 +43,26 @@ def _pad_lines(board,net_num,report):
     lines=[]
     declared_copper_layers=declared_copper_layer_names(board)
     for pad in board.pads:
+        unsupported=False
         if str(pad.layer) not in declared_copper_layers:
-            report.skipped_pads+=1
-            report.skipped_pad_ids.append(pad.id)
+            unsupported=True
             report.issues.append(KicadExportIssue(
                 "warning",
                 "KICAD_PAD_LAYER_UNSUPPORTED",
                 pad.id,
                 f"recovered pad layer {pad.layer!r} is not a declared canonical KiCad copper layer; pad omitted",
             ))
+        if not pad_shape_supported(pad.shape):
+            unsupported=True
+            report.issues.append(KicadExportIssue(
+                "warning",
+                "KICAD_PAD_SHAPE_UNSUPPORTED",
+                pad.id,
+                f"recovered pad shape {pad.shape!r} has no exact current KiCad pad mapping; pad omitted instead of approximated",
+            ))
+        if unsupported:
+            report.skipped_pads+=1
+            report.skipped_pad_ids.append(pad.id)
             continue
         n,net_name,net_known=_net_binding(board,net_num,pad.net_id,pad.id,report)
         descriptor,ref_layer,layer_warning=pad_export_descriptor(pad)
@@ -67,7 +78,6 @@ def _pad_lines(board,net_num,report):
         lines.append('  )')
         report.exported_pads+=1
         report.exported_pad_ids.append(pad.id)
-        if str(pad.shape).upper() not in {"C","R","O"}:report.issues.append(KicadExportIssue("warning","KICAD_PAD_SHAPE_FALLBACK",pad.id,f"unsupported reconstructed pad shape {pad.shape}; exported as rect"))
         if layer_warning:report.issues.append(KicadExportIssue("warning","KICAD_SMD_NON_SURFACE_LAYER",pad.id,layer_warning))
     return lines
 

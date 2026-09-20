@@ -42,6 +42,10 @@ def kicad_board_layer_rows(board):
     ]
 
 
+def pad_shape_supported(shape):
+    return str(shape or "").upper() in {"C","R","O"}
+
+
 def pad_shape_name(shape):
     s=str(shape or "").upper()
     if s=="C":return "circle"
