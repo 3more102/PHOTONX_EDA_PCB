@@ -195,7 +195,7 @@ def _x2_component_lines(board,net_num,report,groups):
             )
             layers=" ".join(_q(x) for x in descriptor["layers"])
             local_x,local_y=planned["at"]
-            angle=descriptor["pad_angle"]
+            angle=planned["angle"]
             net_clause=f' (net {n} {_q(net_name)})' if net_known else ""
             lines.append(
                 f'    (pad {_q(planned["number"])} {descriptor["kind"]} {descriptor["shape"]} '
