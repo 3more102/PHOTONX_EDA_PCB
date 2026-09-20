@@ -92,6 +92,10 @@ def test_x2_blind_and_buried_spans_export_as_exact_kicad_blind_vias(
 
     assert len(report.exported_via_span_ids) == 1
     assert report.skipped_via_span_ids == []
+    expected_support = set(board.metadata["via_spans"][0]["pad_ids"])
+    assert set(report.represented_via_pad_ids) == expected_support
+    assert report.skipped_pad_ids == []
+    assert set(audit["represented_via_pad_ids"]) == expected_support
     assert audit["vias"]["equal"] is True
     assert audit["roundtrip_equal"] is True
     assert audit["source_equivalent"] is True
