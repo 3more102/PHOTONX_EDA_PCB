@@ -6,7 +6,7 @@ from ..models import BoardModel
 from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
-from .kicad_policy import KICAD_BOARD_FORMAT_VERSION,KICAD_GENERATOR,KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,kicad_duplicate_object_ids,kicad_net_export_rows,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,track_export_status,proven_via_span_export_plan
+from .kicad_policy import KICAD_BOARD_FORMAT_VERSION,KICAD_GENERATOR,KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,KICAD_DEFAULT_PAPER,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,kicad_duplicate_object_ids,kicad_net_export_rows,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,track_export_status,proven_via_span_export_plan
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness,route_export_descriptor
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
@@ -570,7 +570,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
     lines=[
         f'(kicad_pcb (version {KICAD_BOARD_FORMAT_VERSION}) (generator {_q(KICAD_GENERATOR)})',
         f'  (general (thickness {KICAD_DEFAULT_BOARD_THICKNESS_MM:g}))',
-        '  (paper "A4")',
+        f'  (paper {_q(KICAD_DEFAULT_PAPER)})',
         '  (layers',
         *_board_layer_lines(board),
         '  )',
