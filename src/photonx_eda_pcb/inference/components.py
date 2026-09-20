@@ -55,6 +55,14 @@ def _trusted_evidence_values(pad, kind: str) -> tuple[str, ...]:
     )
 
 
+def _trusted_identity_values(pad, kind: str) -> tuple[str, ...]:
+    values = {
+        str(value).strip()
+        for value in _trusted_evidence_values(pad, kind)
+    }
+    return tuple(sorted(value for value in values if value))
+
+
 def _source_component_hypotheses(pads):
     """Use only source-proven X2 identity before geometric component guesses."""
 
@@ -63,7 +71,7 @@ def _source_component_hypotheses(pads):
     remaining = []
 
     for pad in sorted(pads, key=lambda item: item.id):
-        refdes_values = _trusted_evidence_values(pad, _X2_REFDES)
+        refdes_values = _trusted_identity_values(pad, _X2_REFDES)
         if not refdes_values:
             remaining.append(pad)
             continue
@@ -121,15 +129,10 @@ def _source_component_hypotheses(pads):
         unresolved_pin_pads = []
         unresolved_function_pads = []
         for pad in members:
-            pin_numbers = tuple(
-                value
-                for value in _trusted_evidence_values(pad, _X2_PIN)
-                if isinstance(value, str) and value.strip()
-            )
-            pin_functions = tuple(
-                value
-                for value in _trusted_evidence_values(pad, _X2_PIN_FUNCTION)
-                if isinstance(value, str) and value.strip()
+            pin_numbers = _trusted_identity_values(pad, _X2_PIN)
+            pin_functions = _trusted_identity_values(
+                pad,
+                _X2_PIN_FUNCTION,
             )
 
             if len(pin_numbers) != 1:
