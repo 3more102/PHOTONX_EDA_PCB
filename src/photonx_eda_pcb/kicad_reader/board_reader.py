@@ -10,6 +10,7 @@ from .mechanical_slots import read_mechanical_slots
 from .zones import read_zones
 from .settings import read_board_settings
 from .header import read_board_header
+from .structure import read_board_structure
 
 
 def read_kicad_board_text(text):
@@ -20,6 +21,7 @@ def read_kicad_board_text(text):
     edge_graphics = read_edge_graphics(root)
     return {
         "file_header": read_board_header(root),
+        "file_structure": read_board_structure(root),
         "board_settings": read_board_settings(root),
         "layers": read_layers(root),
         "nets": read_nets(root),

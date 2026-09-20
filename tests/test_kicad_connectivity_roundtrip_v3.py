@@ -70,6 +70,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
 
     assert audit["scope"] == [
         "file_header",
+        "file_structure",
         "board_settings",
         "layer_table",
         "net_table",
@@ -151,6 +152,56 @@ def test_reader_preserves_duplicate_header_token_counts():
         "generator": None,
         "version_count": 2,
         "generator_count": 2,
+    }
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("general_count", 2),
+        ("paper_count", 0),
+        ("layers_count", 2),
+        ("setup_count", 0),
+    ],
+)
+def test_connectivity_roundtrip_detects_singleton_section_drift(
+    tmp_path,
+    field,
+    value,
+):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["file_structure"][field] = value
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["file_structure"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+
+
+def test_reader_preserves_singleton_board_section_counts():
+    readback = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (general (thickness 1.6))
+          (general (thickness 2.0))
+          (paper "A4")
+          (layers (0 "F.Cu" signal))
+          (layers (31 "B.Cu" signal))
+          (setup (pad_to_mask_clearance 0))
+        )
+        """
+    )
+
+    assert readback["file_structure"] == {
+        "general_count": 2,
+        "paper_count": 1,
+        "layers_count": 2,
+        "setup_count": 1,
     }
 
 

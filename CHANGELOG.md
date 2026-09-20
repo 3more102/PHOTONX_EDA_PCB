@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added KiCad singleton board-section cardinality auditing. The reader now records counts for `general`, `paper`, `layers`, and `setup`; the round-trip contract requires exactly one of each, so duplicate or missing structural sections are fail-visible instead of silently relying on first-match parsing when a later conflicting section may exist.
+
 - Extended KiCad board-settings auditing to manufacturing output controls that PhotonX does not emit. The reader now preserves optional `aux_axis_origin`, `grid_origin`, and `pcbplotparams` presence; any injected origin or plot-settings block is fail-visible through `board_settings` instead of silently altering downstream plot/drill coordinate or manufacturing-output behavior.
 
 - Added fail-closed KiCad footprint/pad fabrication-override auditing. The reader now preserves footprint `solder_mask_margin`, `solder_paste_margin`, `solder_paste_ratio` and pad `solder_mask_margin`, `solder_paste_margin`, `solder_paste_margin_ratio`; any such override on PhotonX-generated recovered objects is surfaced through `unexpected_fabrication_overrides` instead of silently changing mask/paste Gerber behavior.

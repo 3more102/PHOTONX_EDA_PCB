@@ -80,6 +80,25 @@ def _observed_file_header(readback):
     }
 
 
+def _expected_file_structure():
+    return {
+        "general_count": 1,
+        "paper_count": 1,
+        "layers_count": 1,
+        "setup_count": 1,
+    }
+
+
+def _observed_file_structure(readback):
+    structure = dict(readback.get("file_structure", {}))
+    return {
+        "general_count": int(structure.get("general_count", 0)),
+        "paper_count": int(structure.get("paper_count", 0)),
+        "layers_count": int(structure.get("layers_count", 0)),
+        "setup_count": int(structure.get("setup_count", 0)),
+    }
+
+
 def _expected_layer_rows(board):
     return kicad_board_layer_rows(board)
 
@@ -1349,6 +1368,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         [_observed_file_header(readback)],
     )
 
+    file_structure = _compare_multiset(
+        [_expected_file_structure()],
+        [_observed_file_structure(readback)],
+    )
+
     board_settings = _compare_multiset(
         [
             {
@@ -1680,6 +1704,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     roundtrip_equal = bool(
         file_header["equal"]
+        and file_structure["equal"]
         and board_settings["equal"]
         and layer_table["equal"]
         and nets["equal"]
@@ -1725,6 +1750,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     return {
         "scope": [
             "file_header",
+            "file_structure",
             "board_settings",
             "layer_table",
             "net_table",
@@ -1755,6 +1781,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             roundtrip_equal and source_connectivity_complete
         ),
         "file_header": file_header,
+        "file_structure": file_structure,
         "board_settings": board_settings,
         "layer_table": layer_table,
         "nets": nets,
