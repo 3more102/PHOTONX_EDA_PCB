@@ -34,19 +34,28 @@ _FILE_FUNCTION = re.compile(
 )
 
 
+def x2_file_function_declarations(text: str) -> tuple[tuple[str, ...], ...]:
+    """Return every normalized X2 FileFunction declaration in source order."""
+
+    declarations = []
+    for match in _FILE_FUNCTION.finditer(text or ""):
+        parts = tuple(
+            part.strip()
+            for part in match.group("value").split(",")
+            if part.strip()
+        )
+        if parts:
+            declarations.append(parts)
+    return tuple(declarations)
+
+
 def x2_file_function_fields(text: str) -> tuple[str, ...] | None:
-    """Return normalized X2 FileFunction fields from the first declaration."""
+    """Return FileFunction fields only when the immutable attribute is unique."""
 
-    match = _FILE_FUNCTION.search(text or "")
-    if not match:
+    declarations = x2_file_function_declarations(text)
+    if len(declarations) != 1:
         return None
-
-    parts = tuple(
-        part.strip()
-        for part in match.group("value").split(",")
-        if part.strip()
-    )
-    return parts or None
+    return declarations[0]
 
 
 def _x2_file_function_layer(text: str) -> str | None:
@@ -146,8 +155,11 @@ def _filename_layer(path: Path) -> str | None:
 
 
 def infer_layer(path: str | Path, text: str | None = None) -> str | None:
-    """Infer a KiCad-like layer from X2 metadata first, then filename hints."""
-    x2 = _x2_file_function_layer(text or "")
+    """Infer a layer unless immutable X2 FileFunction metadata is ambiguous."""
+    source = text or ""
+    if len(x2_file_function_declarations(source)) > 1:
+        return None
+    x2 = _x2_file_function_layer(source)
     if x2 is not None:
         return x2
     return _filename_layer(Path(path))

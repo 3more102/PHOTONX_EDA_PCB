@@ -312,6 +312,21 @@ def reconstruct(
         _apply_x2_copper_stackup_evidence(board, files)
 
         for item in files:
+            if getattr(item, "x2_file_function_conflict", False):
+                board.diagnostics.append(
+                    ParseDiagnostic(
+                        "warning",
+                        "X2_FILE_FUNCTION_REDEFINED",
+                        (
+                            "Gerber file skipped because .FileFunction is a "
+                            "unique immutable file attribute and was declared "
+                            "more than once"
+                        ),
+                        str(item.path),
+                    )
+                )
+                continue
+
             if item.kind == "drill":
                 result = ExcellonParser(strict=cfg.strict_parsing).parse(item.path)
                 _apply_file_plating_hint(board, item, result.drills)
