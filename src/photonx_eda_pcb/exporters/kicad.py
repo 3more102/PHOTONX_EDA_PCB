@@ -428,8 +428,10 @@ def _via_span_lines(board,net_num,report,exportable,omitted,problems):
             continue
         x,y=item["at"]
         from_layer,to_layer=item["layers"]
+        via_type=str(item.get("type","through"))
+        type_token="" if via_type=="through" else f" {via_type}"
         lines.append(
-            f'  (via (at {x:.6f} {y:.6f}) '
+            f'  (via{type_token} (at {x:.6f} {y:.6f}) '
             f'(size {item["size"]:.6f}) '
             f'(drill {item["drill"]:.6f}) '
             f'(layers {_q(from_layer)} {_q(to_layer)}) '
