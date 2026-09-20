@@ -188,3 +188,114 @@ def test_file_function_plating_propagates_to_routed_paths(tmp_path: Path):
         evidence.kind == "excellon_x2_file_plating"
         for evidence in result.routes[0].provenance.evidence
     )
+
+
+def test_standard_xnc_tool_function_is_preserved_without_overriding_file_plating(
+    tmp_path: Path,
+):
+    path = _write(
+        tmp_path,
+        "M48\n"
+        "; #@! TF.FileFunction,Plated,1,2,PTH\n"
+        "METRIC\n"
+        "; #@! TA.AperFunction,ViaDrill\n"
+        "T01C0.400\n"
+        "%\n"
+        "T01\n"
+        "X1.000Y1.000\n"
+        "M30\n",
+    )
+
+    result = ExcellonParser(strict=True).parse(path)
+
+    assert len(result.drills) == 1
+    drill = result.drills[0]
+    assert drill.plating == "plated"
+    assert drill.x2_aperture_function == "viadrill"
+    assert any(
+        evidence.kind == "excellon_xnc_tool_function"
+        and "function=viadrill" in evidence.detail
+        for evidence in drill.provenance.evidence
+    )
+
+
+def test_standard_xnc_backdrill_is_preserved_as_distinct_tool_function(
+    tmp_path: Path,
+):
+    path = _write(
+        tmp_path,
+        "M48\n"
+        "; #@! TF.FileFunction,NonPlated,4,3,Blind\n"
+        "METRIC\n"
+        "; #@! TA.AperFunction,BackDrill\n"
+        "T01C0.800\n"
+        "%\n"
+        "T01\n"
+        "X1.000Y1.000\n"
+        "M30\n",
+    )
+
+    result = ExcellonParser(strict=True).parse(path)
+
+    assert len(result.drills) == 1
+    drill = result.drills[0]
+    assert drill.plating == "non-plated"
+    assert drill.x2_layer_span == (3, 4)
+    assert drill.x2_span_kind == "blind"
+    assert drill.x2_aperture_function == "backdrill"
+    assert any(
+        evidence.kind == "excellon_xnc_tool_function"
+        and "function=backdrill" in evidence.detail
+        for evidence in drill.provenance.evidence
+    )
+
+
+def test_standard_xnc_tool_function_is_modal_and_td_clears_it(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "M48\n"
+        "; #@! TF.FileFunction,NonPlated,1,2,NPTH\n"
+        "METRIC\n"
+        "; #@! TA.AperFunction,MechanicalDrill,Tooling\n"
+        "T01C0.800\n"
+        "; #@! TD\n"
+        "T02C0.900\n"
+        "%\n"
+        "T01\n"
+        "X1.000Y1.000\n"
+        "T02\n"
+        "X2.000Y2.000\n"
+        "M30\n",
+    )
+
+    result = ExcellonParser(strict=True).parse(path)
+
+    assert [drill.x2_aperture_function for drill in result.drills] == [
+        "mechanicaldrill",
+        None,
+    ]
+
+
+def test_malformed_recognized_xnc_tool_function_fails_closed(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "M48\n"
+        "; #@! TF.FileFunction,NonPlated,1,2,NPTH\n"
+        "METRIC\n"
+        "; #@! TA.AperFunction,BackDrill,Unexpected\n"
+        "T01C0.800\n"
+        "%\n"
+        "T01\n"
+        "X1.000Y1.000\n"
+        "M30\n",
+    )
+
+    with pytest.raises(ParseError, match="malformed XNC AperFunction"):
+        ExcellonParser(strict=True).parse(path)
+
+    permissive = ExcellonParser(strict=False).parse(path)
+    assert permissive.drills == []
+    assert any(
+        diagnostic.code == "INVALID_EXCELLON_X2_TOOL_FUNCTION"
+        for diagnostic in permissive.diagnostics
+    )
