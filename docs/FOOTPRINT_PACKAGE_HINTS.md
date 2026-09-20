@@ -67,3 +67,10 @@ The structured pin maps and `package_hint` coexist on the same component object 
 - `package_hint` remains a geometry-backed package-shape hypothesis.
 - Geometry never invents or renumbers source pins.
 - Conflicting trusted pin numbers fail closed for that pad without discarding an otherwise proven component reference.
+
+
+### KiCad grouping authority
+
+When PhotonX groups a source-proven X2 component into `PHOTONX:RecoveredX2Component`, the exporter consumes `ComponentHypothesis.source_pin_map` and `source_pin_functions` as the canonical machine-readable pin identity produced by reconstruction. It does not independently re-derive pin numbers from pad provenance during export.
+
+Grouping remains fail-closed: the pin map must be a dictionary, cover every component pad exactly once by membership, contain non-empty string pin numbers, keep function entries bound to mapped pads, use unique pin numbers within the component, and retain matching trusted X2 refdes evidence on every grouped pad. Any violation falls back to independent recovered pads with an explicit `KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED` issue.
