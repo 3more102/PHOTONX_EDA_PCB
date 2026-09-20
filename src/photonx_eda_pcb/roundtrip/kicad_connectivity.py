@@ -739,6 +739,7 @@ def _via_item(
     binding,
     object_uuid,
     *,
+    locked=False,
     remove_unused_layers=False,
     keep_end_layers=False,
     free=False,
@@ -751,6 +752,7 @@ def _via_item(
         "layers": [str(layer) for layer in layers],
         "net": binding,
         "uuid": None if object_uuid is None else str(object_uuid),
+        "locked": bool(locked),
         "remove_unused_layers": bool(remove_unused_layers),
         "keep_end_layers": bool(keep_end_layers),
         "free": bool(free),
@@ -798,6 +800,7 @@ def _observed_vias(readback, net_lookup, issues):
     out = []
     for index, via in enumerate(readback.get("vias", ())):
         try:
+            locked = bool(via.get("locked", False))
             remove_unused_layers = bool(via.get("remove_unused_layers", False))
             keep_end_layers = bool(via.get("keep_end_layers", False))
             free = bool(via.get("free", False))
@@ -825,6 +828,7 @@ def _observed_vias(readback, net_lookup, issues):
                     via.get("layers", ()),
                     binding,
                     via.get("uuid"),
+                    locked=locked,
                     remove_unused_layers=remove_unused_layers,
                     keep_end_layers=keep_end_layers,
                     free=free,

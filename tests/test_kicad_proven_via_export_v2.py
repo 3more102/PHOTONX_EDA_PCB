@@ -133,6 +133,7 @@ def test_exact_multilayer_proven_via_exports_through_declared_inner_layer(tmp_pa
     assert readback["vias"][0]["size"] == 1.0
     assert readback["vias"][0]["drill"] == 0.4
     assert readback["vias"][0]["net"] == 1
+    assert readback["vias"][0]["locked"] is False
     assert readback["vias"][0]["remove_unused_layers"] is False
     assert readback["vias"][0]["keep_end_layers"] is False
     assert readback["vias"][0]["free"] is False
@@ -253,7 +254,7 @@ def test_roundtrip_detects_exported_via_behavior_flag_drift(tmp_path):
     path, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
     original = path.read_text(encoding="utf-8")
 
-    for flag in ("remove_unused_layers", "free"):
+    for flag in ("locked", "remove_unused_layers", "free"):
         readback = read_kicad_board_text(_add_via_flag(original, flag))
         assert readback["vias"][0][flag] is True
 
