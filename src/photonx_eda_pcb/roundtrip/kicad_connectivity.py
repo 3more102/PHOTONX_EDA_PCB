@@ -1013,7 +1013,6 @@ def _observed_drills(readback, net_lookup, issues):
                 "reference_uuid": footprint.get("reference_uuid"),
                 "reference_count": int(footprint.get("reference_count", 0)),
                 "pad_uuid": pads[0].get("uuid"),
-                "kind": kind,
                 "geometry": geometry,
                 "net": binding,
             }
@@ -1749,6 +1748,7 @@ def _observed_routes(readback, net_lookup, issues):
                 "reference_uuid": footprint.get("reference_uuid"),
                 "reference_count": int(footprint.get("reference_count", 0)),
                 "pad_uuid": pads[0].get("uuid"),
+                "kind": kind,
                 "geometry": geometry,
                 "net": binding,
             }
