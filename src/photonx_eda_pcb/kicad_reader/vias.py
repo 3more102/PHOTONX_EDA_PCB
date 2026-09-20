@@ -11,7 +11,16 @@ def _net_ordinal(node):
 
 def _via_type(via):
     if len(via) > 1 and isinstance(via[1], str):
-        if via[1] in {"blind", "buried", "micro"}:
+        if via[1] == "blind":
+            layers = child(via, "layers")
+            endpoints = tuple(map(str, layers[1:])) if layers is not None else ()
+            if (
+                len(endpoints) == 2
+                and all(layer not in {"F.Cu", "B.Cu"} for layer in endpoints)
+            ):
+                return "buried"
+            return "blind"
+        if via[1] in {"buried", "micro"}:
             return via[1]
     return "through"
 
