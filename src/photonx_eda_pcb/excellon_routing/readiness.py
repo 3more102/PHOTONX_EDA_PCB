@@ -78,6 +78,26 @@ def _net_is_unambiguous(board, net_id):
     return sum(1 for net in getattr(board, "nets", ()) if net.id == net_id) == 1
 
 
+def _padstack_net_is_fully_proven(board, padstack):
+    net_id = getattr(padstack, "net_id", None)
+    if not _net_is_unambiguous(board, net_id):
+        return False
+
+    pad_ids = tuple(str(pad_id) for pad_id in getattr(padstack, "pad_ids", ()))
+    if not pad_ids or len(set(pad_ids)) != len(pad_ids):
+        return False
+
+    pads_by_id = {}
+    for pad in getattr(board, "pads", ()):
+        pads_by_id.setdefault(str(pad.id), []).append(pad)
+
+    for pad_id in pad_ids:
+        matches = pads_by_id.get(pad_id, ())
+        if len(matches) != 1 or getattr(matches[0], "net_id", None) != net_id:
+            return False
+    return True
+
+
 def _plated_route_span_rejection(route):
     kind = str(getattr(route, "x2_span_kind", "") or "").lower()
     raw_span = getattr(route, "x2_layer_span", None)
@@ -121,7 +141,7 @@ def _plated_route_padstack(board, route):
         return None, "KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN"
     inference = infer_plated_slot_padstack(board, slot)
     padstack = inference.padstack
-    if padstack is None or not _net_is_unambiguous(board, padstack.net_id):
+    if padstack is None or not _padstack_net_is_fully_proven(board, padstack):
         return None, "KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN"
 
     declared_layers = set(declared_copper_layer_names(board))
