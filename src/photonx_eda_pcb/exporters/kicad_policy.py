@@ -707,6 +707,19 @@ def proven_via_span_export_plan(board):
             and {start_layer, end_layer} == {"F.Cu", "B.Cu"}
         )
 
+        if span_proven and (
+            not isinstance(canonical_span, (list, tuple))
+            or len(canonical_span) != 2
+            or {str(canonical_span[0]), str(canonical_span[1])}
+            != {start_layer, end_layer}
+        ):
+            omit(
+                drill_id,
+                "KICAD_PROVEN_VIA_CANONICAL_SPAN_MISMATCH",
+                "source-proven canonical drill span does not match the proven via-span metadata endpoints",
+            )
+            continue
+
         if is_full_through:
             if x2_span_kind and x2_span_kind != "pth":
                 omit(
@@ -723,13 +736,7 @@ def proven_via_span_export_plan(board):
                     "partial-layer plated span lacks explicit X2 Blind/Buried evidence; via omitted instead of guessing blind versus microvia semantics",
                 )
                 continue
-            if (
-                not span_proven
-                or not isinstance(canonical_span, (list, tuple))
-                or len(canonical_span) != 2
-                or {str(canonical_span[0]), str(canonical_span[1])}
-                != {start_layer, end_layer}
-            ):
+            if not span_proven:
                 omit(
                     drill_id,
                     "KICAD_PROVEN_VIA_X2_SPAN_UNPROVEN",
