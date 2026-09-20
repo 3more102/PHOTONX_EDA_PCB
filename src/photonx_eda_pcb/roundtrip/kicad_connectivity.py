@@ -7,7 +7,6 @@ from pathlib import Path
 from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status, track_export_status
 from ..excellon_routing import assess_route_export_readiness, route_export_descriptor
 from ..kicad_reader import read_kicad_board_text
-from ..kicad_reader.mechanical_slots import read_mechanical_slots
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
 from .mechanical import compare_mechanical_slots
@@ -1907,7 +1906,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
                 for slot in source_slots
                 if slot.id in exported_slot_ids
             ],
-            read_mechanical_slots(observed_slot_footprints),
+            readback.get("mechanical_slots", ()),
         )
 
     roundtrip_equal = bool(
