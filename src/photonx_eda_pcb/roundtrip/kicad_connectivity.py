@@ -15,6 +15,11 @@ from .regions import compare_kicad_copper_regions
 _RECOVERED_PAD_FOOTPRINT = "PHOTONX:RecoveredPad"
 _RECOVERED_NPTH_SLOT = "PHOTONX:RecoveredNPTHSlot"
 _RECOVERED_PLATED_SLOT = "PHOTONX:RecoveredPlatedSlot"
+_PHOTONX_FOOTPRINT_NAMES = {
+    _RECOVERED_PAD_FOOTPRINT,
+    _RECOVERED_NPTH_SLOT,
+    _RECOVERED_PLATED_SLOT,
+}
 
 
 def _r(value):
@@ -304,6 +309,50 @@ def _observed_tracks(readback, net_lookup, issues):
                 {
                     "code": "KICAD_ROUNDTRIP_INVALID_SEGMENT",
                     "segment_index": index,
+                    "detail": str(exc),
+                }
+            )
+    return out
+
+
+def _foreign_footprint_item(footprint):
+    pads = []
+    for pad in footprint.get("pads", ()):
+        pads.append(
+            {
+                "number": str(pad.get("number")),
+                "kind": str(pad.get("kind")),
+                "shape": str(pad.get("shape")),
+                "layers": sorted(str(layer) for layer in pad.get("layers", ())),
+                "net": pad.get("net"),
+                "net_name": pad.get("net_name"),
+                "uuid": pad.get("uuid"),
+            }
+        )
+    return {
+        "name": str(footprint.get("name")),
+        "reference": footprint.get("reference"),
+        "uuid": footprint.get("uuid"),
+        "layer": footprint.get("layer"),
+        "at": list(_point(footprint.get("at"))),
+        "angle": _r(footprint.get("angle", 0.0)),
+        "pad_count": len(pads),
+        "pads": pads,
+    }
+
+
+def _observed_foreign_footprints(readback, issues):
+    out = []
+    for index, footprint in enumerate(readback.get("footprints", ())):
+        if footprint.get("name") in _PHOTONX_FOOTPRINT_NAMES:
+            continue
+        try:
+            out.append(_foreign_footprint_item(footprint))
+        except (TypeError, ValueError, IndexError, KeyError) as exc:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_INVALID_FOREIGN_FOOTPRINT",
+                    "footprint_index": index,
                     "detail": str(exc),
                 }
             )
@@ -739,7 +788,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
     With an export report, the audit covers the declared KiCad layer table, net table, and tracks,
-    rejects unexpected KiCad vias, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry,
+    rejects unexpected KiCad vias and foreign footprints, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry,
     and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
@@ -793,6 +842,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     outline = _compare_multiset(
         _expected_outline(board),
         _observed_outline(readback, issues),
+    )
+
+    foreign_footprints = _compare_multiset(
+        [],
+        _observed_foreign_footprints(readback, issues),
     )
 
     expected_pads, unresolved_pad_ids = _expected_pads(board)
@@ -893,6 +947,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and tracks["equal"]
         and vias["equal"]
         and outline["equal"]
+        and foreign_footprints["equal"]
         and pads["equal"]
         and regions["equal"]
         and region_geometry["equal"]
@@ -918,6 +973,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "tracks",
             "vias",
             "board_outline",
+            "foreign_footprints",
             "recovered_pads",
             "copper_regions",
             "region_geometry",
@@ -934,6 +990,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "tracks": tracks,
         "vias": vias,
         "outline": outline,
+        "foreign_footprints": foreign_footprints,
         "pads": pads,
         "regions": regions,
         "region_geometry": region_geometry,

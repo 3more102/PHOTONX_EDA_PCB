@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened KiCad readback against injected/foreign footprints. Because the generated board is expected to contain only `PHOTONX:RecoveredPad`, `PHOTONX:RecoveredNPTHSlot`, and `PHOTONX:RecoveredPlatedSlot`, any other footprint is now surfaced in a machine-readable `foreign_footprints` comparison (including nested pad/net summaries) and fails `roundtrip_equal` instead of being silently ignored.
+
 - Added exact KiCad `Edge.Cuts` outline round-trip verification without breaking the legacy `edge_lines` reader surface. The reader now exposes structured `edge_graphics` with start/end, stroke width/type, layer, and UUID; the main audit compares undirected geometry plus deterministic `edge:<id>` UUID identity so missing, extra, moved, or identity-drifted outline segments fail visibly.
 
 - Added structural KiCad layer-table round-trip verification. Export and readback now share one board-layer specification for `F.Cu`, contiguous canonical `In1.Cu..InN.Cu`, `B.Cu`, silks, and `Edge.Cuts`; missing/renumbered/retagged rows plus duplicate layer IDs or names are fail-visible even when track/zone layer strings themselves still match.

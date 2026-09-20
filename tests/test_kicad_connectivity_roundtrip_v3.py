@@ -74,6 +74,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "tracks",
         "vias",
         "board_outline",
+        "foreign_footprints",
         "recovered_pads",
         "copper_regions",
         "region_geometry",
@@ -261,6 +262,47 @@ def test_connectivity_roundtrip_detects_outline_uuid_drift(tmp_path):
         audit["outline"]["missing"][0]["uuid"]
         != audit["outline"]["unexpected"][0]["uuid"]
     )
+
+
+def test_connectivity_roundtrip_rejects_foreign_footprint(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["footprints"].append(
+        {
+            "name": "Vendor:InjectedPart",
+            "reference": "U99",
+            "uuid": "00000000-0000-0000-0000-000000000099",
+            "at": (10.0, 10.0),
+            "angle": 0.0,
+            "layer": "F.Cu",
+            "pads": [
+                {
+                    "number": "1",
+                    "kind": "smd",
+                    "shape": "rect",
+                    "layers": ("F.Cu",),
+                    "net": 1,
+                    "net_name": "GND",
+                    "uuid": "00000000-0000-0000-0000-000000000098",
+                }
+            ],
+        }
+    )
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["foreign_footprints"]["equal"] is False
+    assert audit["foreign_footprints"]["expected_count"] == 0
+    assert audit["foreign_footprints"]["observed_count"] == 1
+    assert audit["foreign_footprints"]["unexpected"][0]["name"] == (
+        "Vendor:InjectedPart"
+    )
+    assert audit["foreign_footprints"]["unexpected"][0]["pads"][0]["net"] == 1
 
 
 def test_connectivity_roundtrip_detects_unexpected_via(tmp_path):
