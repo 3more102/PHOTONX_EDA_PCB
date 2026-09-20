@@ -788,6 +788,36 @@ def test_connectivity_roundtrip_marks_unsupported_pad_shape_as_source_loss(
     assert audit["losses"]["skipped_pad_ids"] == ["P_BAD_SHAPE"]
 
 
+def test_connectivity_roundtrip_marks_drilled_pad_as_source_loss(tmp_path):
+    board = BoardModel(
+        pads=[
+            PadCandidate(
+                "P_DRILLED",
+                Point(1, 2),
+                2,
+                2,
+                "C",
+                "F.Cu",
+                drill=0.8,
+            )
+        ]
+    )
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert report.skipped_pad_ids == ["P_DRILLED"]
+    assert audit["pads"]["equal"] is True
+    assert audit["roundtrip_equal"] is True
+    assert audit["source_connectivity_complete"] is False
+    assert audit["source_equivalent"] is False
+    assert audit["losses"]["skipped_pad_ids"] == ["P_DRILLED"]
+
+
 def test_connectivity_roundtrip_detects_missing_pad_net_name(tmp_path):
     board = _board_with_all_connectivity_families()
     path, report = export_kicad_with_report(

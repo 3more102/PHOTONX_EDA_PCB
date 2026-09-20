@@ -2,6 +2,7 @@ _REASON_CODES={
     "skipped_pads":{
         "KICAD_PAD_LAYER_UNSUPPORTED",
         "KICAD_PAD_SHAPE_UNSUPPORTED",
+        "KICAD_PAD_DRILL_PADSTACK_UNPROVEN",
     },
     "skipped_slots":{
         "KICAD_SLOT_PLATED_UNSUPPORTED",

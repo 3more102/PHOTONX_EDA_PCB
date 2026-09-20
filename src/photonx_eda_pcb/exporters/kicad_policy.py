@@ -46,6 +46,16 @@ def pad_shape_supported(shape):
     return str(shape or "").upper() in {"C","R","O"}
 
 
+def pad_export_status(board,pad):
+    if str(pad.layer) not in declared_copper_layer_names(board):
+        return "skip-layer"
+    if not pad_shape_supported(pad.shape):
+        return "skip-shape"
+    if pad.drill is not None:
+        return "skip-drill-padstack"
+    return "export"
+
+
 def pad_shape_name(shape):
     s=str(shape or "").upper()
     if s=="C":return "circle"

@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import declared_copper_layer_names, kicad_board_layer_rows, pad_export_descriptor, pad_shape_supported, proven_via_span_omissions, slot_export_status
+from ..exporters.kicad_policy import kicad_board_layer_rows, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -246,12 +246,10 @@ def _reported_track_sets(board, export_report, issues):
 def _reported_pad_sets(board, export_report, issues):
     source_ids = {pad.id for pad in board.pads}
     if export_report is None:
-        declared_layers = declared_copper_layer_names(board)
         exported = {
             pad.id
             for pad in board.pads
-            if str(pad.layer) in declared_layers
-            and pad_shape_supported(pad.shape)
+            if pad_export_status(board,pad)=="export"
         }
         return exported, source_ids - exported
 

@@ -6,7 +6,7 @@ from ..models import BoardModel
 from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
-from .kicad_policy import declared_copper_layer_names,kicad_board_layer_specs,pad_export_descriptor,pad_shape_name,pad_shape_supported,slot_geometry,slot_export_status,proven_via_span_omissions
+from .kicad_policy import declared_copper_layer_names,kicad_board_layer_specs,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,proven_via_span_omissions
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
@@ -41,28 +41,32 @@ def _board_layer_lines(board):
 
 def _pad_lines(board,net_num,report):
     lines=[]
-    declared_copper_layers=declared_copper_layer_names(board)
     for pad in board.pads:
-        unsupported=False
-        if str(pad.layer) not in declared_copper_layers:
-            unsupported=True
-            report.issues.append(KicadExportIssue(
-                "warning",
-                "KICAD_PAD_LAYER_UNSUPPORTED",
-                pad.id,
-                f"recovered pad layer {pad.layer!r} is not a declared canonical KiCad copper layer; pad omitted",
-            ))
-        if not pad_shape_supported(pad.shape):
-            unsupported=True
-            report.issues.append(KicadExportIssue(
-                "warning",
-                "KICAD_PAD_SHAPE_UNSUPPORTED",
-                pad.id,
-                f"recovered pad shape {pad.shape!r} has no exact current KiCad pad mapping; pad omitted instead of approximated",
-            ))
-        if unsupported:
+        status=pad_export_status(board,pad)
+        if status!="export":
             report.skipped_pads+=1
             report.skipped_pad_ids.append(pad.id)
+            if status=="skip-layer":
+                report.issues.append(KicadExportIssue(
+                    "warning",
+                    "KICAD_PAD_LAYER_UNSUPPORTED",
+                    pad.id,
+                    f"recovered pad layer {pad.layer!r} is not a declared canonical KiCad copper layer; pad omitted",
+                ))
+            elif status=="skip-shape":
+                report.issues.append(KicadExportIssue(
+                    "warning",
+                    "KICAD_PAD_SHAPE_UNSUPPORTED",
+                    pad.id,
+                    f"recovered pad shape {pad.shape!r} has no exact current KiCad pad mapping; pad omitted instead of approximated",
+                ))
+            else:
+                report.issues.append(KicadExportIssue(
+                    "warning",
+                    "KICAD_PAD_DRILL_PADSTACK_UNPROVEN",
+                    pad.id,
+                    "drill overlap does not prove plated through-hole pad-stack semantics; recovered drilled pad omitted instead of inventing *.Cu copper",
+                ))
             continue
         n,net_name,net_known=_net_binding(board,net_num,pad.net_id,pad.id,report)
         descriptor,ref_layer,layer_warning=pad_export_descriptor(pad)

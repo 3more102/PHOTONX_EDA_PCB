@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Removed speculative recovered drilled-pad export. `PadCandidate.drill` is populated by geometric drill overlap and does not itself prove plating or a through-hole copper pad stack; drilled recovered pads are therefore omitted with `KICAD_PAD_DRILL_PADSTACK_UNPROVEN` instead of being promoted to KiCad `thru_hole` pads on `*.Cu`. The omission participates in existing skipped-pad/source-equivalence accounting until a grouped evidence-backed pad-stack contract is implemented.
+
 - Removed the lossy KiCad recovered-pad shape fallback. PadCandidate shapes outside the exact C/R/O mapping are now omitted with `KICAD_PAD_SHAPE_UNSUPPORTED` and counted in the existing skipped-pad omission/source-equivalence surface instead of being silently approximated as rectangles.
 
 - Hardened recovered-pad export against undeclared/noncanonical KiCad copper layers. Pads whose source layer cannot be represented by the generated board layer table are now omitted with `KICAD_PAD_LAYER_UNSUPPORTED`; export reports and omission manifests track exported/skipped pad IDs, and connectivity audits surface `skipped_pad_ids` as source-equivalence loss instead of emitting a structurally inconsistent footprint/pad layer reference.

@@ -87,3 +87,27 @@ def test_unsupported_pad_shape_is_omitted_instead_of_rect_fallback(tmp_path):
         issue.code == "KICAD_PAD_SHAPE_FALLBACK"
         for issue in report.issues
     )
+
+
+def test_drilled_pad_is_omitted_without_padstack_contract(tmp_path):
+    text, report = _export_pad(
+        tmp_path,
+        PadCandidate(
+            "PD",
+            Point(1, 2),
+            2,
+            2,
+            "C",
+            "F.Cu",
+            drill=0.8,
+        ),
+    )
+
+    assert "PHOTONX:RecoveredPad" not in text
+    assert report.skipped_pad_ids == ["PD"]
+    assert any(
+        issue.code == "KICAD_PAD_DRILL_PADSTACK_UNPROVEN"
+        and issue.object_id == "PD"
+        for issue in report.issues
+    )
+    assert "thru_hole" not in text
