@@ -425,6 +425,13 @@ def proven_via_span_export_plan(board):
                 )
                 continue
         else:
+            if x2_span_kind not in {"blind", "buried"}:
+                omit(
+                    drill_id,
+                    "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
+                    "partial-layer plated span lacks explicit X2 Blind/Buried evidence; via omitted instead of guessing blind versus microvia semantics",
+                )
+                continue
             if (
                 not span_proven
                 or not isinstance(canonical_span, (list, tuple))
@@ -436,13 +443,6 @@ def proven_via_span_export_plan(board):
                     drill_id,
                     "KICAD_PROVEN_VIA_X2_SPAN_UNPROVEN",
                     "partial-layer via requires a source-proven canonical drill span matching the exported layer endpoints",
-                )
-                continue
-            if x2_span_kind not in {"blind", "buried"}:
-                omit(
-                    drill_id,
-                    "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
-                    "partial-layer plated span lacks explicit X2 Blind/Buried evidence; via omitted instead of guessing blind versus microvia semantics",
                 )
                 continue
 
