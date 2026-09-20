@@ -320,3 +320,49 @@ def test_x2_pin_mapping_ignores_whitespace_only_source_identity():
         "pin identity unresolved for pads: P1" in item
         for item in component.evidence
     )
+
+def test_x2_whitespace_only_refdes_is_not_promoted_to_source_identity():
+    board = BoardModel(
+        pads=[
+            _pad("P1", 0.0, refdes="   ", pin="1"),
+        ]
+    )
+
+    components = infer_component_hypotheses(board, backend="python")
+
+    assert not any(
+        item.kind == "gerber_x2_component"
+        for item in components
+    )
+    assert len(components) == 1
+    assert components[0].kind == "unresolved_pad"
+    assert components[0].pad_ids == ["P1"]
+
+
+def test_x2_identity_values_are_trimmed_before_structured_promotion():
+    board = BoardModel(
+        pads=[
+            _pad(
+                "P1",
+                0.0,
+                refdes="  U1  ",
+                pin="  1  ",
+                pin_function="  VCC  ",
+            ),
+            _pad(
+                "P2",
+                2.0,
+                refdes="  U1  ",
+                pin="  2  ",
+                pin_function="  GND  ",
+            ),
+        ]
+    )
+
+    component = infer_component_hypotheses(board, backend="python")[0]
+
+    assert component.kind == "gerber_x2_component"
+    assert component.reference == "U1"
+    assert component.source_pin_map == {"P1": "1", "P2": "2"}
+    assert component.source_pin_functions == {"P1": "VCC", "P2": "GND"}
+
