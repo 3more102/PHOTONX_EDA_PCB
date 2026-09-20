@@ -77,6 +77,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "board_outline",
         "unexpected_edge_graphics",
         "unexpected_copper_graphics",
+        "unexpected_footprint_copper_graphics",
         "foreign_footprints",
         "recovered_pads",
         "copper_regions",
@@ -341,6 +342,43 @@ def test_connectivity_roundtrip_rejects_top_level_copper_graphic():
             "uuid": "00000000-0000-0000-0000-000000000095",
         }
     ]
+
+
+def test_connectivity_roundtrip_rejects_footprint_copper_graphic(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    footprint = next(
+        item
+        for item in readback["footprints"]
+        if item["name"] == "PHOTONX:RecoveredPad"
+    )
+    footprint["unexpected_copper_graphics"].append(
+        {
+            "type": "fp_poly",
+            "layer": "F.Cu",
+            "uuid": "00000000-0000-0000-0000-000000000093",
+        }
+    )
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["unexpected_footprint_copper_graphics"]["equal"] is False
+    assert (
+        audit["unexpected_footprint_copper_graphics"]["observed_count"]
+        == 1
+    )
+    assert audit["unexpected_footprint_copper_graphics"]["unexpected"][0] == {
+        "footprint_name": "PHOTONX:RecoveredPad",
+        "reference": "P1",
+        "type": "fp_poly",
+        "layer": "F.Cu",
+        "uuid": "00000000-0000-0000-0000-000000000093",
+    }
 
 
 def test_connectivity_roundtrip_rejects_foreign_footprint(tmp_path):

@@ -334,6 +334,22 @@ def _observed_tracks(readback, net_lookup, issues):
     return out
 
 
+def _observed_footprint_copper_graphics(readback):
+    out = []
+    for footprint in readback.get("footprints", ()):
+        for item in footprint.get("unexpected_copper_graphics", ()):
+            out.append(
+                {
+                    "footprint_name": str(footprint.get("name")),
+                    "reference": footprint.get("reference"),
+                    "type": str(item.get("type")),
+                    "layer": str(item.get("layer")),
+                    "uuid": item.get("uuid"),
+                }
+            )
+    return out
+
+
 def _foreign_footprint_item(footprint):
     pads = []
     for pad in footprint.get("pads", ()):
@@ -1001,7 +1017,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
     With an export report, the audit covers the declared KiCad layer table, net table, and tracks,
-    rejects unexpected KiCad vias, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
+    rejects unexpected KiCad vias, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
     and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
@@ -1088,6 +1104,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             }
             for item in readback.get("unexpected_copper_graphics", ())
         ],
+    )
+
+    unexpected_footprint_copper_graphics = _compare_multiset(
+        [],
+        _observed_footprint_copper_graphics(readback),
     )
 
     exported_pad_ids, skipped_pad_ids = _reported_pad_sets(
@@ -1211,6 +1232,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and outline["equal"]
         and unexpected_edge_graphics["equal"]
         and unexpected_copper_graphics["equal"]
+        and unexpected_footprint_copper_graphics["equal"]
         and foreign_footprints["equal"]
         and pads["equal"]
         and regions["equal"]
@@ -1243,6 +1265,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "board_outline",
             "unexpected_edge_graphics",
             "unexpected_copper_graphics",
+            "unexpected_footprint_copper_graphics",
             "foreign_footprints",
             "recovered_pads",
             "copper_regions",
@@ -1265,6 +1288,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "outline": outline,
         "unexpected_edge_graphics": unexpected_edge_graphics,
         "unexpected_copper_graphics": unexpected_copper_graphics,
+        "unexpected_footprint_copper_graphics": unexpected_footprint_copper_graphics,
         "foreign_footprints": foreign_footprints,
         "pads": pads,
         "regions": regions,
