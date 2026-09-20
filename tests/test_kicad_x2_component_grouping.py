@@ -163,19 +163,66 @@ def test_incomplete_structured_pin_map_fails_closed_to_independent_pads(tmp_path
     assert "source pin map is incomplete for pads: P2" in issue.message
 
 
-def test_structured_pin_map_is_the_exported_pin_identity(tmp_path):
+def test_structured_pin_map_drift_from_provenance_fails_closed(tmp_path):
     board = _board()
     board.components[0].source_pin_map = {"P1": "A1", "P2": "B2"}
 
     path, report = export_kicad_with_report(
         board,
-        tmp_path / "x2-structured-pin-map.kicad_pcb",
+        tmp_path / "x2-stale-structured-pin-map.kicad_pcb",
     )
     text = path.read_text(encoding="utf-8")
 
-    assert '(pad "A1" smd rect' in text
-    assert '(pad "B2" smd rect' in text
-    assert not any(
+    assert "PHOTONX:RecoveredX2Component" not in text
+    assert text.count('(footprint "PHOTONX:RecoveredPad"') == 2
+    assert any(
         item.code == "KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED"
+        and "structured source pin number does not match trusted X2 evidence"
+        in item.message
+        for item in report.issues
+    )
+
+
+def test_structured_pin_function_drift_from_provenance_fails_closed(tmp_path):
+    board = _board()
+    board.components[0].source_pin_functions["P2"] = "RESET"
+
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "x2-stale-structured-pin-function.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8")
+
+    assert "PHOTONX:RecoveredX2Component" not in text
+    assert text.count('(footprint "PHOTONX:RecoveredPad"') == 2
+    assert any(
+        item.code == "KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED"
+        and "structured source pin function does not match trusted X2 evidence"
+        in item.message
+        for item in report.issues
+    )
+
+
+def test_structured_pin_function_without_provenance_fails_closed(tmp_path):
+    board = _board()
+    p2 = board.pads[1]
+    p2.provenance.evidence = [
+        item
+        for item in p2.provenance.evidence
+        if item.kind != "gerber_x2_pin_function"
+    ]
+
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "x2-unbacked-structured-pin-function.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8")
+
+    assert "PHOTONX:RecoveredX2Component" not in text
+    assert text.count('(footprint "PHOTONX:RecoveredPad"') == 2
+    assert any(
+        item.code == "KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED"
+        and "structured source pin function lacks matching trusted X2 evidence"
+        in item.message
         for item in report.issues
     )
