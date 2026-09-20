@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, KICAD_DEFAULT_PAPER, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, pad_shape_name, proven_via_span_omissions, slot_export_status, slot_geometry, track_export_status
+from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, KICAD_DEFAULT_PAPER, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, pad_shape_name, proven_via_span_export_plan, slot_export_status, slot_geometry, track_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -308,8 +308,12 @@ def _reported_outline_sets(board, export_report, issues):
     )
 
 
-def _reported_drill_sets(board, export_report, issues):
-    source_ids = {drill.id for drill in board.drills}
+def _reported_drill_sets(board, export_report, issues, via_export_ids=()):
+    via_export_ids=set(via_export_ids)
+    source_ids = {
+        drill.id for drill in board.drills
+        if drill.id not in via_export_ids
+    }
     if export_report is None:
         exported = {
             drill.id
@@ -723,14 +727,51 @@ def _observed_track_arcs(readback, net_lookup, issues):
     return out
 
 
-def _via_item(at, size, drill, layers, binding):
+def _via_item(at, size, drill, layers, binding, object_uuid):
     return {
         "at": list(_point(at)),
         "size": _r(size),
         "drill": _r(drill),
         "layers": [str(layer) for layer in layers],
         "net": binding,
+        "uuid": None if object_uuid is None else str(object_uuid),
     }
+
+
+def _expected_vias(board, via_exportable, exported_ids, issues):
+    by_id={item["drill_id"]:item for item in via_exportable}
+    out=[]
+    for drill_id in sorted(exported_ids):
+        item=by_id.get(drill_id)
+        if item is None:
+            issues.append(
+                {
+                    "code":"KICAD_ROUNDTRIP_EXPORTED_VIA_PLAN_MISSING",
+                    "drill_id":drill_id,
+                }
+            )
+            continue
+        binding=_source_net_binding(board,item["net_id"])
+        if binding is None:
+            issues.append(
+                {
+                    "code":"KICAD_ROUNDTRIP_EXPORTED_VIA_NET_UNRESOLVED",
+                    "drill_id":drill_id,
+                    "net_id":item["net_id"],
+                }
+            )
+            continue
+        out.append(
+            _via_item(
+                item["at"],
+                item["size"],
+                item["drill"],
+                item["layers"],
+                binding,
+                photonx_uuid("via:"+str(drill_id)),
+            )
+        )
+    return out
 
 
 def _observed_vias(readback, net_lookup, issues):
@@ -751,6 +792,7 @@ def _observed_vias(readback, net_lookup, issues):
                     via.get("drill"),
                     via.get("layers", ()),
                     binding,
+                    via.get("uuid"),
                 )
             )
         except (TypeError, ValueError, IndexError, KeyError) as exc:
@@ -1465,9 +1507,9 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     With an export report, the audit covers emitted board fabrication settings, the declared KiCad layer table, net table, and tracks,
     rejects unexpected KiCad vias, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, direct mask/paste graphics at board or footprint scope, footprint/pad copper-behavior overrides, verifies the emitted Edge.Cuts outline, and compares recovered point drills, pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
-    and recovered slots, including canonical mechanical geometry plus the exact emitted KiCad slot pad-stack geometry. Proven plated via spans are tracked as explicit source
-    export losses because the current exporter does not synthesize via annular
-    geometry. Deterministic PhotonX UUIDs are part of the supported
+    and recovered slots, including canonical mechanical geometry plus the exact emitted KiCad slot pad-stack geometry. Proven plated via spans are exported and round-trip checked only when their
+    annular geometry, complete layer support, and reconstructed net are exactly
+    representable; all other proven spans remain explicit source losses. Deterministic PhotonX UUIDs are part of the supported
     object identity for emitted tracks, recovered pad/slot footprints and their child pads, regions, and slots. Recovered-pad emitted geometry is compared exactly as read back.
     Without a report,
     the legacy fallback can still validate net/track/pad connectivity, but
@@ -1478,7 +1520,12 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     issues = []
     _net_rows, ambiguous_net_ids = kicad_net_export_rows(board)
     duplicate_object_ids = kicad_duplicate_object_ids(board)
-    source_via_span_ids, via_span_metadata_problems = proven_via_span_omissions(board)
+    via_exportable, via_omitted, via_span_metadata_problems = proven_via_span_export_plan(board)
+    source_via_span_ids = {
+        item["drill_id"] for item in via_exportable
+    } | {
+        item[0] for item in via_omitted
+    }
     for object_id, message in via_span_metadata_problems:
         issues.append(
             {
@@ -1635,8 +1682,26 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         _observed_tracks(readback, net_lookup, issues),
     )
 
+    if export_report is None:
+        exported_via_span_ids={
+            item["drill_id"] for item in via_exportable
+        }
+        skipped_via_span_ids=set(source_via_span_ids)-set(exported_via_span_ids)
+    else:
+        exported_via_span_ids, skipped_via_span_ids = _reported_sets(
+            source_via_span_ids,
+            getattr(export_report, "exported_via_span_ids", ()),
+            getattr(export_report, "skipped_via_span_ids", ()),
+            "VIA_SPAN",
+            issues,
+        )
     vias = _compare_multiset(
-        [],
+        _expected_vias(
+            board,
+            via_exportable,
+            exported_via_span_ids,
+            issues,
+        ),
         _observed_vias(readback, net_lookup, issues),
     )
 
@@ -1717,6 +1782,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         board,
         export_report,
         issues,
+        exported_via_span_ids,
     )
     drills = _compare_multiset(
         _expected_drills(board, exported_drill_ids),
@@ -1752,20 +1818,12 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     }
     if export_report is None:
         skipped_route_ids = set(source_route_ids)
-        skipped_via_span_ids = set(source_via_span_ids)
     else:
         _, skipped_route_ids = _reported_sets(
             source_route_ids,
             (),
             getattr(export_report, "skipped_route_ids", ()),
             "ROUTE",
-            issues,
-        )
-        _, skipped_via_span_ids = _reported_sets(
-            source_via_span_ids,
-            (),
-            getattr(export_report, "skipped_via_span_ids", ()),
-            "VIA_SPAN",
             issues,
         )
 
