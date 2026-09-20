@@ -232,7 +232,7 @@ def test_x2_partial_span_exports_exact_kicad_via_type_end_to_end(
     assert report.exported_via_span_ids == [board.drills[0].id]
     assert report.skipped_via_span_ids == []
     assert audit["vias"]["equal"] is True
-    assert audit["source_equivalent"] is True
+    assert audit["losses"]["omitted_proven_via_span_drill_ids"] == []
 
 
 def test_x2_span_beyond_declared_stackup_never_falls_back_to_geometry(
