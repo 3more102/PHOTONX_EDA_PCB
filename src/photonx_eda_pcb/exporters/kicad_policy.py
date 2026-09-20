@@ -651,6 +651,21 @@ def proven_via_span_export_plan(board):
             continue
 
         drill = drill_by_id.get(drill_id)
+        function = (
+            str(getattr(drill, "x2_aperture_function", "") or "")
+            .lower()
+            .replace("_", "")
+            .replace("-", "")
+            if drill is not None
+            else ""
+        )
+        if function == "backdrill":
+            omit(
+                drill_id,
+                "KICAD_PROVEN_VIA_BACKDRILL_UNSUPPORTED",
+                "source-proven XNC BackDrill is a plating-removal operation and cannot be exported as an electrical KiCad via",
+            )
+            continue
         plating = (
             str(getattr(drill, "plating", "unknown")).lower().replace("_", "-")
             if drill is not None
