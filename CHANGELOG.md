@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened recovered-pad KiCad export against malformed geometry. Pad centers must be finite numeric coordinates, sizes must be finite and positive, and rotation must be finite before any footprint text is formatted; failures are explicit `KICAD_PAD_COORDINATE_INVALID`, `KICAD_PAD_SIZE_INVALID`, or `KICAD_PAD_ROTATION_INVALID` omissions using the existing skipped-pad/source-loss surface.
+
 - Hardened KiCad track export against invalid geometry before formatting. Tracks with non-numeric/non-finite coordinates, non-positive/non-finite widths, or zero-length centerlines are now omitted with explicit diagnostics and existing `skipped_track_ids` loss accounting; unsupported-layer and unresolved-net diagnostics remain independent so combined defects stay visible without double-counting the skipped object.
 
 - Hardened KiCad `Edge.Cuts` export against invalid source outline geometry. Non-numeric/non-finite coordinates and zero-length `OutlineSegment` objects are now omitted with explicit reasons, tracked through export reports/omission manifests, and surfaced as `skipped_outline_ids` source losses; valid outline segments still round-trip with exact deterministic UUID/geometry checks.

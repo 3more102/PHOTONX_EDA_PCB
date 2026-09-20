@@ -162,7 +162,28 @@ def _pad_lines(board,net_num,report):
         if status!="export":
             report.skipped_pads+=1
             report.skipped_pad_ids.append(pad.id)
-            if status=="skip-layer":
+            if status=="skip-invalid-coordinate":
+                report.issues.append(KicadExportIssue(
+                    "warning",
+                    "KICAD_PAD_COORDINATE_INVALID",
+                    pad.id,
+                    "recovered pad center coordinates must be finite numeric values; pad omitted",
+                ))
+            elif status=="skip-invalid-size":
+                report.issues.append(KicadExportIssue(
+                    "warning",
+                    "KICAD_PAD_SIZE_INVALID",
+                    pad.id,
+                    "recovered pad dimensions must be finite positive numbers; pad omitted",
+                ))
+            elif status=="skip-invalid-rotation":
+                report.issues.append(KicadExportIssue(
+                    "warning",
+                    "KICAD_PAD_ROTATION_INVALID",
+                    pad.id,
+                    "recovered pad rotation must be a finite numeric value; pad omitted",
+                ))
+            elif status=="skip-layer":
                 report.issues.append(KicadExportIssue(
                     "warning",
                     "KICAD_PAD_LAYER_UNSUPPORTED",

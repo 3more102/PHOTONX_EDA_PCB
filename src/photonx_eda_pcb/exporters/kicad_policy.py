@@ -51,6 +51,41 @@ def pad_shape_supported(shape):
 
 
 def pad_export_status(board,pad):
+    try:
+        cx = float(pad.center.x)
+        cy = float(pad.center.y)
+    except (TypeError, ValueError):
+        return "skip-invalid-coordinate"
+    if not all(isfinite(value) for value in (cx, cy)):
+        return "skip-invalid-coordinate"
+
+    try:
+        size_x = float(pad.size_x)
+        size_y = float(pad.size_y)
+    except (TypeError, ValueError):
+        return "skip-invalid-size"
+    if (
+        not isfinite(size_x)
+        or not isfinite(size_y)
+        or size_x <= 0
+        or size_y <= 0
+    ):
+        return "skip-invalid-size"
+
+    try:
+        angle = float(
+            getattr(
+                pad,
+                "rotation_deg",
+                getattr(pad, "rotation", 0.0),
+            )
+            or 0.0
+        )
+    except (TypeError, ValueError):
+        return "skip-invalid-rotation"
+    if not isfinite(angle):
+        return "skip-invalid-rotation"
+
     if str(pad.layer) not in declared_copper_layer_names(board):
         return "skip-layer"
     if not pad_shape_supported(pad.shape):
