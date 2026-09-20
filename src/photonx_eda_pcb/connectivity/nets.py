@@ -24,8 +24,9 @@ def _plated_via_evidence(
     members: list[str],
 ) -> tuple[list[Evidence], list[object]]:
     by_drill: dict[str, dict[str, object]] = {}
+    via_reasons = {"plated_via_span", "plated_via_barrel_contact"}
     for left_id, right_id, data in graph.subgraph(members).edges(data=True):
-        if data.get("reason") != "plated_via_span":
+        if data.get("reason") not in via_reasons:
             continue
         drill_id = str(data.get("drill_id") or "")
         if not drill_id:
@@ -33,13 +34,15 @@ def _plated_via_evidence(
         entry = by_drill.setdefault(
             drill_id,
             {
+                "contacts": set(),
                 "pads": set(),
                 "from_layer": data.get("from_layer"),
                 "to_layer": data.get("to_layer"),
                 "confidence": float(data.get("confidence", 0.0)),
             },
         )
-        entry["pads"].update((left_id, right_id))
+        entry["contacts"].update((left_id, right_id))
+        entry["pads"].update(data.get("evidence_pad_ids", ()))
         entry["confidence"] = min(
             float(entry["confidence"]),
             float(data.get("confidence", 0.0)),
@@ -59,13 +62,14 @@ def _plated_via_evidence(
                 sources.append(source)
 
         pads = ",".join(sorted(entry["pads"]))
+        contacts = ",".join(sorted(entry["contacts"]))
         evidence.append(
             Evidence(
                 "plated_via_span",
                 (
                     f"drill={drill_id}; "
                     f"span={entry['from_layer']}->{entry['to_layer']}; "
-                    f"pads={pads}"
+                    f"pads={pads}; contacts={contacts}"
                 ),
                 float(entry["confidence"]),
                 source,
@@ -177,10 +181,7 @@ def assign_physical_nets(board: BoardModel, graph: nx.Graph) -> list[NetGroup]:
             net.provenance.add_evidence(
                 Evidence(
                     "gerber_x2_duplicate_net_label",
-                    (
-                        f"name={duplicate}; physical_groups={label_counts[duplicate]}; "
-                        "label left unresolved"
-                    ),
+                    f"name={duplicate}; physical_groups={label_counts[duplicate]}; label left unresolved",
                     1.0,
                 )
             )
