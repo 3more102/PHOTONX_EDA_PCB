@@ -1,7 +1,7 @@
 from __future__ import annotations
 import tkinter as tk
 from .state import ViewState
-from .via_review import build_via_review_descriptors
+from ..via_review import build_via_review_descriptors
 
 
 class BoardCanvas(tk.Canvas):
