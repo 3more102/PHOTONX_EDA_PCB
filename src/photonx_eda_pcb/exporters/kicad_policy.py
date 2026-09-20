@@ -396,13 +396,44 @@ def proven_via_span_export_plan(board):
                 "proven via span endpoint is not a declared canonical KiCad copper layer",
             )
             continue
-        if {from_layer, to_layer} != {"F.Cu", "B.Cu"}:
-            omit(
-                drill_id,
-                "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
-                "partial-layer plated span is proven, but Gerber/Excellon evidence does not distinguish KiCad blind/buried via semantics from microvia manufacturing; via omitted instead of guessing a via type",
-            )
-            continue
+        span_kind = str(getattr(drill, "x2_span_kind", "") or "").lower()
+        endpoint_set = {from_layer, to_layer}
+        if endpoint_set == {"F.Cu", "B.Cu"}:
+            if span_kind in {"blind", "buried", "npth"}:
+                omit(
+                    drill_id,
+                    "KICAD_PROVEN_VIA_KIND_MISMATCH",
+                    "explicit X2 drill span kind contradicts a full outer-to-outer plated via span",
+                )
+                continue
+            via_type = "through"
+        else:
+            outer_count = len(endpoint_set & {"F.Cu", "B.Cu"})
+            if span_kind == "blind":
+                if outer_count != 1:
+                    omit(
+                        drill_id,
+                        "KICAD_PROVEN_VIA_KIND_MISMATCH",
+                        "X2 Blind span must touch exactly one outer copper layer",
+                    )
+                    continue
+                via_type = "blind"
+            elif span_kind == "buried":
+                if outer_count != 0:
+                    omit(
+                        drill_id,
+                        "KICAD_PROVEN_VIA_KIND_MISMATCH",
+                        "X2 Buried span must connect only inner copper layers",
+                    )
+                    continue
+                via_type = "buried"
+            else:
+                omit(
+                    drill_id,
+                    "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
+                    "partial-layer plated span lacks explicit X2 Blind/Buried type evidence; via omitted instead of guessing a KiCad via type",
+                )
+                continue
 
         start_index, end_index = sorted(
             (layer_index[from_layer], layer_index[to_layer])
@@ -511,6 +542,7 @@ def proven_via_span_export_plan(board):
         exportable.append(
             {
                 "drill_id": drill_id,
+                "type": via_type,
                 "at": (cx, cy),
                 "size": diameters[0],
                 "drill": drill_diameter,
