@@ -18,12 +18,14 @@ _RECOVERED_NPTH_DRILL = "PHOTONX:RecoveredNPTHDrill"
 _RECOVERED_NPTH_SLOT = "PHOTONX:RecoveredNPTHSlot"
 _RECOVERED_PLATED_SLOT = "PHOTONX:RecoveredPlatedSlot"
 _RECOVERED_NPTH_ROUTE = "PHOTONX:RecoveredNPTHRoute"
+_RECOVERED_PLATED_ROUTE = "PHOTONX:RecoveredPlatedRoute"
 _PHOTONX_FOOTPRINT_NAMES = {
     _RECOVERED_PAD_FOOTPRINT,
     _RECOVERED_NPTH_DRILL,
     _RECOVERED_NPTH_SLOT,
     _RECOVERED_PLATED_SLOT,
     _RECOVERED_NPTH_ROUTE,
+    _RECOVERED_PLATED_ROUTE,
 }
 
 
@@ -1455,7 +1457,7 @@ def _expected_routes(board, exported_ids, issues):
     for route in getattr(board, "routes", ()):
         if route.id not in exported_ids:
             continue
-        descriptor = route_export_descriptor(route)
+        descriptor = route_export_descriptor(route, board)
         if descriptor is None:
             issues.append(
                 {
@@ -1464,13 +1466,26 @@ def _expected_routes(board, exported_ids, issues):
                 }
             )
             continue
+        if descriptor["net_id"] is None:
+            binding = {"code": 0, "name": ""}
+        else:
+            binding = _source_net_binding(board, descriptor["net_id"])
+            if binding is None:
+                issues.append(
+                    {
+                        "code": "KICAD_ROUNDTRIP_EXPORTED_ROUTE_NET_UNRESOLVED",
+                        "route_id": route.id,
+                        "net_id": descriptor["net_id"],
+                    }
+                )
+                continue
         geometry = _pad_geometry_item(
             descriptor["center"],
             0.0,
             descriptor["footprint_layer"],
-            "",
-            "np_thru_hole",
-            "oval",
+            descriptor["pad_number"],
+            descriptor["pad_kind"],
+            descriptor["pad_shape"],
             (0.0, 0.0),
             descriptor["angle_deg"],
             descriptor["size"],
@@ -1486,8 +1501,9 @@ def _expected_routes(board, exported_ids, issues):
                 "reference_uuid": photonx_uuid("route-ref:" + str(route.id)),
                 "reference_count": 1,
                 "pad_uuid": photonx_uuid("route-pad:" + str(route.id)),
+                "kind": descriptor["kind"],
                 "geometry": geometry,
-                "net": {"code": 0, "name": ""},
+                "net": binding,
             }
         )
     return out
@@ -1495,8 +1511,13 @@ def _expected_routes(board, exported_ids, issues):
 
 def _observed_routes(readback, net_lookup, issues):
     out = []
+    names = {
+        _RECOVERED_NPTH_ROUTE: "npth",
+        _RECOVERED_PLATED_ROUTE: "plated",
+    }
     for fp_index, footprint in enumerate(readback.get("footprints", ())):
-        if footprint.get("name") != _RECOVERED_NPTH_ROUTE:
+        kind = names.get(footprint.get("name"))
+        if kind is None:
             continue
         reference = footprint.get("reference")
         pads = list(footprint.get("pads", ()))
@@ -1505,6 +1526,7 @@ def _observed_routes(readback, net_lookup, issues):
                 {
                     "code": "KICAD_ROUNDTRIP_ROUTE_REFERENCE_MISSING",
                     "footprint_index": fp_index,
+                    "kind": kind,
                 }
             )
             continue
@@ -1514,6 +1536,7 @@ def _observed_routes(readback, net_lookup, issues):
                     "code": "KICAD_ROUNDTRIP_ROUTE_PAD_COUNT_INVALID",
                     "route_id": str(reference),
                     "pad_count": len(pads),
+                    "kind": kind,
                 }
             )
             continue
@@ -1526,6 +1549,7 @@ def _observed_routes(readback, net_lookup, issues):
                     "code": "KICAD_ROUNDTRIP_INVALID_ROUTE_GEOMETRY",
                     "route_id": str(reference),
                     "detail": str(exc),
+                    "kind": kind,
                 }
             )
             continue
@@ -1551,12 +1575,12 @@ def _observed_routes(readback, net_lookup, issues):
                 "reference_uuid": footprint.get("reference_uuid"),
                 "reference_count": int(footprint.get("reference_count", 0)),
                 "pad_uuid": pads[0].get("uuid"),
+                "kind": kind,
                 "geometry": geometry,
                 "net": binding,
             }
         )
     return out
-
 
 def _empty_comparison():
     return _compare_multiset([], [])
@@ -1567,7 +1591,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     With an export report, the audit covers emitted board fabrication settings, the declared KiCad layer table, net table, and tracks,
     rejects unexpected KiCad vias, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, direct mask/paste graphics at board or footprint scope, footprint/pad copper-behavior overrides, verifies the emitted Edge.Cuts outline, and compares recovered point drills, pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
-    recovered slots, and exact non-plated routed paths exported as NPTH route footprints. Proven plated via spans are exported only when their
+    recovered slots, exact non-plated routed paths exported as NPTH route footprints, and source-proven plated routed slots. Proven plated via spans are exported only when their
     through-hole annular geometry, complete layer support, and reconstructed net
     are exactly representable; all other proven spans remain explicit source losses. Deterministic PhotonX UUIDs are part of the supported
     object identity for emitted tracks, recovered pad/slot footprints and their child pads, regions, and slots. Recovered-pad emitted geometry is compared exactly as read back.
@@ -1875,7 +1899,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     source_routes = list(getattr(board, "routes", ()))
     source_route_ids = {route.id for route in source_routes}
     if export_report is None:
-        route_readiness = assess_route_export_readiness(source_routes)
+        route_readiness = assess_route_export_readiness(source_routes, board)
         exported_route_ids = set(route_readiness.exportable)
         skipped_route_ids = set(route_readiness.omitted)
     else:
