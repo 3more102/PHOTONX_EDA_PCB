@@ -195,6 +195,8 @@ class GerberRS274XParser:
         self.region_current_arc_evidence: list[Evidence] = []
         self.region_current_edge_kinds: list[str] = []
         self.region_start_line: int | None = None
+        self.region_aperture_attributes: dict[str, tuple[str, ...]] = {}
+        self.region_aperture_attribute_sources: dict[str, SourceRef] = {}
         self.file_polarity: str | None = None
         self.layer_polarity = "dark"
         self.layer_polarity_sources: list[SourceRef] = []
@@ -223,6 +225,14 @@ class GerberRS274XParser:
         self.aperture_mirror_source: SourceRef | None = None
         self.aperture_rotation_source: SourceRef | None = None
         self.aperture_scale_source: SourceRef | None = None
+        self.aperture_attributes: dict[str, tuple[str, ...]] = {}
+        self.aperture_attribute_sources: dict[str, SourceRef] = {}
+        self.aperture_definition_attributes: dict[
+            int, dict[str, tuple[str, ...]]
+        ] = {}
+        self.aperture_definition_attribute_sources: dict[
+            int, dict[str, SourceRef]
+        ] = {}
         self.object_attributes: dict[str, tuple[str, ...]] = {}
         self.object_attribute_sources: dict[str, SourceRef] = {}
         self.image_body_started = False
@@ -2099,16 +2109,27 @@ class GerberRS274XParser:
         )
         self.unsupported_apertures.add(code)
 
-    def _update_object_attribute_state(
+    def _update_attribute_state(
         self,
         command: str,
         name: str,
         values: list[str],
         source: SourceRef,
     ) -> None:
-        """Apply X2 TO/TD dictionary semantics for future graphical objects."""
+        """Apply the single X2 TA/TO/TD attribute-dictionary semantics."""
+
+        if command == "TA":
+            # Attribute names are unique in the current dictionary. Reusing a
+            # custom name in another domain replaces the previous entry.
+            self.object_attributes.pop(name, None)
+            self.object_attribute_sources.pop(name, None)
+            self.aperture_attributes[name] = tuple(values)
+            self.aperture_attribute_sources[name] = source
+            return
 
         if command == "TO":
+            self.aperture_attributes.pop(name, None)
+            self.aperture_attribute_sources.pop(name, None)
             self.object_attributes[name] = tuple(values)
             self.object_attribute_sources[name] = source
             return
@@ -2117,12 +2138,67 @@ class GerberRS274XParser:
             return
 
         if name:
+            self.aperture_attributes.pop(name, None)
+            self.aperture_attribute_sources.pop(name, None)
             self.object_attributes.pop(name, None)
             self.object_attribute_sources.pop(name, None)
             return
 
+        self.aperture_attributes.clear()
+        self.aperture_attribute_sources.clear()
         self.object_attributes.clear()
         self.object_attribute_sources.clear()
+
+    def _snapshot_aperture_attributes(self, code: int) -> None:
+        """Freeze the TA dictionary on one successfully defined aperture."""
+
+        self.aperture_definition_attributes[code] = dict(self.aperture_attributes)
+        self.aperture_definition_attribute_sources[code] = dict(
+            self.aperture_attribute_sources
+        )
+
+    def _add_aperture_attribute_provenance(
+        self,
+        prov: Provenance,
+        attributes: dict[str, tuple[str, ...]],
+        sources: dict[str, SourceRef],
+    ) -> None:
+        """Attach one immutable aperture-attribute snapshot as source evidence."""
+
+        for name in sorted(attributes):
+            values = attributes[name]
+            source = sources[name]
+            prov.add_source(source)
+            prov.add_evidence(
+                Evidence(
+                    "gerber_x2_aperture_attribute",
+                    f"name={name}; values={values!r}",
+                    1.0,
+                    source,
+                )
+            )
+            if name == ".AperFunction":
+                prov.add_evidence(
+                    Evidence(
+                        "gerber_x2_aperture_function",
+                        ",".join(values),
+                        1.0,
+                        source,
+                    )
+                )
+
+    def _add_defined_aperture_attribute_provenance(
+        self,
+        prov: Provenance,
+        code: int | None,
+    ) -> None:
+        if code is None:
+            return
+        self._add_aperture_attribute_provenance(
+            prov,
+            self.aperture_definition_attributes.get(code, {}),
+            self.aperture_definition_attribute_sources.get(code, {}),
+        )
 
     def _add_object_attribute_provenance(self, prov: Provenance) -> None:
         """Attach the current X2 object-attribute snapshot to one new object."""
@@ -2185,9 +2261,15 @@ class GerberRS274XParser:
         y_index: int,
         dx_mm: float,
         dy_mm: float,
+        *,
+        include_current_aperture_attributes: bool = True,
     ) -> Provenance:
         prov = Provenance([src], [])
         self._add_object_attribute_provenance(prov)
+        if include_current_aperture_attributes:
+            self._add_defined_aperture_attribute_provenance(
+                prov, self.current_aperture
+            )
         if self.step_repeat is not None:
             output_offset = self._rotate_image_point(Point(dx_mm, dy_mm))
             detail = (
@@ -2361,6 +2443,8 @@ class GerberRS274XParser:
         self.region_current_arc_evidence.clear()
         self.region_current_edge_kinds.clear()
         self.region_start_line = None
+        self.region_aperture_attributes.clear()
+        self.region_aperture_attribute_sources.clear()
 
     def _region_fail(
         self,
@@ -2425,6 +2509,12 @@ class GerberRS274XParser:
         self.region_current_arc_evidence = []
         self.region_current_edge_kinds = []
         self.region_start_line = line_no
+        # Gerber regions take aperture attributes from the current TA
+        # dictionary at G36, not from the selected aperture.
+        self.region_aperture_attributes = dict(self.aperture_attributes)
+        self.region_aperture_attribute_sources = dict(
+            self.aperture_attribute_sources
+        )
 
     def _finish_current_region_contour(
         self,
@@ -3265,6 +3355,10 @@ class GerberRS274XParser:
         statement_start_sources = self.region_sources[:1]
         start_line = self.region_start_line
         end_src = SourceRef(str(path), line_no, line)
+        region_aperture_attributes = dict(self.region_aperture_attributes)
+        region_aperture_attribute_sources = dict(
+            self.region_aperture_attribute_sources
+        )
 
         self.region_sources = []
         self.region_arc_evidence = []
@@ -3277,6 +3371,8 @@ class GerberRS274XParser:
         self.region_current_arc_evidence = []
         self.region_current_edge_kinds = []
         self.region_start_line = None
+        self.region_aperture_attributes = {}
+        self.region_aperture_attribute_sources = {}
 
         contour_count = len(contours)
         for contour_index, points in enumerate(contours):
@@ -3390,6 +3486,12 @@ class GerberRS274XParser:
                     y_index or 0,
                     dx_mm,
                     dy_mm,
+                    include_current_aperture_attributes=False,
+                )
+                self._add_aperture_attribute_provenance(
+                    prov,
+                    region_aperture_attributes,
+                    region_aperture_attribute_sources,
                 )
                 for source in sources:
                     prov.add_source(source)
@@ -4347,8 +4449,8 @@ class GerberRS274XParser:
                     if not self.strict:
                         self._disable_image_geometry(out)
                     continue
-                if command in {"TO", "TD"}:
-                    self._update_object_attribute_state(
+                if command in {"TA", "TO", "TD"}:
+                    self._update_attribute_state(
                         command,
                         name,
                         values,
@@ -4453,8 +4555,9 @@ class GerberRS274XParser:
                 if not self._require_units(p, line_no, line, out):
                     continue
                 code, shape, modifiers = m.groups()
+                aperture_code = int(code)
                 self._instantiate_standard_aperture(
-                    int(code),
+                    aperture_code,
                     shape,
                     modifiers,
                     p,
@@ -4462,6 +4565,8 @@ class GerberRS274XParser:
                     line,
                     out,
                 )
+                if aperture_code in self.apertures:
+                    self._snapshot_aperture_attributes(aperture_code)
                 continue
 
             m = _AD_MACRO.match(line)
@@ -4469,8 +4574,9 @@ class GerberRS274XParser:
                 if not self._require_units(p, line_no, line, out):
                     continue
                 code, name, modifiers = m.groups()
+                aperture_code = int(code)
                 self._instantiate_macro_aperture(
-                    int(code),
+                    aperture_code,
                     name,
                     modifiers,
                     p,
@@ -4478,6 +4584,8 @@ class GerberRS274XParser:
                     line,
                     out,
                 )
+                if aperture_code in self.apertures:
+                    self._snapshot_aperture_attributes(aperture_code)
                 continue
 
             m = _SELECT.match(line)

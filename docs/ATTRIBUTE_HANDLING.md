@@ -27,3 +27,27 @@ decodes escaped string fields using the same safe decoder as
 
 This validation does not invent semantics for attributes PHOTONX does not yet
 consume; valid metadata remains evidence-bearing diagnostic information.
+
+## Aperture and object attribute state
+
+PHOTONX tracks the current `TA` aperture-attribute state and `TO`
+object-attribute state with Gerber's single-name dictionary behavior for these
+domains. Reusing the same attribute name replaces the previous tracked entry;
+`TD.<name>` removes that name and bare `TD` clears all tracked aperture and
+object attributes.
+
+When a supported `AD` command creates an aperture, the current `TA` state is
+snapshotted onto that aperture and remains immutable even if later `TA` or
+`TD` commands change the current dictionary. Geometry created with that
+aperture carries the frozen aperture metadata in provenance as
+`gerber_x2_aperture_attribute` evidence. `.AperFunction` is additionally
+normalized as `gerber_x2_aperture_function` evidence without inferring any
+electrical or component semantics from the value.
+
+A `G36` region snapshots the current `TA` dictionary at region creation. It
+does not inherit aperture attributes from the currently selected aperture.
+Subsequent `TA`/`TD` changes are non-retroactive.
+
+Generic `TF` attributes remain subject to the existing grammar validation and
+domain-specific handling; this section does not claim full semantic consumption
+of every X2 file attribute.
