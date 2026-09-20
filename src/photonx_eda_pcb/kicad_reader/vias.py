@@ -17,6 +17,7 @@ def read_vias(root):
         drill = child(via, "drill")
         layers = child(via, "layers")
         net = child(via, "net")
+        object_uuid = child(via, "uuid")
         out.append(
             {
                 "at": (float(at[1]), float(at[2])),
@@ -24,6 +25,7 @@ def read_vias(root):
                 "drill": float(drill[1]),
                 "layers": tuple(map(str, layers[1:])),
                 "net": _net_ordinal(net),
+                "uuid": None if object_uuid is None else str(object_uuid[1]),
             }
         )
     return out
