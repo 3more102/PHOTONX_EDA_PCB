@@ -173,11 +173,37 @@ def test_conflicting_trusted_x2_refdes_isolated_from_geometry():
     )
 
 
-def test_duplicate_trusted_x2_pin_number_fails_closed_for_component():
+def test_duplicate_trusted_x2_pin_number_across_flashes_is_allowed():
     board = BoardModel(
         pads=[
-            _pad("P1", 0.0, refdes="U1", pin="1"),
-            _pad("P2", 10.0, refdes="U1", pin="1"),
+            _pad("P1", 0.0, refdes="U1", pin="1", pin_function="VCC"),
+            _pad("P2", 10.0, refdes="U1", pin="1", pin_function="VCC"),
+        ]
+    )
+
+    components = infer_component_hypotheses(
+        board,
+        max_pair_distance_mm=2.0,
+        backend="python",
+    )
+
+    assert len(components) == 1
+    source = components[0]
+    assert source.kind == "gerber_x2_component"
+    assert source.reference == "U1"
+    assert source.pad_ids == ["P1", "P2"]
+    assert source.confidence == 1.0
+    assert any(
+        "P1=1 (VCC)" in item and "P2=1 (VCC)" in item
+        for item in source.evidence
+    )
+
+
+def test_duplicate_x2_pin_with_conflicting_functions_fails_closed():
+    board = BoardModel(
+        pads=[
+            _pad("P1", 0.0, refdes="U1", pin="1", pin_function="VCC"),
+            _pad("P2", 10.0, refdes="U1", pin="1", pin_function="GND"),
         ]
     )
 
@@ -194,7 +220,8 @@ def test_duplicate_trusted_x2_pin_number_fails_closed_for_component():
     assert conflict.pad_ids == ["P1", "P2"]
     assert conflict.confidence == 0.0
     assert any(
-        "pin '1' assigned to multiple pads: P1, P2" in item
+        "pin '1' has conflicting functions across flashes: 'GND', 'VCC'"
+        in item
         for item in conflict.evidence
     )
 
