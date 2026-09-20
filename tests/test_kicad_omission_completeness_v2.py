@@ -162,3 +162,32 @@ def test_manifest_records_proven_via_span_connectivity_omission(tmp_path):
         for item in data["issues"]
     )
     assert validate_omission_manifest(data) == []
+
+
+def test_manifest_records_unsupported_pad_layer_omission(tmp_path):
+    board = BoardModel(
+        pads=[
+            PadCandidate(
+                "P_BAD_LAYER",
+                Point(0, 0),
+                1,
+                1,
+                "C",
+                "In31.Cu",
+            )
+        ]
+    )
+    _, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    data = omission_manifest(report)
+
+    assert data["exported_pads"] == []
+    assert data["skipped_pads"] == ["P_BAD_LAYER"]
+    assert any(
+        item["code"] == "KICAD_PAD_LAYER_UNSUPPORTED"
+        and item["object_id"] == "P_BAD_LAYER"
+        for item in data["issues"]
+    )
+    assert validate_omission_manifest(data) == []

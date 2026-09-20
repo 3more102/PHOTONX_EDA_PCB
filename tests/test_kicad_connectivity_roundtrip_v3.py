@@ -716,6 +716,7 @@ def test_connectivity_roundtrip_separates_export_losses(tmp_path):
     assert audit["source_connectivity_complete"] is False
     assert audit["source_equivalent"] is False
     assert audit["losses"] == {
+        "skipped_pad_ids": [],
         "skipped_track_ids": ["T_SKIP"],
         "skipped_region_ids": ["R_SKIP"],
         "skipped_slot_ids": ["S_SKIP"],
@@ -723,6 +724,37 @@ def test_connectivity_roundtrip_separates_export_losses(tmp_path):
         "unresolved_slot_net_ids": [],
         "omitted_proven_via_span_drill_ids": [],
     }
+
+
+def test_connectivity_roundtrip_marks_unsupported_pad_layer_as_source_loss(
+    tmp_path,
+):
+    board = BoardModel(
+        pads=[
+            PadCandidate(
+                "P_BAD_LAYER",
+                Point(1, 2),
+                2,
+                1,
+                "R",
+                "In31.Cu",
+            )
+        ]
+    )
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert report.skipped_pad_ids == ["P_BAD_LAYER"]
+    assert audit["pads"]["equal"] is True
+    assert audit["roundtrip_equal"] is True
+    assert audit["source_connectivity_complete"] is False
+    assert audit["source_equivalent"] is False
+    assert audit["losses"]["skipped_pad_ids"] == ["P_BAD_LAYER"]
 
 
 def test_connectivity_roundtrip_detects_missing_pad_net_name(tmp_path):

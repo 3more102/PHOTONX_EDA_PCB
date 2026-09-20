@@ -243,6 +243,26 @@ def _reported_track_sets(board, export_report, issues):
     )
 
 
+def _reported_pad_sets(board, export_report, issues):
+    source_ids = {pad.id for pad in board.pads}
+    if export_report is None:
+        declared_layers = declared_copper_layer_names(board)
+        exported = {
+            pad.id
+            for pad in board.pads
+            if str(pad.layer) in declared_layers
+        }
+        return exported, source_ids - exported
+
+    return _reported_sets(
+        source_ids,
+        getattr(export_report, "exported_pad_ids", ()),
+        getattr(export_report, "skipped_pad_ids", ()),
+        "PAD",
+        issues,
+    )
+
+
 def _track_item(start, end, width, layer, binding, object_uuid):
     a, b = sorted((_point(start), _point(end)))
     return {
@@ -565,10 +585,12 @@ def _observed_pad_geometry(footprint, pad):
     )
 
 
-def _expected_pads(board):
+def _expected_pads(board, exported_pad_ids):
     out = []
     unresolved = []
     for pad in board.pads:
+        if pad.id not in exported_pad_ids:
+            continue
         binding = _source_net_binding(board, pad.net_id)
         if binding is None:
             unresolved.append(pad.id)
@@ -910,7 +932,15 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         ],
     )
 
-    expected_pads, unresolved_pad_ids = _expected_pads(board)
+    exported_pad_ids, skipped_pad_ids = _reported_pad_sets(
+        board,
+        export_report,
+        issues,
+    )
+    expected_pads, unresolved_pad_ids = _expected_pads(
+        board,
+        exported_pad_ids,
+    )
     pads = _compare_multiset(
         expected_pads,
         _observed_pads(readback, net_lookup, issues),
@@ -1020,6 +1050,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     )
 
     losses = {
+        "skipped_pad_ids": sorted(skipped_pad_ids),
         "skipped_track_ids": sorted(skipped_track_ids),
         "skipped_region_ids": sorted(skipped_region_ids),
         "skipped_slot_ids": sorted(skipped_slot_ids),

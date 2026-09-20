@@ -4,6 +4,8 @@ from pathlib import Path
 def omission_manifest(report):
     return {
       "exported_slots":list(getattr(report,"exported_slot_ids",())),
+      "exported_pads":list(getattr(report,"exported_pad_ids",())),
+      "skipped_pads":list(getattr(report,"skipped_pad_ids",())),
       "skipped_slots":list(getattr(report,"skipped_slot_ids",())),
       "exported_regions":list(getattr(report,"exported_region_ids",())),
       "skipped_regions":list(getattr(report,"skipped_region_ids",())),

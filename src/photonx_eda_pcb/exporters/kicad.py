@@ -41,7 +41,18 @@ def _board_layer_lines(board):
 
 def _pad_lines(board,net_num,report):
     lines=[]
+    declared_copper_layers=declared_copper_layer_names(board)
     for pad in board.pads:
+        if str(pad.layer) not in declared_copper_layers:
+            report.skipped_pads+=1
+            report.skipped_pad_ids.append(pad.id)
+            report.issues.append(KicadExportIssue(
+                "warning",
+                "KICAD_PAD_LAYER_UNSUPPORTED",
+                pad.id,
+                f"recovered pad layer {pad.layer!r} is not a declared canonical KiCad copper layer; pad omitted",
+            ))
+            continue
         n,net_name,net_known=_net_binding(board,net_num,pad.net_id,pad.id,report)
         descriptor,ref_layer,layer_warning=pad_export_descriptor(pad)
         shape=descriptor["shape"];pad_type=descriptor["kind"]
@@ -54,6 +65,8 @@ def _pad_lines(board,net_num,report):
         net_clause=f' (net {n} {_q(net_name)})' if net_known else ""
         lines.append(f'    (pad "1" {pad_type} {shape} (at 0 0 {angle:.6f}) (size {pad.size_x:.6f} {pad.size_y:.6f}){drill} (layers {layers}){net_clause} (uuid {photonx_uuid("pad:"+pad.id)}))')
         lines.append('  )')
+        report.exported_pads+=1
+        report.exported_pad_ids.append(pad.id)
         if str(pad.shape).upper() not in {"C","R","O"}:report.issues.append(KicadExportIssue("warning","KICAD_PAD_SHAPE_FALLBACK",pad.id,f"unsupported reconstructed pad shape {pad.shape}; exported as rect"))
         if layer_warning:report.issues.append(KicadExportIssue("warning","KICAD_SMD_NON_SURFACE_LAYER",pad.id,layer_warning))
     return lines

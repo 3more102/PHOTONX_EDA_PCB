@@ -49,3 +49,21 @@ def test_non_surface_smd_pad_does_not_invent_paste_or_mask(tmp_path):
         issue.code == "KICAD_SMD_NON_SURFACE_LAYER" and issue.object_id == "PI"
         for issue in report.issues
     )
+
+
+def test_noncanonical_pad_layer_is_omitted_fail_closed(tmp_path):
+    text, report = _export_pad(
+        tmp_path,
+        PadCandidate("PX", Point(1, 2), 2, 1, "R", "In31.Cu"),
+    )
+
+    assert "PHOTONX:RecoveredPad" not in text
+    assert '"In31.Cu"' not in text
+    assert report.exported_pads == 0
+    assert report.skipped_pads == 1
+    assert report.skipped_pad_ids == ["PX"]
+    assert any(
+        issue.code == "KICAD_PAD_LAYER_UNSUPPORTED"
+        and issue.object_id == "PX"
+        for issue in report.issues
+    )

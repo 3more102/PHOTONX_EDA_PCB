@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened recovered-pad export against undeclared/noncanonical KiCad copper layers. Pads whose source layer cannot be represented by the generated board layer table are now omitted with `KICAD_PAD_LAYER_UNSUPPORTED`; export reports and omission manifests track exported/skipped pad IDs, and connectivity audits surface `skipped_pad_ids` as source-equivalence loss instead of emitting a structurally inconsistent footprint/pad layer reference.
+
 - Closed the remaining KiCad `Edge.Cuts` shape escape hatch: the reader now records any top-level `gr_*` object on `Edge.Cuts` other than the `gr_line` family emitted by PhotonX, and the main round-trip audit treats those unexpected arcs/rectangles/circles/polygons/text graphics as expected-empty differences instead of silently ignoring contour-changing geometry.
 
 - Added fail-closed KiCad routed-track arc readback. Top-level `arc` objects are now parsed separately from graphics/footprint arcs with strict integer net ordinals and machine-readable start/mid/end/width/layer/net/identifier fields; because the current PhotonX exporter emits no routed KiCad arcs, any observed track arc is an explicit round-trip difference instead of silently escaping the connectivity audit.
