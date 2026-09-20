@@ -405,6 +405,41 @@ def _active_overrides(values):
     }
 
 
+def _observed_fabrication_overrides(readback):
+    out = []
+    for footprint in readback.get("footprints", ()):
+        if footprint.get("name") not in _PHOTONX_FOOTPRINT_NAMES:
+            continue
+        fp_overrides = _active_overrides(
+            dict(footprint.get("fabrication_overrides", {}))
+        )
+        if fp_overrides:
+            out.append(
+                {
+                    "scope": "footprint",
+                    "footprint_name": str(footprint.get("name")),
+                    "reference": footprint.get("reference"),
+                    "pad_number": None,
+                    "overrides": fp_overrides,
+                }
+            )
+        for pad in footprint.get("pads", ()):
+            pad_overrides = _active_overrides(
+                dict(pad.get("fabrication_overrides", {}))
+            )
+            if pad_overrides:
+                out.append(
+                    {
+                        "scope": "pad",
+                        "footprint_name": str(footprint.get("name")),
+                        "reference": footprint.get("reference"),
+                        "pad_number": str(pad.get("number")),
+                        "overrides": pad_overrides,
+                    }
+                )
+    return out
+
+
 def _observed_pad_properties(readback):
     out = []
     for footprint in readback.get("footprints", ()):
@@ -1463,6 +1498,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         _observed_copper_overrides(readback),
     )
 
+    unexpected_fabrication_overrides = _compare_multiset(
+        [],
+        _observed_fabrication_overrides(readback),
+    )
+
     unexpected_pad_properties = _compare_multiset(
         [],
         _observed_pad_properties(readback),
@@ -1620,6 +1660,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and unexpected_copper_graphics["equal"]
         and unexpected_footprint_copper_graphics["equal"]
         and unexpected_copper_overrides["equal"]
+        and unexpected_fabrication_overrides["equal"]
         and unexpected_pad_properties["equal"]
         and unexpected_net_tie_groups["equal"]
         and foreign_footprints["equal"]
@@ -1664,6 +1705,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "unexpected_copper_graphics",
             "unexpected_footprint_copper_graphics",
             "unexpected_copper_overrides",
+            "unexpected_fabrication_overrides",
             "unexpected_pad_properties",
             "unexpected_net_tie_groups",
             "foreign_footprints",
@@ -1693,6 +1735,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "unexpected_copper_graphics": unexpected_copper_graphics,
         "unexpected_footprint_copper_graphics": unexpected_footprint_copper_graphics,
         "unexpected_copper_overrides": unexpected_copper_overrides,
+        "unexpected_fabrication_overrides": unexpected_fabrication_overrides,
         "unexpected_pad_properties": unexpected_pad_properties,
         "unexpected_net_tie_groups": unexpected_net_tie_groups,
         "foreign_footprints": foreign_footprints,

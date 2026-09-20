@@ -30,6 +30,14 @@ def _copper_overrides(node):
     }
 
 
+def _fabrication_overrides(node):
+    return {
+        "solder_mask_margin": _optional_float(node, "solder_mask_margin"),
+        "solder_paste_margin": _optional_float(node, "solder_paste_margin"),
+        "solder_paste_ratio": _optional_float(node, "solder_paste_ratio"),
+    }
+
+
 def _net_tie_pad_groups(node):
     item = child(node, "net_tie_pad_groups")
     if item is None:
@@ -89,6 +97,7 @@ def read_footprints(root):
                 "layer": str(layer[1]) if layer else None,
                 "pads": read_pads(f),
                 "copper_overrides": _copper_overrides(f),
+                "fabrication_overrides": _fabrication_overrides(f),
                 "net_tie_pad_groups": _net_tie_pad_groups(f),
                 "unexpected_copper_graphics": _unexpected_copper_graphics(f),
             }

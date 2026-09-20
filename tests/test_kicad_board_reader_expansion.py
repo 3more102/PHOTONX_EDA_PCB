@@ -142,3 +142,39 @@ def test_reader_preserves_special_pad_property():
     assert d["footprints"][0]["pads"][0]["property"] == (
         "pad_prop_castellated"
     )
+
+
+def test_reader_preserves_footprint_and_pad_fabrication_overrides():
+    d = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (footprint "PHOTONX:RecoveredPad"
+            (layer "F.Cu")
+            (at 0 0)
+            (solder_mask_margin 0.1)
+            (solder_paste_margin -0.05)
+            (solder_paste_ratio 0.9)
+            (pad "1" smd rect
+              (at 0 0)
+              (size 1 1)
+              (layers "F.Cu")
+              (solder_mask_margin 0.2)
+              (solder_paste_margin -0.02)
+              (solder_paste_margin_ratio 0.8)
+            )
+          )
+        )
+        """
+    )
+
+    footprint = d["footprints"][0]
+    assert footprint["fabrication_overrides"] == {
+        "solder_mask_margin": 0.1,
+        "solder_paste_margin": -0.05,
+        "solder_paste_ratio": 0.9,
+    }
+    assert footprint["pads"][0]["fabrication_overrides"] == {
+        "solder_mask_margin": 0.2,
+        "solder_paste_margin": -0.02,
+        "solder_paste_margin_ratio": 0.8,
+    }

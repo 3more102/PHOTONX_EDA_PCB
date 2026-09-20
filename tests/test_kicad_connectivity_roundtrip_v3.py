@@ -81,6 +81,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "unexpected_copper_graphics",
         "unexpected_footprint_copper_graphics",
         "unexpected_copper_overrides",
+        "unexpected_fabrication_overrides",
         "unexpected_pad_properties",
         "unexpected_net_tie_groups",
         "foreign_footprints",
@@ -614,6 +615,52 @@ def test_connectivity_roundtrip_rejects_pad_copper_override(tmp_path):
         "pad_number": "1",
         "overrides": {"thermal_gap": 0.2},
     }
+
+
+@pytest.mark.parametrize(
+    ("scope", "field", "value"),
+    [
+        ("footprint", "solder_mask_margin", 0.1),
+        ("footprint", "solder_paste_margin", -0.05),
+        ("footprint", "solder_paste_ratio", 0.9),
+        ("pad", "solder_mask_margin", 0.1),
+        ("pad", "solder_paste_margin", -0.05),
+        ("pad", "solder_paste_margin_ratio", 0.9),
+    ],
+)
+def test_connectivity_roundtrip_rejects_fabrication_overrides(
+    tmp_path,
+    scope,
+    field,
+    value,
+):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    target = next(
+        footprint
+        for footprint in readback["footprints"]
+        if footprint["name"] == "PHOTONX:RecoveredPad"
+    )
+    if scope == "footprint":
+        target["fabrication_overrides"][field] = value
+    else:
+        target["pads"][0]["fabrication_overrides"][field] = value
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["unexpected_fabrication_overrides"]["equal"] is False
+    assert audit["unexpected_fabrication_overrides"]["observed_count"] == 1
+    assert (
+        audit["unexpected_fabrication_overrides"]["unexpected"][0][
+            "overrides"
+        ][field]
+        == value
+    )
 
 
 def test_connectivity_roundtrip_rejects_photonx_pad_property(tmp_path):

@@ -38,6 +38,17 @@ def _copper_overrides(node):
     }
 
 
+def _fabrication_overrides(node):
+    return {
+        "solder_mask_margin": _optional_float(node, "solder_mask_margin"),
+        "solder_paste_margin": _optional_float(node, "solder_paste_margin"),
+        "solder_paste_margin_ratio": _optional_float(
+            node,
+            "solder_paste_margin_ratio",
+        ),
+    }
+
+
 def _pad_property(node):
     item = child(node, "property")
     if item is None:
@@ -117,6 +128,7 @@ def read_pads(footprint):
                 "uuid": str(uuid[1]) if uuid and len(uuid) >= 2 else None,
                 "property": _pad_property(pad),
                 "copper_overrides": _copper_overrides(pad),
+                "fabrication_overrides": _fabrication_overrides(pad),
             }
         )
     return out
