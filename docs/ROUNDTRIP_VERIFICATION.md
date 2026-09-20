@@ -35,6 +35,7 @@ The connectivity audit checks:
 - zone semantics that can change repour results even with identical polygon geometry: priority, keepout state, solid/hatched fill mode, filled-area thickness policy, connect-pad clearance, minimum thickness, thermal gap/bridge width, island-removal mode, and minimum island area;
 - recovered confirmed non-plated point drills as exact round NPTH footprints with deterministic footprint/Reference-property/child-pad identity and drill geometry; unknown/plated/invalid point drills remain explicit export losses;
 - recovered NPTH/plated-slot footprint/Reference-property/child-pad identity, kind, net binding, and canonical mechanical geometry using the existing slot round-trip comparator;
+- recovered route footprint identity and exact pad geometry for both deterministic NPTH routes and evidence-backed plated routed slots, including plated-route net binding; route footprints are excluded from the mechanical-slot comparator so the two source families do not alias;
 - consistency between embedded KiCad net names and the board net table where the file format carries both;
 - proven plated via spans: exact through vias plus source-proven X2 `Blind`/`Buried` partial spans are emitted only when canonical layer-span proof, annular support, net binding, and via-kind topology are all exact. The current KiCad `20240108` target serializes blind/buried using the legacy `blind` token; inner-to-inner readback is normalized to semantic `buried`. Untyped partial spans and contradictory source kind/topology remain explicit losses.
 
