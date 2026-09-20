@@ -213,6 +213,29 @@ def test_validate_macro_accepts_variable_definition_statements():
     assert validate_macro(statements) == []
 
 
+@pytest.mark.parametrize(
+    "primitive",
+    [
+        "2,1,0.2,-1,0,1,0,0",
+        "22,1,2.0,1.0,-1.0,-0.5,0",
+    ],
+)
+def test_validate_macro_accepts_registered_legacy_and_lower_left_primitives(
+    primitive: str,
+):
+    statements = parse_macro_body(primitive)
+
+    assert validate_macro(statements) == []
+
+
+def test_validate_macro_still_flags_unknown_primitive():
+    statements = parse_macro_body("99,1,2,3")
+
+    assert validate_macro(statements) == [
+        ("warning", "MACRO_PRIMITIVE_UNSUPPORTED", 0, 99)
+    ]
+
+
 def test_macro_assignment_integer_overflow_fails_closed(tmp_path: Path):
     huge_integer = "9" * 400
     path = _write(
