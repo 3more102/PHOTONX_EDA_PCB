@@ -118,3 +118,37 @@ def test_td_without_name_clears_ta_and_to_state_for_future_creations(
     assert _evidence(pad, "gerber_x2_aperture_function") == []
     assert _evidence(pad, "gerber_x2_object_attribute") == []
     assert _evidence(pad, "gerber_x2_net_name") == []
+
+def test_custom_name_switches_domain_without_rewriting_frozen_aperture(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%TAUserAttr,APERTURE*%\n"
+        "%ADD10C,1.000*%\n"
+        "%TOUserAttr,OBJECT*%\n"
+        "%ADD11C,1.000*%\n"
+        "D10*\n"
+        "X010000Y010000D03*\n"
+        "D11*\n"
+        "X020000Y010000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    first, second = result.pads
+    assert any(
+        "name=UserAttr" in detail and "APERTURE" in detail
+        for detail in _evidence(first, "gerber_x2_aperture_attribute")
+    )
+    assert any(
+        "name=UserAttr" in detail and "OBJECT" in detail
+        for detail in _evidence(first, "gerber_x2_object_attribute")
+    )
+    assert _evidence(second, "gerber_x2_aperture_attribute") == []
+    assert any(
+        "name=UserAttr" in detail and "OBJECT" in detail
+        for detail in _evidence(second, "gerber_x2_object_attribute")
+    )
+
