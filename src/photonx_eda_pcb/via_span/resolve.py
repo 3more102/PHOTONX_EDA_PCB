@@ -8,10 +8,9 @@ from .evidence import span_evidence
 
 
 def _mapped_x2_span_layers(board, stackup, drill):
-    if not bool(getattr(drill, "span_proven", False)):
+    declared = getattr(drill, "x2_layer_span", None)
+    if declared is None:
         return None, None
-
-    declared = getattr(drill, "layer_span", None)
     if declared is None or len(declared) != 2:
         return (), "missing or malformed explicit layer-span tuple"
 
@@ -43,7 +42,7 @@ def _mapped_x2_span_layers(board, stackup, drill):
             )
         return tuple(copper[start - 1 : end]), None
 
-    kind = str(getattr(drill, "span_kind", "") or "").lower()
+    kind = str(getattr(drill, "x2_span_kind", "") or "").lower()
     if (
         (start, end) == (1, 2)
         and kind in {"pth", "npth"}
@@ -79,6 +78,8 @@ def resolve_via_spans(
         )
 
     for drill in board.drills:
+        drill.layer_span=None
+        drill.span_proven=False
         if use_spatial_index:
             pads = pads_near_drill(
                 board,
@@ -117,6 +118,8 @@ def resolve_via_spans(
                 ]
                 from_layer = layer_ids[0]
                 to_layer = layer_ids[-1]
+                drill.layer_span=(from_layer,to_layer)
+                drill.span_proven=True
                 proven = (
                     drill.plating == "plated"
                     and len(layer_ids) >= 2
