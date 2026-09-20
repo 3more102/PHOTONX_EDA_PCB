@@ -5,7 +5,7 @@ import tkinter as tk
 from dataclasses import asdict, is_dataclass
 
 from .state import ViewState
-from .via_review import via_review_descriptor
+from ..via_review import via_review_descriptor
 
 
 def _find_entity(state: ViewState, object_id: str):
