@@ -1562,6 +1562,94 @@ def _empty_comparison():
     return _compare_multiset([], [])
 
 
+def _electrical_partition_rows(families, issues, side):
+    """Canonicalize emitted electrical objects into net-connected member sets.
+
+    This is intentionally independent of copper geometry. It verifies the
+    semantic partition that KiCad will use after export: every emitted
+    conductive object must remain bound to exactly the same exported net.
+    """
+    by_net = {}
+    seen = {}
+    for family, items in families:
+        for item in items:
+            binding = item.get("net") or {}
+            code = binding.get("code", 0)
+            if code in (None, 0):
+                continue
+            try:
+                code = int(code)
+            except (TypeError, ValueError):
+                issues.append(
+                    {
+                        "code": "KICAD_ROUNDTRIP_PARTITION_NET_CODE_INVALID",
+                        "side": side,
+                        "family": family,
+                        "net_code": code,
+                    }
+                )
+                continue
+            name = binding.get("name")
+            if name is None:
+                issues.append(
+                    {
+                        "code": "KICAD_ROUNDTRIP_PARTITION_NET_NAME_MISSING",
+                        "side": side,
+                        "family": family,
+                        "net_code": code,
+                    }
+                )
+                continue
+
+            object_id = item.get("id")
+            if object_id is not None:
+                identity = f"{family}:id:{object_id}"
+            else:
+                object_uuid = item.get("uuid")
+                if not object_uuid:
+                    issues.append(
+                        {
+                            "code": "KICAD_ROUNDTRIP_PARTITION_IDENTITY_MISSING",
+                            "side": side,
+                            "family": family,
+                        }
+                    )
+                    continue
+                identity = f"{family}:uuid:{object_uuid}"
+
+            net_key = (code, str(name))
+            if identity in seen:
+                issues.append(
+                    {
+                        "code": "KICAD_ROUNDTRIP_PARTITION_MEMBER_DUPLICATE",
+                        "side": side,
+                        "member": identity,
+                        "first_net": {
+                            "code": seen[identity][0],
+                            "name": seen[identity][1],
+                        },
+                        "duplicate_net": {
+                            "code": code,
+                            "name": str(name),
+                        },
+                    }
+                )
+                continue
+            seen[identity] = net_key
+            by_net.setdefault(net_key, set()).add(identity)
+
+    return [
+        {
+            "net": {"code": code, "name": name},
+            "members": sorted(members),
+        }
+        for (code, name), members in sorted(
+            by_net.items(),
+            key=lambda item: (item[0][0], item[0][1]),
+        )
+    ]
+
+
 def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
@@ -1737,9 +1825,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         export_report,
         issues,
     )
+    expected_tracks = _expected_tracks(board, exported_track_ids, issues)
+    observed_tracks = _observed_tracks(readback, net_lookup, issues)
     tracks = _compare_multiset(
-        _expected_tracks(board, exported_track_ids, issues),
-        _observed_tracks(readback, net_lookup, issues),
+        expected_tracks,
+        observed_tracks,
     )
 
     if export_report is None:
@@ -1755,14 +1845,16 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "VIA_SPAN",
             issues,
         )
+    expected_vias = _expected_vias(
+        board,
+        via_exportable,
+        exported_via_span_ids,
+        issues,
+    )
+    observed_vias = _observed_vias(readback, net_lookup, issues)
     vias = _compare_multiset(
-        _expected_vias(
-            board,
-            via_exportable,
-            exported_via_span_ids,
-            issues,
-        ),
-        _observed_vias(readback, net_lookup, issues),
+        expected_vias,
+        observed_vias,
     )
 
     track_arcs = _compare_multiset(
@@ -1858,9 +1950,10 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         board,
         exported_pad_ids,
     )
+    observed_pads = _observed_pads(readback, net_lookup, issues)
     pads = _compare_multiset(
         expected_pads,
-        _observed_pads(readback, net_lookup, issues),
+        observed_pads,
     )
 
     regions = _empty_comparison()
@@ -1872,6 +1965,10 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     skipped_region_ids = set()
     skipped_slot_ids = set()
     unresolved_slot_ids = []
+    expected_regions = []
+    observed_region_bindings = []
+    expected_slots = []
+    observed_slot_bindings = []
     source_routes = list(getattr(board, "routes", ()))
     source_route_ids = {route.id for route in source_routes}
     if export_report is None:
@@ -1925,9 +2022,19 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "REGION",
             issues,
         )
+        expected_regions = _expected_regions(
+            board,
+            exported_region_ids,
+            issues,
+        )
+        observed_region_bindings = _observed_regions(
+            readback,
+            net_lookup,
+            issues,
+        )
         regions = _compare_multiset(
-            _expected_regions(board, exported_region_ids, issues),
-            _observed_regions(readback, net_lookup, issues),
+            expected_regions,
+            observed_region_bindings,
         )
         region_geometry = compare_kicad_copper_regions(
             board,
@@ -1957,9 +2064,14 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             exported_slot_ids,
             issues,
         )
+        observed_slot_bindings = _observed_slots(
+            readback,
+            net_lookup,
+            issues,
+        )
         slots = _compare_multiset(
             expected_slots,
-            _observed_slots(readback, net_lookup, issues),
+            observed_slot_bindings,
         )
         slot_geometry = compare_mechanical_slots(
             [
@@ -1970,12 +2082,38 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             readback.get("mechanical_slots", ()),
         )
 
+    electrical_connectivity_partition = _compare_multiset(
+        _electrical_partition_rows(
+            (
+                ("track", expected_tracks),
+                ("via", expected_vias),
+                ("pad", expected_pads),
+                ("region", expected_regions),
+                ("slot", expected_slots),
+            ),
+            issues,
+            "expected",
+        ),
+        _electrical_partition_rows(
+            (
+                ("track", observed_tracks),
+                ("via", observed_vias),
+                ("pad", observed_pads),
+                ("region", observed_region_bindings),
+                ("slot", observed_slot_bindings),
+            ),
+            issues,
+            "observed",
+        ),
+    )
+
     roundtrip_equal = bool(
         file_header["equal"]
         and file_structure["equal"]
         and board_settings["equal"]
         and layer_table["equal"]
         and nets["equal"]
+        and electrical_connectivity_partition["equal"]
         and tracks["equal"]
         and vias["equal"]
         and track_arcs["equal"]
@@ -2024,6 +2162,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "board_settings",
             "layer_table",
             "net_table",
+            "electrical_connectivity_partition",
             "tracks",
             "vias",
             "track_arcs",
@@ -2057,6 +2196,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "board_settings": board_settings,
         "layer_table": layer_table,
         "nets": nets,
+        "electrical_connectivity_partition": electrical_connectivity_partition,
         "tracks": tracks,
         "vias": vias,
         "track_arcs": track_arcs,
