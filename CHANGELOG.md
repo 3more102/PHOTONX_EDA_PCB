@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserved Gerber X2 aperture attributes as fixed aperture-definition evidence. Active `TA` entries are snapshotted when each standard or macro aperture is created, `TD` remains non-retroactive for already-defined apertures, `.AperFunction` is exposed as structured provenance on later aperture-generated geometry, and user-defined attribute names honor the single shared aperture/object dictionary namespace.
+
 - Hardened KiCad `paper` readback against malformed scalar arity. A singleton `(paper ...)` section is now accepted only when it contains exactly one value; extra trailing values fail closed as unknown and therefore fail the round-trip structure contract instead of being silently ignored.
 
 - Promoted fully trusted Gerber X2 `.P` component-reference evidence into component reconstruction before geometric pairing. Source-proven refdes groups retain pin/function evidence, repeated step-and-repeat instances stay separate, lower-confidence identity is not escalated, and conflicting trusted refdes evidence remains explicit and fail-closed instead of being reassigned by proximity.
