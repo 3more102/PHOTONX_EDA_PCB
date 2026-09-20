@@ -535,8 +535,23 @@ def _route_lines(board,net_num,report,duplicate_object_ids=()):
         code=readiness.reasons.get(route.id,"KICAD_ARBITRARY_ROUTE_UNSUPPORTED")
         if code=="KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN":
             message=(
-                "straight plated routed slot lacks a source-proven multilayer copper "
-                "pad-stack with one unambiguous exported net; route omitted"
+                "straight plated routed slot lacks full-stack copper support with "
+                "one unambiguous exported net; route omitted"
+            )
+        elif code=="KICAD_PLATED_ROUTE_SPAN_UNPROVEN":
+            message=(
+                "explicit X2 plated-route layer-span evidence could not be mapped "
+                "to one proven canonical copper span; route omitted"
+            )
+        elif code=="KICAD_PLATED_ROUTE_PARTIAL_SPAN_UNSUPPORTED":
+            message=(
+                "source-proven plated route is partial-depth; current KiCad route "
+                "recovery uses a thru_hole pad and would overstate copper depth"
+            )
+        elif code=="KICAD_PLATED_ROUTE_X2_KIND_MISMATCH":
+            message=(
+                "explicit X2 Blind/Buried route kind contradicts a full-stack "
+                "through-hole export; route omitted instead of overriding source evidence"
             )
         else:
             message=(
