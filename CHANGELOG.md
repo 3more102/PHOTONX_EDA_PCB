@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a canonical electrical-connectivity partition to KiCad round-trip auditing. Emitted tracks, recovered pads, copper regions, plated slots, and exactly proven vias are grouped by exported net using stable PhotonX identities; any cross-family net split, merge, duplicate identity, or rebinding now fails `roundtrip_equal` through `electrical_connectivity_partition` instead of appearing only as separate object-level mismatches.
+
 - Hardened KiCad `paper` readback against malformed scalar arity. A singleton `(paper ...)` section is now accepted only when it contains exactly one value; extra trailing values fail closed as unknown and therefore fail the round-trip structure contract instead of being silently ignored.
 
 - Promoted fully trusted Gerber X2 `.P` component-reference evidence into component reconstruction before geometric pairing. Source-proven refdes groups retain pin/function evidence, repeated step-and-repeat instances stay separate, lower-confidence identity is not escalated, and conflicting trusted refdes evidence remains explicit and fail-closed instead of being reassigned by proximity.
