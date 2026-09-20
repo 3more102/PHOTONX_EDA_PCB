@@ -111,6 +111,16 @@ def test_plated_route_with_conflicting_pad_nets_fails_closed():
     assert readiness.reasons["ROUTE_PTH"] == "KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN"
 
 
+def test_plated_route_requires_net_proof_on_every_padstack_layer():
+    board, route = _proven_board(net_a="N1", net_b=None)
+
+    readiness = assess_route_export_readiness(board.routes, board)
+
+    assert readiness.exportable == ()
+    assert readiness.omitted == ("ROUTE_PTH",)
+    assert readiness.reasons["ROUTE_PTH"] == "KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN"
+
+
 def test_plated_route_requires_board_evidence_context():
     board, route = _proven_board()
     readiness = assess_route_export_readiness([route])
