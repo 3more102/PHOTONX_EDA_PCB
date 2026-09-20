@@ -55,6 +55,48 @@ from photonx_eda_pcb.mechanical_features.measure import slot_geometry_descriptor
 _INNER_COPPER_LAYER_RE=re.compile(r"^In([1-9]|[12][0-9]|30)\.Cu$")
 
 
+def _declared_x2_inner_layer_highest(board):
+    metadata=getattr(board,"metadata",{}) or {}
+    if not isinstance(metadata,dict):
+        return 0
+    x2=metadata.get("x2_copper_stackup",{})
+    if not isinstance(x2,dict) or x2.get("status")!="declared":
+        return 0
+    layers=x2.get("layers",())
+    if not isinstance(layers,(list,tuple)):
+        return 0
+    expected=[]
+    inner=[]
+    for name in layers:
+        name=str(name)
+        if name=="F.Cu":
+            expected.append(name)
+            continue
+        if name=="B.Cu":
+            expected.append(name)
+            continue
+        match=_INNER_COPPER_LAYER_RE.fullmatch(name)
+        if match:
+            inner.append(int(match.group(1)))
+            expected.append(name)
+            continue
+        return 0
+    if not expected or expected[0]!="F.Cu" or expected[-1]!="B.Cu":
+        return 0
+    highest=max(inner,default=0)
+    canonical=["F.Cu",*(f"In{index}.Cu" for index in range(1,highest+1)),"B.Cu"]
+    if expected!=canonical:
+        return 0
+    declared_count=x2.get("declared_copper_count")
+    if declared_count is not None:
+        try:
+            if int(declared_count)!=len(canonical):
+                return 0
+        except (TypeError,ValueError):
+            return 0
+    return highest
+
+
 def inner_copper_layers(board):
     observed={
         str(getattr(obj,"layer",""))
@@ -65,7 +107,7 @@ def inner_copper_layers(board):
         match=_INNER_COPPER_LAYER_RE.fullmatch(name)
         if match:
             indices.append(int(match.group(1)))
-    highest=max(indices,default=0)
+    highest=max(max(indices,default=0),_declared_x2_inner_layer_highest(board))
     return tuple((index,f"In{index}.Cu") for index in range(1,highest+1))
 
 
