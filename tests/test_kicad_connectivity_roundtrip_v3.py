@@ -272,6 +272,45 @@ def test_reader_exposes_board_and_footprint_fabrication_graphics():
     ]
 
 
+def test_reader_rejects_non_graphic_direct_fabrication_items():
+    readback = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (image
+            (layer "F.Mask")
+            (uuid 00000000-0000-0000-0000-000000000086)
+          )
+          (footprint "PHOTONX:RecoveredPad"
+            (layer "F.Cu")
+            (uuid 00000000-0000-0000-0000-000000000087)
+            (at 0 0)
+            (property "Reference" "P1"
+              (at 0 -2 0)
+              (layer "F.SilkS")
+              hide
+              (uuid 00000000-0000-0000-0000-000000000088)
+            )
+            (image
+              (layer "B.Mask")
+              (uuid 00000000-0000-0000-0000-000000000089)
+            )
+          )
+        )
+        """
+    )
+
+    assert readback["unexpected_fabrication_graphics"][0]["type"] == "image"
+    assert readback["unexpected_fabrication_graphics"][0]["layer"] == "F.Mask"
+    assert (
+        readback["footprints"][0]["unexpected_fabrication_graphics"][0]["type"]
+        == "image"
+    )
+    assert (
+        readback["footprints"][0]["unexpected_fabrication_graphics"][0]["layer"]
+        == "B.Mask"
+    )
+
+
 def test_connectivity_roundtrip_rejects_direct_fabrication_graphics():
     readback = read_kicad_board_text(
         """
