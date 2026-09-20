@@ -396,20 +396,52 @@ def proven_via_span_export_plan(board):
                 "proven via span endpoint is not a declared canonical KiCad copper layer",
             )
             continue
-        if {from_layer, to_layer} != {"F.Cu", "B.Cu"}:
-            omit(
-                drill_id,
-                "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
-                "partial-layer plated span is proven, but Gerber/Excellon evidence does not distinguish KiCad blind/buried via semantics from microvia manufacturing; via omitted instead of guessing a via type",
-            )
-            continue
-
         start_index, end_index = sorted(
             (layer_index[from_layer], layer_index[to_layer])
         )
         start_layer = layer_order[start_index]
         end_layer = layer_order[end_index]
         expected_layers = layer_order[start_index : end_index + 1]
+
+        source_kind = str(getattr(drill, "x2_span_kind", "") or "").lower()
+        surface_count = sum(
+            layer in {"F.Cu", "B.Cu"}
+            for layer in (start_layer, end_layer)
+        )
+        if {start_layer, end_layer} == {"F.Cu", "B.Cu"}:
+            if source_kind in {"blind", "buried"}:
+                omit(
+                    drill_id,
+                    "KICAD_PROVEN_VIA_TYPE_CONTRADICTS_SPAN",
+                    "source-declared blind/buried via kind contradicts an outer-layer-to-outer-layer proven span",
+                )
+                continue
+            via_type = "through"
+        elif source_kind == "blind":
+            if surface_count != 1:
+                omit(
+                    drill_id,
+                    "KICAD_PROVEN_VIA_TYPE_CONTRADICTS_SPAN",
+                    "source-declared blind via must terminate on exactly one outer copper layer",
+                )
+                continue
+            via_type = "blind"
+        elif source_kind == "buried":
+            if surface_count != 0:
+                omit(
+                    drill_id,
+                    "KICAD_PROVEN_VIA_TYPE_CONTRADICTS_SPAN",
+                    "source-declared buried via must terminate on inner copper layers only",
+                )
+                continue
+            via_type = "buried"
+        else:
+            omit(
+                drill_id,
+                "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
+                "partial-layer plated span is proven, but source evidence does not prove KiCad blind/buried rather than microvia semantics; via omitted instead of guessing a via type",
+            )
+            continue
 
         support = [pad_by_id[pad_id] for pad_id in pad_ids]
         by_layer = {}
@@ -515,6 +547,7 @@ def proven_via_span_export_plan(board):
                 "size": diameters[0],
                 "drill": drill_diameter,
                 "layers": (start_layer, end_layer),
+                "type": via_type,
                 "net_id": net_id,
                 "pad_ids": tuple(sorted(pad_ids)),
             }
