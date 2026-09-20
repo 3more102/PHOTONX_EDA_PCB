@@ -81,6 +81,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "unexpected_footprint_copper_graphics",
         "unexpected_copper_overrides",
         "foreign_footprints",
+        "recovered_drills",
         "recovered_pads",
         "copper_regions",
         "region_geometry",
@@ -1070,12 +1071,14 @@ def test_connectivity_roundtrip_separates_export_losses(tmp_path):
     assert audit["source_connectivity_complete"] is False
     assert audit["source_equivalent"] is False
     assert audit["losses"] == {
+        "skipped_drill_ids": [],
         "skipped_pad_ids": [],
         "skipped_track_ids": ["T_SKIP"],
         "skipped_region_ids": ["R_SKIP"],
         "skipped_slot_ids": ["S_SKIP"],
         "unresolved_pad_net_ids": ["P_UNRESOLVED"],
         "unresolved_slot_net_ids": [],
+        "omitted_route_ids": [],
         "omitted_proven_via_span_drill_ids": [],
     }
 

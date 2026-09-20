@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, kicad_board_layer_rows, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status
+from ..exporters.kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -13,10 +13,12 @@ from .regions import canonical_ring, compare_kicad_copper_regions
 
 
 _RECOVERED_PAD_FOOTPRINT = "PHOTONX:RecoveredPad"
+_RECOVERED_NPTH_DRILL = "PHOTONX:RecoveredNPTHDrill"
 _RECOVERED_NPTH_SLOT = "PHOTONX:RecoveredNPTHSlot"
 _RECOVERED_PLATED_SLOT = "PHOTONX:RecoveredPlatedSlot"
 _PHOTONX_FOOTPRINT_NAMES = {
     _RECOVERED_PAD_FOOTPRINT,
+    _RECOVERED_NPTH_DRILL,
     _RECOVERED_NPTH_SLOT,
     _RECOVERED_PLATED_SLOT,
 }
@@ -239,6 +241,25 @@ def _reported_track_sets(board, export_report, issues):
         getattr(export_report, "exported_track_ids", ()),
         getattr(export_report, "skipped_track_ids", ()),
         "TRACK",
+        issues,
+    )
+
+
+def _reported_drill_sets(board, export_report, issues):
+    source_ids = {drill.id for drill in board.drills}
+    if export_report is None:
+        exported = {
+            drill.id
+            for drill in board.drills
+            if drill_export_status(drill) == "export-npth"
+        }
+        return exported, source_ids - exported
+
+    return _reported_sets(
+        source_ids,
+        getattr(export_report, "exported_drill_ids", ()),
+        getattr(export_report, "skipped_drill_ids", ()),
+        "DRILL",
         issues,
     )
 
@@ -641,6 +662,104 @@ def _observed_pad_geometry(footprint, pad):
         pad.get("drill_offset", (0.0, 0.0)),
         pad.get("layers", ()),
     )
+
+
+def _expected_drill_geometry(drill):
+    diameter = float(drill.diameter)
+    return _pad_geometry_item(
+        (drill.center.x, drill.center.y),
+        0.0,
+        "F.Cu",
+        "",
+        "np_thru_hole",
+        "circle",
+        (0.0, 0.0),
+        0.0,
+        (diameter, diameter),
+        "round",
+        (diameter, diameter),
+        (0.0, 0.0),
+        ("*.Cu", "*.Mask"),
+    )
+
+
+def _expected_drills(board, exported_drill_ids):
+    out = []
+    for drill in board.drills:
+        if drill.id not in exported_drill_ids:
+            continue
+        out.append(
+            {
+                "id": str(drill.id),
+                "uuid": photonx_uuid("drill-fp:" + str(drill.id)),
+                "pad_uuid": photonx_uuid("drill-pad:" + str(drill.id)),
+                "geometry": _expected_drill_geometry(drill),
+                "net": {"code": 0, "name": ""},
+            }
+        )
+    return out
+
+
+def _observed_drills(readback, net_lookup, issues):
+    out = []
+    for fp_index, footprint in enumerate(readback.get("footprints", ())):
+        if footprint.get("name") != _RECOVERED_NPTH_DRILL:
+            continue
+        reference = footprint.get("reference")
+        pads = list(footprint.get("pads", ()))
+        if not reference:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_DRILL_REFERENCE_MISSING",
+                    "footprint_index": fp_index,
+                }
+            )
+            continue
+        if len(pads) != 1:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_DRILL_PAD_COUNT_INVALID",
+                    "drill_id": str(reference),
+                    "pad_count": len(pads),
+                }
+            )
+            continue
+        try:
+            geometry = _observed_pad_geometry(footprint, pads[0])
+        except (TypeError, ValueError, IndexError, KeyError) as exc:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_INVALID_DRILL_GEOMETRY",
+                    "drill_id": str(reference),
+                    "detail": str(exc),
+                }
+            )
+            continue
+
+        binding = _binding_from_code(
+            pads[0].get("net"),
+            net_lookup,
+            issues,
+            "drill",
+            reference,
+        )
+        _check_embedded_net_name(
+            pads[0],
+            binding,
+            issues,
+            "drill",
+            reference,
+        )
+        out.append(
+            {
+                "id": str(reference),
+                "uuid": footprint.get("uuid"),
+                "pad_uuid": pads[0].get("uuid"),
+                "geometry": geometry,
+                "net": binding,
+            }
+        )
+    return out
 
 
 def _expected_pads(board, exported_pad_ids):
@@ -1080,7 +1199,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
     With an export report, the audit covers emitted board fabrication settings, the declared KiCad layer table, net table, and tracks,
-    rejects unexpected KiCad vias, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, footprint/pad copper-behavior overrides, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
+    rejects unexpected KiCad vias, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, footprint/pad copper-behavior overrides, verifies the emitted Edge.Cuts outline, and compares recovered point drills, pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
     and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
@@ -1208,6 +1327,16 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         _observed_copper_overrides(readback),
     )
 
+    exported_drill_ids, skipped_drill_ids = _reported_drill_sets(
+        board,
+        export_report,
+        issues,
+    )
+    drills = _compare_multiset(
+        _expected_drills(board, exported_drill_ids),
+        _observed_drills(readback, net_lookup, issues),
+    )
+
     exported_pad_ids, skipped_pad_ids = _reported_pad_sets(
         board,
         export_report,
@@ -1231,9 +1360,21 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     skipped_region_ids = set()
     skipped_slot_ids = set()
     unresolved_slot_ids = []
+    source_route_ids = {
+        route.id
+        for route in getattr(board, "routes", ())
+    }
     if export_report is None:
+        skipped_route_ids = set(source_route_ids)
         skipped_via_span_ids = set(source_via_span_ids)
     else:
+        _, skipped_route_ids = _reported_sets(
+            source_route_ids,
+            (),
+            getattr(export_report, "skipped_route_ids", ()),
+            "ROUTE",
+            issues,
+        )
         _, skipped_via_span_ids = _reported_sets(
             source_via_span_ids,
             (),
@@ -1333,6 +1474,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and unexpected_footprint_copper_graphics["equal"]
         and unexpected_copper_overrides["equal"]
         and foreign_footprints["equal"]
+        and drills["equal"]
         and pads["equal"]
         and regions["equal"]
         and region_geometry["equal"]
@@ -1344,12 +1486,14 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     )
 
     losses = {
+        "skipped_drill_ids": sorted(skipped_drill_ids),
         "skipped_pad_ids": sorted(skipped_pad_ids),
         "skipped_track_ids": sorted(skipped_track_ids),
         "skipped_region_ids": sorted(skipped_region_ids),
         "skipped_slot_ids": sorted(skipped_slot_ids),
         "unresolved_pad_net_ids": unresolved_pad_ids,
         "unresolved_slot_net_ids": unresolved_slot_ids,
+        "omitted_route_ids": sorted(skipped_route_ids),
         "omitted_proven_via_span_drill_ids": sorted(skipped_via_span_ids),
     }
     source_connectivity_complete = not any(losses.values())
@@ -1368,6 +1512,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "unexpected_footprint_copper_graphics",
             "unexpected_copper_overrides",
             "foreign_footprints",
+            "recovered_drills",
             "recovered_pads",
             "copper_regions",
             "region_geometry",
@@ -1393,6 +1538,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "unexpected_footprint_copper_graphics": unexpected_footprint_copper_graphics,
         "unexpected_copper_overrides": unexpected_copper_overrides,
         "foreign_footprints": foreign_footprints,
+        "drills": drills,
         "pads": pads,
         "regions": regions,
         "region_geometry": region_geometry,

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added conservative KiCad point-drill export and round-trip auditing. Confirmed non-plated `DrillHit` objects now export as deterministic round NPTH footprints; unknown, plated-without-pad-stack, invalid, or unsupported-plating drills are explicitly omitted and recorded in the omission manifest. Round-trip `losses` now includes `skipped_drill_ids`, and previously uncounted arbitrary routed-milling omissions now surface as `omitted_route_ids` so `source_equivalent` cannot remain true when mechanical source features were dropped.
+
 - Added fail-closed readback for KiCad footprint/pad copper-behavior overrides. PhotonX recovered footprints and child pads now surface non-default clearance, zone-connect, thermal width/gap, and pad unused-layer/end-layer controls through an `unexpected_copper_overrides` audit family, preventing unchanged geometry from hiding different zone-connection copper.
 
 - Expanded KiCad region-rule auditing to semantics that can change repour output without changing the zone polygon: priority, keepout state, solid-vs-hatched fill mode, filled-area-thickness policy, and minimum-island area. Missing/default values are normalized semantically (for example omitted priority equals zero), while meaningful changes now fail `region_rules`.

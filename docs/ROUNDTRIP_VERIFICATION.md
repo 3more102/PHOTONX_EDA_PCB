@@ -23,6 +23,7 @@ The connectivity audit checks:
 - exported copper-region identity, zone net binding, and canonical shell/hole geometry using the existing start/winding-invariant region comparator;
 - emitted region fill/cache policy: solid regions must retain `(fill yes)` plus the deterministic cached shell polygon, while holed regions must retain the intentionally unfilled-cache state that forces KiCad to repour from exact shell/hole contours;
 - zone semantics that can change repour results even with identical polygon geometry: priority, keepout state, solid/hatched fill mode, filled-area thickness policy, connect-pad clearance, minimum thickness, thermal gap/bridge width, island-removal mode, and minimum island area;
+- recovered confirmed non-plated point drills as exact round NPTH footprints with deterministic identity and drill geometry; unknown/plated/invalid point drills remain explicit export losses;
 - recovered NPTH/plated-slot identity, kind, net binding, and canonical mechanical geometry using the existing slot round-trip comparator;
 - consistency between embedded KiCad net names and the board net table where the file format carries both;
 - proven plated via spans that are part of source physical connectivity but are not emitted by the current KiCad exporter.
@@ -30,7 +31,7 @@ The connectivity audit checks:
 The JSON result deliberately separates:
 
 - `roundtrip_equal`: emitted KiCad objects re-read with the same supported electrical semantics;
-- `source_connectivity_complete`: no connectivity-bearing pad, track, region, slot, proven plated via span, or unresolved pad/slot net claim was lost by conservative export policy;
+- `source_connectivity_complete`: no drill, pad, track, region, slot, routed mechanical path, proven plated via span, or unresolved pad/slot net claim was lost by conservative export policy;
 - `source_equivalent`: both conditions are true.
 
 A skipped source object is therefore recorded as a source-equivalence loss, not mislabeled as readback corruption. Proven plated via spans are listed in `losses.omitted_proven_via_span_drill_ids` and in the omission manifest as `omitted_via_spans`; PHOTONX does not synthesize KiCad via annular geometry when that geometry is not explicitly reconstructed. Conversely, a changed net ordinal, changed embedded net name, missing recovered identity, duplicate net code, or unexpected emitted connectivity fails the round-trip check.

@@ -6,7 +6,7 @@ from ..models import BoardModel
 from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
-from .kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,kicad_board_layer_specs,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,proven_via_span_omissions
+from .kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,proven_via_span_omissions
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
@@ -35,6 +35,76 @@ def _board_layer_lines(board):
         suffix=f' {_q(row["suffix"])}' if row["suffix"] else ""
         lines.append(
             f'    ({row["id"]} {_q(row["name"])} {row["type"]}{suffix})'
+        )
+    return lines
+
+
+def _record_drill_skip(report, drill, code, message):
+    report.skipped_drills += 1
+    report.skipped_drill_ids.append(drill.id)
+    report.issues.append(
+        KicadExportIssue(
+            "warning",
+            code,
+            drill.id,
+            message,
+        )
+    )
+
+
+def _drill_lines(board, report):
+    lines = []
+    for drill in board.drills:
+        status = drill_export_status(drill)
+        if status != "export-npth":
+            if status == "skip-unknown-plating":
+                code = "KICAD_DRILL_PLATING_UNKNOWN"
+                message = (
+                    "point-drill plating is unknown; drill omitted instead of "
+                    "being guessed as NPTH or plated"
+                )
+            elif status == "skip-plated-padstack":
+                code = "KICAD_DRILL_PLATED_PADSTACK_UNSUPPORTED"
+                message = (
+                    "plated point drill has no standalone annular pad-stack "
+                    "contract; drill omitted instead of being mislabeled NPTH"
+                )
+            elif status == "skip-invalid-geometry":
+                code = "KICAD_DRILL_GEOMETRY_INVALID"
+                message = "point-drill diameter must be finite and positive"
+            else:
+                code = "KICAD_DRILL_PLATING_UNSUPPORTED"
+                message = (
+                    f"unsupported point-drill plating value {drill.plating!r}"
+                )
+            _record_drill_skip(report, drill, code, message)
+            continue
+
+        diameter = float(drill.diameter)
+        report.exported_drills += 1
+        report.exported_drill_ids.append(drill.id)
+        lines.extend(
+            [
+                (
+                    f'  (footprint "PHOTONX:RecoveredNPTHDrill" '
+                    f'(layer "F.Cu") '
+                    f'(uuid {photonx_uuid("drill-fp:"+drill.id)})'
+                ),
+                f'    (at {drill.center.x:.6f} {drill.center.y:.6f})',
+                (
+                    f'    (property "Reference" {_q(drill.id)} '
+                    f'(at 0 -2 0) (layer "F.SilkS") hide '
+                    f'(uuid {photonx_uuid("drill-ref:"+drill.id)}))'
+                ),
+                (
+                    f'    (pad "" np_thru_hole circle (at 0 0 0) '
+                    f'(size {diameter:.6f} {diameter:.6f}) '
+                    f'(drill {diameter:.6f}) '
+                    f'(layers "*.Cu" "*.Mask") '
+                    f'(uuid {photonx_uuid("drill-pad:"+drill.id)}))'
+                ),
+                "  )",
+            ]
         )
     return lines
 
@@ -305,7 +375,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
         '  (net 0 "")',
     ]
     for net in board.nets:lines.append(f'  (net {net_num[net.id]} {_q(net.label or net.id)})')
-    lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));lines.extend(_region_lines(board,net_num,report));lines.extend(_track_lines(board,net_num,report));_record_via_span_skips(board,report);_record_route_skips(board,report)
+    lines.extend(_drill_lines(board,report));lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));lines.extend(_region_lines(board,net_num,report));lines.extend(_track_lines(board,net_num,report));_record_via_span_skips(board,report);_record_route_skips(board,report)
     for seg in board.outline:lines.append(f'  (gr_line (start {seg.start.x:.6f} {seg.start.y:.6f}) (end {seg.end.x:.6f} {seg.end.y:.6f}) (stroke (width 0.1) (type default)) (layer "Edge.Cuts") (uuid {photonx_uuid("edge:"+seg.id)}))')
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
 def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]

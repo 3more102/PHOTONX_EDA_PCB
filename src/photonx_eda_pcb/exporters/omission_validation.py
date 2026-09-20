@@ -1,4 +1,10 @@
 _REASON_CODES={
+    "skipped_drills":{
+        "KICAD_DRILL_PLATING_UNKNOWN",
+        "KICAD_DRILL_PLATED_PADSTACK_UNSUPPORTED",
+        "KICAD_DRILL_GEOMETRY_INVALID",
+        "KICAD_DRILL_PLATING_UNSUPPORTED",
+    },
     "skipped_pads":{
         "KICAD_PAD_LAYER_UNSUPPORTED",
         "KICAD_PAD_SHAPE_UNSUPPORTED",
@@ -40,6 +46,8 @@ def _missing_reason(values,manifest_issues,allowed_codes):
 def validate_omission_manifest(data):
     issues=[]
     exported_slots=list(data.get("exported_slots",()))
+    exported_drills=list(data.get("exported_drills",()))
+    skipped_drills=list(data.get("skipped_drills",()))
     exported_pads=list(data.get("exported_pads",()))
     skipped_pads=list(data.get("skipped_pads",()))
     skipped_slots=list(data.get("skipped_slots",()))
@@ -52,6 +60,8 @@ def validate_omission_manifest(data):
 
     duplicate_checks=(
         ("OMISSION_EXPORTED_SLOT_DUPLICATE_ID",exported_slots),
+        ("OMISSION_EXPORTED_DRILL_DUPLICATE_ID",exported_drills),
+        ("OMISSION_SKIPPED_DRILL_DUPLICATE_ID",skipped_drills),
         ("OMISSION_EXPORTED_PAD_DUPLICATE_ID",exported_pads),
         ("OMISSION_SKIPPED_PAD_DUPLICATE_ID",skipped_pads),
         ("OMISSION_SKIPPED_SLOT_DUPLICATE_ID",skipped_slots),
@@ -67,6 +77,7 @@ def validate_omission_manifest(data):
 
     overlap_checks=(
         ("OMISSION_SLOT_BOTH_EXPORTED_AND_SKIPPED",exported_slots,skipped_slots),
+        ("OMISSION_DRILL_BOTH_EXPORTED_AND_SKIPPED",exported_drills,skipped_drills),
         ("OMISSION_PAD_BOTH_EXPORTED_AND_SKIPPED",exported_pads,skipped_pads),
         ("OMISSION_REGION_BOTH_EXPORTED_AND_SKIPPED",exported_regions,skipped_regions),
         ("OMISSION_TRACK_BOTH_EXPORTED_AND_SKIPPED",exported_tracks,skipped_tracks),
@@ -77,6 +88,7 @@ def validate_omission_manifest(data):
     manifest_issues=list(data.get("issues",()))
     reason_checks=(
         ("OMISSION_SKIPPED_SLOT_WITHOUT_REASON","skipped_slots",skipped_slots),
+        ("OMISSION_SKIPPED_DRILL_WITHOUT_REASON","skipped_drills",skipped_drills),
         ("OMISSION_SKIPPED_PAD_WITHOUT_REASON","skipped_pads",skipped_pads),
         ("OMISSION_SKIPPED_REGION_WITHOUT_REASON","skipped_regions",skipped_regions),
         ("OMISSION_SKIPPED_TRACK_WITHOUT_REASON","skipped_tracks",skipped_tracks),

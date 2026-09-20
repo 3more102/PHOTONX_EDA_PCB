@@ -1,4 +1,5 @@
 import re
+from math import isfinite
 
 KICAD_DEFAULT_BOARD_THICKNESS_MM = 1.6
 KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM = 0.0
@@ -99,6 +100,24 @@ def pad_export_descriptor(pad):
         "drill_offset":(0.0,0.0),
         "layers":layers,
     },ref_layer,warning
+
+def drill_export_status(drill):
+    try:
+        diameter = float(drill.diameter)
+    except (TypeError, ValueError):
+        return "skip-invalid-geometry"
+    if not isfinite(diameter) or diameter <= 0:
+        return "skip-invalid-geometry"
+
+    plating = str(getattr(drill, "plating", "unknown")).lower().replace("_", "-")
+    if plating == "non-plated":
+        return "export-npth"
+    if plating == "unknown":
+        return "skip-unknown-plating"
+    if plating == "plated":
+        return "skip-plated-padstack"
+    return "skip-unsupported-plating"
+
 
 def slot_geometry(slot):return slot_geometry_descriptor(slot)
 def slot_export_status(slot):
