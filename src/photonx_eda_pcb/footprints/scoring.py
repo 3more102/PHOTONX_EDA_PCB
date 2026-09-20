@@ -18,7 +18,7 @@ def score_signature(features,sig):
         return 0.0
     if 'drilled_max' in sig and drilled>sig['drilled_max']:
         return 0.0
-    if features['bbox_aspect']<sig.get('aspect_min',1.0):
+    if features['principal_aspect']<sig.get('aspect_min',1.0):
         return 0.0
     if not _group_rule(features,sig,'primary'):
         return 0.0
