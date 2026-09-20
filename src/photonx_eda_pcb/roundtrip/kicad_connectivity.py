@@ -730,7 +730,19 @@ def _observed_track_arcs(readback, net_lookup, issues):
     return out
 
 
-def _via_item(via_type, at, size, drill, layers, binding, object_uuid):
+def _via_item(
+    via_type,
+    at,
+    size,
+    drill,
+    layers,
+    binding,
+    object_uuid,
+    *,
+    remove_unused_layers=False,
+    keep_end_layers=False,
+    free=False,
+):
     return {
         "type": str(via_type),
         "at": list(_point(at)),
@@ -739,6 +751,9 @@ def _via_item(via_type, at, size, drill, layers, binding, object_uuid):
         "layers": [str(layer) for layer in layers],
         "net": binding,
         "uuid": None if object_uuid is None else str(object_uuid),
+        "remove_unused_layers": bool(remove_unused_layers),
+        "keep_end_layers": bool(keep_end_layers),
+        "free": bool(free),
     }
 
 
@@ -783,6 +798,17 @@ def _observed_vias(readback, net_lookup, issues):
     out = []
     for index, via in enumerate(readback.get("vias", ())):
         try:
+            remove_unused_layers = bool(via.get("remove_unused_layers", False))
+            keep_end_layers = bool(via.get("keep_end_layers", False))
+            free = bool(via.get("free", False))
+            if keep_end_layers and not remove_unused_layers:
+                issues.append(
+                    {
+                        "code": "KICAD_ROUNDTRIP_INVALID_VIA_BEHAVIOR",
+                        "via_index": index,
+                        "detail": "keep_end_layers requires remove_unused_layers",
+                    }
+                )
             binding = _binding_from_code(
                 via.get("net"),
                 net_lookup,
@@ -799,6 +825,9 @@ def _observed_vias(readback, net_lookup, issues):
                     via.get("layers", ()),
                     binding,
                     via.get("uuid"),
+                    remove_unused_layers=remove_unused_layers,
+                    keep_end_layers=keep_end_layers,
+                    free=free,
                 )
             )
         except (TypeError, ValueError, IndexError, KeyError) as exc:
@@ -1568,7 +1597,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
     With an export report, the audit covers emitted board fabrication settings, the declared KiCad layer table, net table, and tracks,
-    rejects unexpected KiCad vias, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, direct mask/paste graphics at board or footprint scope, footprint/pad copper-behavior overrides, verifies the emitted Edge.Cuts outline, and compares recovered point drills, pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
+    verifies exact exported KiCad via geometry/net/UUID plus copper-behavior flags, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, direct mask/paste graphics at board or footprint scope, footprint/pad copper-behavior overrides, verifies the emitted Edge.Cuts outline, and compares recovered point drills, pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
     recovered slots, and exact non-plated routed paths exported as NPTH route footprints. Proven plated via spans are exported only when their
     through-hole annular geometry, complete layer support, and reconstructed net
     are exactly representable; all other proven spans remain explicit source losses. Deterministic PhotonX UUIDs are part of the supported
