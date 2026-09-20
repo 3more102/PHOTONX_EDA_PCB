@@ -2,6 +2,90 @@
 
 ## Unreleased
 
+- Added expected-empty KiCad fabrication-graphics auditing for direct F/B.Mask and F/B.Paste artwork. Top-level `gr_*` objects and footprint `fp_*`/property/zone graphics on mask/paste layers are now surfaced through `unexpected_fabrication_graphics` and fail round-trip verification instead of bypassing copper-only guards.
+
+- Expanded KiCad zone repour-rule auditing to the full currently documented rule surface used by PhotonX verification: zone hatch style/pitch, `connect_pads` connection mode, smoothing/radius, and all hatched-fill tuning fields are now parsed and compared alongside clearance/thermal/island settings. Injected zone overrides can no longer preserve shell/net identity while silently changing future repours.
+
+- Extended deterministic recovered-object identity checks to KiCad `Reference` properties. The reader now preserves Reference-property count and UUID; recovered pads, point drills, and slots require exactly one Reference plus the exporter-derived `ref:`, `drill-ref:`, or `slot-ref:` UUID, so duplicate Reference fields or Reference UUID drift cannot hide behind first-match object IDs.
+
+- Hardened required KiCad board-setting parsing against duplicate tokens. The reader now records exact `thickness` and `pad_to_mask_clearance` counts, and the round-trip contract requires one of each, preventing a conflicting second value inside an otherwise singleton `general` or `setup` section from escaping first-match validation.
+
+- Added KiCad singleton board-section cardinality auditing. The reader now records counts for `general`, `paper`, `layers`, and `setup`; the round-trip contract requires exactly one of each, so duplicate or missing structural sections are fail-visible instead of silently relying on first-match parsing when a later conflicting section may exist.
+
+- Extended KiCad board-settings auditing to manufacturing output controls that PhotonX does not emit. The reader now preserves optional `aux_axis_origin`, `grid_origin`, and `pcbplotparams` presence; any injected origin or plot-settings block is fail-visible through `board_settings` instead of silently altering downstream plot/drill coordinate or manufacturing-output behavior.
+
+- Added fail-closed KiCad footprint/pad fabrication-override auditing. The reader now preserves footprint `solder_mask_margin`, `solder_paste_margin`, `solder_paste_ratio` and pad `solder_mask_margin`, `solder_paste_margin`, `solder_paste_margin_ratio`; any such override on PhotonX-generated recovered objects is surfaced through `unexpected_fabrication_overrides` instead of silently changing mask/paste Gerber behavior.
+
+- Added exact KiCad file-header round-trip auditing. Board export, reader, and verifier now share the PhotonX board-format version/generator contract; the reader preserves version/generator token counts, and missing, duplicated, or changed header metadata is fail-visible through `file_header` instead of letting the audit silently apply modern-format assumptions to an unverified document header.
+
+- Added fail-closed KiCad special-pad property auditing. The reader now preserves the optional pad `property` token, and the main round-trip audit rejects any such classification on PhotonX-generated recovered pads (including castellated, heatsink, testpoint, BGA, or fiducial semantics) because PhotonX does not emit or infer those fabrication properties.
+
+- Added fail-closed KiCad footprint net-tie auditing. The reader now preserves `net_tie_pad_groups`, and the main round-trip audit rejects any net-tie group attached to a PhotonX-generated recovered footprint because PhotonX never emits this semantic override and KiCad uses it to allow distinct pad nets in a group to short.
+
+- Extended KiCad board-settings round-trip auditing to optional manufacturing overrides. The reader now preserves `solder_mask_min_width`, `pad_to_paste_clearance`, `pad_to_paste_clearance_ratio`, and stack-up presence; because PhotonX does not emit these source-unproven settings, any post-export insertion is fail-visible in `board_settings` instead of silently changing solder-mask/paste or stack-up manufacturing behavior.
+
+- Hardened KiCad export against duplicate physical object IDs even when callers bypass `validate_board()`. Any repeated ID across exportable tracks, pads, point drills, outline segments, slots, or copper regions is omitted from every affected family before deterministic UUID generation, reported once as `KICAD_OBJECT_ID_DUPLICATE`, accepted by omission-manifest validation, and surfaced as `duplicate_object_ids` source-equivalence loss.
+
+- Hardened KiCad net-table export against duplicate physical net IDs. Duplicate `NetGroup.id` values are now validation errors and are excluded wholesale from KiCad ordinal assignment instead of silently using the last duplicate in a dictionary; unique nets are compactly renumbered, dependent tracks fail closed, pad net claims remain unresolved, and round-trip reports expose `ambiguous_net_ids` as a source-equivalence loss.
+
+- Hardened recovered-pad KiCad export against malformed geometry. Pad centers must be finite numeric coordinates, sizes must be finite and positive, and rotation must be finite before any footprint text is formatted; failures are explicit `KICAD_PAD_COORDINATE_INVALID`, `KICAD_PAD_SIZE_INVALID`, or `KICAD_PAD_ROTATION_INVALID` omissions using the existing skipped-pad/source-loss surface.
+
+- Hardened KiCad track export against invalid geometry before formatting. Tracks with non-numeric/non-finite coordinates, non-positive/non-finite widths, or zero-length centerlines are now omitted with explicit diagnostics and existing `skipped_track_ids` loss accounting; unsupported-layer and unresolved-net diagnostics remain independent so combined defects stay visible without double-counting the skipped object.
+
+- Hardened KiCad `Edge.Cuts` export against invalid source outline geometry. Non-numeric/non-finite coordinates and zero-length `OutlineSegment` objects are now omitted with explicit reasons, tracked through export reports/omission manifests, and surfaced as `skipped_outline_ids` source losses; valid outline segments still round-trip with exact deterministic UUID/geometry checks.
+
+- Added conservative KiCad point-drill export and round-trip auditing. Confirmed non-plated `DrillHit` objects now export as deterministic round NPTH footprints; unknown, plated-without-pad-stack, invalid, or unsupported-plating drills are explicitly omitted and recorded in the omission manifest. Round-trip `losses` now includes `skipped_drill_ids`, and previously uncounted arbitrary routed-milling omissions now surface as `omitted_route_ids` so `source_equivalent` cannot remain true when mechanical source features were dropped.
+
+- Added fail-closed readback for KiCad footprint/pad copper-behavior overrides. PhotonX recovered footprints and child pads now surface non-default clearance, zone-connect, thermal width/gap, and pad unused-layer/end-layer controls through an `unexpected_copper_overrides` audit family, preventing unchanged geometry from hiding different zone-connection copper.
+
+- Expanded KiCad region-rule auditing to semantics that can change repour output without changing the zone polygon: priority, keepout state, solid-vs-hatched fill mode, filled-area-thickness policy, and minimum-island area. Missing/default values are normalized semantically (for example omitted priority equals zero), while meaningful changes now fail `region_rules`.
+
+- Added KiCad board-fabrication setting readback and round-trip verification. Exporter and audit now share the same default board-thickness and global pad-to-mask-clearance constants, and edits to either setting fail `board_settings` even when all copper connectivity objects are otherwise unchanged.
+
+- Generalized the top-level KiCad copper guard beyond `gr_*` tokens. Any board-level object carrying a direct canonical copper layer now fails closed unless it is one of the explicitly audited electrical containers (`segment`, routed `arc`, `zone`, or `footprint`). This also catches copper-layer dimensions, targets, images, and future direct-layer item classes instead of relying on a brittle token list.
+
+- Hardened KiCad footprint readback against hidden copper additions. Footprint-local `fp_*` graphics, text properties, or nested zones placed on canonical copper layers are now preserved as `unexpected_copper_graphics` and rejected by the round-trip audit. This prevents a PhotonX recovered footprint from gaining extra fabrication copper while its pad/reference identity still appears unchanged.
+
+- Closed a KiCad copper-graphics audit escape hatch. The board reader now records top-level `gr_*` items placed on canonical copper layers, and connectivity round-trip treats every such object as an unexpected expected-empty family because PhotonX never emits electrical copper as board graphics. Injected `gr_line`, `gr_arc`, `gr_poly`, text, or similar copper graphics can no longer alter fabrication copper while remaining invisible to the audit.
+
+- Added KiCad zone-rule readback and round-trip verification for the exporter’s deterministic repour defaults: connect-pad clearance, minimum thickness, thermal gap, thermal bridge width, and island-removal mode. A board can no longer keep identical zone shell geometry while silently changing the rules that would generate different copper on repour.
+
+- Extended KiCad CopperRegion round-trip auditing beyond shell/hole geometry to the exporter’s fill/cache contract. Solid regions now verify `fill yes` plus the deterministic cached shell polygon, while holed regions verify the intentionally cache-omitted/unfilled state; fill toggles or cached-polygon drift now fail `region_fill_state` instead of passing as geometry-equivalent.
+
+- Removed speculative recovered drilled-pad export. `PadCandidate.drill` is populated by geometric drill overlap and does not itself prove plating or a through-hole copper pad stack; drilled recovered pads are therefore omitted with `KICAD_PAD_DRILL_PADSTACK_UNPROVEN` instead of being promoted to KiCad `thru_hole` pads on `*.Cu`. The omission participates in existing skipped-pad/source-equivalence accounting until a grouped evidence-backed pad-stack contract is implemented.
+
+- Removed the lossy KiCad recovered-pad shape fallback. PadCandidate shapes outside the exact C/R/O mapping are now omitted with `KICAD_PAD_SHAPE_UNSUPPORTED` and counted in the existing skipped-pad omission/source-equivalence surface instead of being silently approximated as rectangles.
+
+- Hardened recovered-pad export against undeclared/noncanonical KiCad copper layers. Pads whose source layer cannot be represented by the generated board layer table are now omitted with `KICAD_PAD_LAYER_UNSUPPORTED`; export reports and omission manifests track exported/skipped pad IDs, and connectivity audits surface `skipped_pad_ids` as source-equivalence loss instead of emitting a structurally inconsistent footprint/pad layer reference.
+
+- Closed the remaining KiCad `Edge.Cuts` shape escape hatch: the reader now records any top-level `gr_*` object on `Edge.Cuts` other than the `gr_line` family emitted by PhotonX, and the main round-trip audit treats those unexpected arcs/rectangles/circles/polygons/text graphics as expected-empty differences instead of silently ignoring contour-changing geometry.
+
+- Added fail-closed KiCad routed-track arc readback. Top-level `arc` objects are now parsed separately from graphics/footprint arcs with strict integer net ordinals and machine-readable start/mid/end/width/layer/net/identifier fields; because the current PhotonX exporter emits no routed KiCad arcs, any observed track arc is an explicit round-trip difference instead of silently escaping the connectivity audit.
+
+- Hardened KiCad readback against injected/foreign footprints. Because the generated board is expected to contain only `PHOTONX:RecoveredPad`, `PHOTONX:RecoveredNPTHSlot`, and `PHOTONX:RecoveredPlatedSlot`, any other footprint is now surfaced in a machine-readable `foreign_footprints` comparison (including nested pad/net summaries) and fails `roundtrip_equal` instead of being silently ignored.
+
+- Added exact KiCad `Edge.Cuts` outline round-trip verification without breaking the legacy `edge_lines` reader surface. The reader now exposes structured `edge_graphics` with start/end, stroke width/type, layer, and UUID; the main audit compares undirected geometry plus deterministic `edge:<id>` UUID identity so missing, extra, moved, or identity-drifted outline segments fail visibly.
+
+- Added structural KiCad layer-table round-trip verification. Export and readback now share one board-layer specification for `F.Cu`, contiguous canonical `In1.Cu..InN.Cu`, `B.Cu`, silks, and `Edge.Cuts`; missing/renumbered/retagged rows plus duplicate layer IDs or names are fail-visible even when track/zone layer strings themselves still match.
+
+- Integrated canonical KiCad CopperRegion shell/hole verification into the main connectivity audit. `region_geometry` now applies the existing start-point/winding-invariant comparator to exported regions only, so zone geometry drift fails `roundtrip_equal` while policy-skipped source regions remain source-equivalence losses.
+
+- Integrated existing KiCad mechanical-slot round-trip verification into the main connectivity audit. `slot_geometry` now checks canonical center/overall length/width/plating for exported NPTH and plated slots, so geometry drift fails `roundtrip_equal` while policy-skipped source slots remain source-equivalence losses rather than readback corruption.
+
+- Added exact recovered-pad geometry verification to KiCad connectivity round-trip auditing. Export and readback now share one pad export descriptor and compare footprint/pad placement, layers, type, shape, size, angle, drill shape/size/offset, UUIDs, and net binding; malformed pad geometry is fail-visible instead of raising an unchecked readback error.
+
+- Extended deterministic KiCad identity verification into recovered pad/slot child pads. The KiCad reader now preserves pad UUIDs, and connectivity round-trip checks compare both footprint UUIDs and child-pad UUIDs so nested identity drift cannot pass when geometry and net bindings remain unchanged.
+
+- Made proven plated via-span loss explicit across KiCad export reporting and round-trip source-equivalence checks. The exporter now records `KICAD_PROVEN_VIA_SPAN_UNSUPPORTED`, `kicad_omissions.json` includes `omitted_via_spans`, and connectivity audits expose `omitted_proven_via_span_drill_ids`. PhotonX still does not invent KiCad annular via geometry from drill/span evidence alone.
+
+- Centralized deterministic KiCad UUID generation in a shared identity helper used by both export and readback verification, with stable contract tests for track, pad-footprint, region, and slot-footprint identities. This removes duplicate UUID logic that could otherwise drift between emission and round-trip expectations.
+
+- Strengthened KiCad connectivity round-trip identity checks: track segment UUIDs are now read back, and deterministic PhotonX UUIDs are compared for tracks, recovered-pad footprints, copper regions, and recovered-slot footprints in addition to geometry/net semantics. UUID drift is therefore fail-visible even when electrical geometry is unchanged.
+
+- Hardened KiCad connectivity round-trip auditing against unexpected `via` objects. The reader now rejects non-integer via net ordinals fail-closed, and the audit treats any via in a generated board as an explicit round-trip difference until PhotonX has a source via export contract with proven net/layer-span semantics.
+
+- Added a fail-visible, omission-aware KiCad connectivity round-trip audit for `photonx reconstruct --kicad`. The CLI now re-reads the generated board and checks the exact net table plus emitted track, recovered-pad, copper-region, and recovered-slot electrical bindings, including embedded net-name consistency and preserved PHOTONX identities. The audit distinguishes policy-preserving `roundtrip_equal` from `source_connectivity_complete` and full `source_equivalent`, exposing skipped tracks/regions/slots and unresolved pad/slot net claims without changing reconstruction exit-code semantics.
+
 - Added evidence-gated multilayer physical connectivity through proven plated via spans. Via-span resolution now preserves the exact overlapping pad IDs used as evidence; the PhysicalGraph adds cross-layer edges only when plating is explicitly `plated` and the span is proven, propagates drill/span/confidence evidence into physical-net provenance, and lowers net confidence to the weakest via-span evidence when a net depends on a vertical transition. Unknown plating across multiple observed copper layers remains fail-visible through `MULTILAYER_SPAN_UNKNOWN` and does not create an electrical bridge. The spatial and brute-force graph paths share the same via-edge semantics.
 
 - Added KiCad CopperRegion round-trip verification. The board reader now preserves zone shell/hole contours, layer/net/name identity, fill state, and cached filled polygons; a semantic comparator verifies exported regions independent of polygon start vertex or winding while retaining PhotonX region identity and net labels. Zone net ordinals are parsed fail-closed as integers instead of being silently coerced.

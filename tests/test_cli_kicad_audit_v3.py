@@ -126,6 +126,28 @@ def test_reconstruct_kicad_emits_board_report_omissions_and_validation(
         return path, report
 
     monkeypatch.setattr(cli, "export_kicad_with_report", fake_export)
+    roundtrip = {
+        "scope": [
+            "net_table",
+            "tracks",
+            "recovered_pads",
+            "copper_regions",
+            "recovered_slots",
+        ],
+        "roundtrip_equal": True,
+        "source_connectivity_complete": False,
+        "source_equivalent": False,
+        "nets": {"equal": True},
+        "tracks": {"equal": True},
+        "pads": {"equal": True},
+        "losses": {"skipped_track_ids": ["T_SKIP"], "unresolved_pad_net_ids": []},
+        "issues": [],
+    }
+    monkeypatch.setattr(
+        cli,
+        "validate_kicad_connectivity_roundtrip",
+        lambda *_args: roundtrip,
+    )
     monkeypatch.setattr(
         cli,
         "validate_with_kicad_cli",
@@ -161,6 +183,13 @@ def test_reconstruct_kicad_emits_board_report_omissions_and_validation(
     assert omissions["exported_tracks"] == ["T_OK"]
     assert omissions["skipped_tracks"] == ["T_SKIP"]
     assert omissions["omitted_routes"] == ["Q_SKIP"]
+
+    connectivity = json.loads(
+        (output / "kicad_connectivity_roundtrip.json").read_text(encoding="utf-8")
+    )
+    assert connectivity["roundtrip_equal"] is True
+    assert connectivity["source_connectivity_complete"] is False
+    assert connectivity["losses"]["skipped_track_ids"] == ["T_SKIP"]
 
     assert (output / "kicad_validation.txt").read_text(
         encoding="utf-8"
