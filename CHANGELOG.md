@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extended deterministic recovered-object identity checks to KiCad `Reference` properties. The reader now preserves Reference-property count and UUID; recovered pads, point drills, and slots require exactly one Reference plus the exporter-derived `ref:`, `drill-ref:`, or `slot-ref:` UUID, so duplicate Reference fields or Reference UUID drift cannot hide behind first-match object IDs.
+
 - Hardened required KiCad board-setting parsing against duplicate tokens. The reader now records exact `thickness` and `pad_to_mask_clearance` counts, and the round-trip contract requires one of each, preventing a conflicting second value inside an otherwise singleton `general` or `setup` section from escaping first-match validation.
 
 - Added KiCad singleton board-section cardinality auditing. The reader now records counts for `general`, `paper`, `layers`, and `setup`; the round-trip contract requires exactly one of each, so duplicate or missing structural sections are fail-visible instead of silently relying on first-match parsing when a later conflicting section may exist.

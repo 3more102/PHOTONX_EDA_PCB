@@ -181,3 +181,29 @@ def test_reader_preserves_footprint_and_pad_fabrication_overrides():
         "solder_paste_margin": -0.02,
         "solder_paste_margin_ratio": 0.8,
     }
+
+
+def test_reader_preserves_reference_property_uuid_and_count():
+    d = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (footprint "PHOTONX:RecoveredPad"
+            (layer "F.Cu")
+            (at 0 0)
+            (property "Reference" "P1"
+              (uuid 00000000-0000-0000-0000-000000000081)
+            )
+            (property "Reference" "P2"
+              (uuid 00000000-0000-0000-0000-000000000082)
+            )
+          )
+        )
+        """
+    )
+
+    footprint = d["footprints"][0]
+    assert footprint["reference"] == "P1"
+    assert footprint["reference_uuid"] == (
+        "00000000-0000-0000-0000-000000000081"
+    )
+    assert footprint["reference_count"] == 2

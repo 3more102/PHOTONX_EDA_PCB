@@ -52,6 +52,27 @@ def _property_value(node, name):
     return None
 
 
+def _reference_property(node):
+    references = [
+        prop
+        for prop in children(node, "property")
+        if len(prop) >= 3 and str(prop[1]) == "Reference"
+    ]
+    if not references:
+        return {
+            "value": None,
+            "uuid": None,
+            "count": 0,
+        }
+    first = references[0]
+    uuid = child(first, "uuid")
+    return {
+        "value": str(first[2]),
+        "uuid": str(uuid[1]) if uuid and len(uuid) >= 2 else None,
+        "count": len(references),
+    }
+
+
 def _unexpected_copper_graphics(node):
     out = []
     for index, item in enumerate(node[2:]):
@@ -87,10 +108,13 @@ def read_footprints(root):
         at = child(f, "at")
         layer = child(f, "layer")
         uuid = child(f, "uuid")
+        reference = _reference_property(f)
         out.append(
             {
                 "name": str(f[1]) if len(f) > 1 else "",
-                "reference": _property_value(f, "Reference"),
+                "reference": reference["value"],
+                "reference_uuid": reference["uuid"],
+                "reference_count": reference["count"],
                 "uuid": str(uuid[1]) if uuid and len(uuid) >= 2 else None,
                 "at": (float(at[1]), float(at[2])) if at else (0.0, 0.0),
                 "angle": float(at[3]) if at and len(at) > 3 else 0.0,

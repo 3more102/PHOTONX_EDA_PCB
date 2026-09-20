@@ -831,6 +831,8 @@ def _expected_drills(board, exported_drill_ids):
             {
                 "id": str(drill.id),
                 "uuid": photonx_uuid("drill-fp:" + str(drill.id)),
+                "reference_uuid": photonx_uuid("drill-ref:" + str(drill.id)),
+                "reference_count": 1,
                 "pad_uuid": photonx_uuid("drill-pad:" + str(drill.id)),
                 "geometry": _expected_drill_geometry(drill),
                 "net": {"code": 0, "name": ""},
@@ -893,6 +895,8 @@ def _observed_drills(readback, net_lookup, issues):
             {
                 "id": str(reference),
                 "uuid": footprint.get("uuid"),
+                "reference_uuid": footprint.get("reference_uuid"),
+                "reference_count": int(footprint.get("reference_count", 0)),
                 "pad_uuid": pads[0].get("uuid"),
                 "geometry": geometry,
                 "net": binding,
@@ -915,6 +919,8 @@ def _expected_pads(board, exported_pad_ids):
             {
                 "id": str(pad.id),
                 "uuid": photonx_uuid("fp:" + str(pad.id)),
+                "reference_uuid": photonx_uuid("ref:" + str(pad.id)),
+                "reference_count": 1,
                 "pad_uuid": photonx_uuid("pad:" + str(pad.id)),
                 "geometry": _expected_pad_geometry(pad),
                 "net": binding,
@@ -978,6 +984,8 @@ def _observed_pads(readback, net_lookup, issues):
             {
                 "id": str(reference),
                 "uuid": footprint.get("uuid"),
+                "reference_uuid": footprint.get("reference_uuid"),
+                "reference_count": int(footprint.get("reference_count", 0)),
                 "pad_uuid": pads[0].get("uuid"),
                 "geometry": geometry,
                 "net": binding,
@@ -1229,6 +1237,8 @@ def _expected_slots(board, exported_ids, issues):
                 {
                     "id": str(slot.id),
                     "uuid": photonx_uuid("slot-fp:" + str(slot.id)),
+                    "reference_uuid": photonx_uuid("slot-ref:" + str(slot.id)),
+                    "reference_count": 1,
                     "pad_uuid": photonx_uuid("slot-pad:" + str(slot.id)),
                     "kind": "npth",
                     "net": {"code": 0, "name": ""},
@@ -1265,6 +1275,8 @@ def _expected_slots(board, exported_ids, issues):
             {
                 "id": str(slot.id),
                 "uuid": photonx_uuid("slot-fp:" + str(slot.id)),
+                "reference_uuid": photonx_uuid("slot-ref:" + str(slot.id)),
+                "reference_count": 1,
                 "pad_uuid": photonx_uuid("slot-pad:" + str(slot.id)),
                 "kind": "plated",
                 "net": binding,
@@ -1322,6 +1334,8 @@ def _observed_slots(readback, net_lookup, issues):
             {
                 "id": str(reference),
                 "uuid": footprint.get("uuid"),
+                "reference_uuid": footprint.get("reference_uuid"),
+                "reference_count": int(footprint.get("reference_count", 0)),
                 "pad_uuid": pads[0].get("uuid"),
                 "kind": kind,
                 "net": binding,

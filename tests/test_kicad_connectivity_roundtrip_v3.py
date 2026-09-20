@@ -1049,6 +1049,40 @@ def test_connectivity_roundtrip_detects_recovered_object_uuid_drift(
     assert audit[comparison_key]["missing"][0]["uuid"] != audit[comparison_key]["unexpected"][0]["uuid"]
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        (
+            "reference_uuid",
+            "00000000-0000-0000-0000-000000000080",
+        ),
+        ("reference_count", 2),
+    ],
+)
+def test_connectivity_roundtrip_detects_reference_identity_drift(
+    tmp_path,
+    field,
+    value,
+):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    target = next(
+        footprint
+        for footprint in readback["footprints"]
+        if footprint["name"] == "PHOTONX:RecoveredPad"
+    )
+    target[field] = value
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["pads"]["equal"] is False
+
+
 def test_connectivity_roundtrip_detects_recovered_pad_geometry_drift(tmp_path):
     board = _board_with_all_connectivity_families()
     path, report = export_kicad_with_report(
