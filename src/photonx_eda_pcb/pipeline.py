@@ -35,6 +35,32 @@ def _serialize_via_spans(spans):
     ]
 
 
+def _apply_file_plating_hint(board: BoardModel, item, drills) -> None:
+    hint = getattr(item, "plating_hint", None)
+    if hint not in {"plated", "non-plated"}:
+        return
+
+    changed_ids = []
+    for drill in drills:
+        if drill.plating != "unknown":
+            continue
+        drill.plating = hint
+        changed_ids.append(drill.id)
+
+    if not changed_ids:
+        return
+
+    evidence = board.metadata.setdefault("drill_plating_evidence", [])
+    evidence.append(
+        {
+            "path": str(item.path),
+            "plating": hint,
+            "source": "explicit_filename_token",
+            "drill_ids": changed_ids,
+        }
+    )
+
+
 def _report_unproven_multilayer_spans(board: BoardModel, spans) -> None:
     drill_by_id = {drill.id: drill for drill in board.drills}
     source_path = str(board.metadata.get("source_input", ""))
@@ -89,6 +115,7 @@ def reconstruct(
         for item in files:
             if item.kind == "drill":
                 result = ExcellonParser(strict=cfg.strict_parsing).parse(item.path)
+                _apply_file_plating_hint(board, item, result.drills)
                 board.drills.extend(result.drills)
                 board.slots.extend(result.slots)
                 board.routes.extend(result.routes)
