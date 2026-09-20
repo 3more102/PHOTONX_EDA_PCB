@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Added a model-backed via evidence review overlay to the Tkinter viewer. Reconstructed via spans are classified as exportable, conservatively omitted, unproven, or invalid using the existing KiCad via policy; the canvas exposes those states without inventing copper semantics, the inspector shows source plating/layer/pad/confidence/net evidence plus exact omission reasons, and the status bar reports deterministic via-review counts.\n\n- Added exact KiCad export for straight non-plated Excellon routed paths. Two-point finite routes now become deterministic `PHOTONX:RecoveredNPTHRoute` oval NPTH footprints; route export/omission partitions are machine-readable, and KiCad round-trip verification checks recovered route identity, geometry, and unassigned-net semantics without misclassifying route footprints as component slots.
+- Added a model-backed via evidence review overlay to the Tkinter viewer. Reconstructed via spans are classified as exportable, conservatively omitted, unproven, or invalid using the existing KiCad via policy; the canvas exposes those states without inventing copper semantics, the inspector shows source plating/layer/pad/confidence/net evidence plus exact omission reasons, and the status bar reports deterministic via-review counts.
+
+- Added exact KiCad export for straight non-plated Excellon routed paths. Two-point finite routes now become deterministic `PHOTONX:RecoveredNPTHRoute` oval NPTH footprints; route export/omission partitions are machine-readable, and KiCad round-trip verification checks recovered route identity, geometry, and unassigned-net semantics without misclassifying route footprints as component slots.
 
 - Added expected-empty KiCad fabrication-graphics auditing for direct F/B.Mask and F/B.Paste artwork. Top-level `gr_*` objects and footprint `fp_*`/property/zone graphics on mask/paste layers are now surfaced through `unexpected_fabrication_graphics` and fail round-trip verification instead of bypassing copper-only guards.
 
