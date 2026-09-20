@@ -784,7 +784,7 @@ def _expected_vias(board, via_exportable, exported_ids, issues):
             continue
         out.append(
             _via_item(
-                "through",
+                item.get("type", "through"),
                 item["at"],
                 item["size"],
                 item["drill"],
@@ -1603,8 +1603,10 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     With an export report, the audit covers emitted board fabrication settings, the declared KiCad layer table, net table, and tracks,
     verifies exact exported KiCad via geometry/net/UUID plus copper-behavior flags, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, direct mask/paste graphics at board or footprint scope, footprint/pad copper-behavior overrides, verifies the emitted Edge.Cuts outline, and compares recovered point drills, pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
     recovered slots, and exact non-plated routed paths exported as NPTH route footprints. Proven plated via spans are exported only when their
-    through-hole annular geometry, complete layer support, and reconstructed net
-    are exactly representable; all other proven spans remain explicit source losses. Deterministic PhotonX UUIDs are part of the supported
+    annular geometry, complete layer support, reconstructed net, and via type
+    are exactly representable. Source-proven X2 Blind/Buried spans are represented
+    as KiCad blind vias with their exact layer endpoints; microvia semantics are never invented.
+    All other proven spans remain explicit source losses. Deterministic PhotonX UUIDs are part of the supported
     object identity for emitted tracks, recovered pad/slot footprints and their child pads, regions, and slots. Recovered-pad emitted geometry is compared exactly as read back.
     Without a report,
     the legacy fallback can still validate net/track/pad connectivity, but
