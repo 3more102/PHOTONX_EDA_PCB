@@ -126,6 +126,50 @@ def test_connectivity_roundtrip_marks_proven_via_span_as_source_loss(tmp_path):
     assert audit["losses"]["omitted_proven_via_span_drill_ids"] == ["D1"]
 
 
+def test_invalid_proven_via_span_metadata_fails_closed(tmp_path):
+    board = BoardModel(
+        nets=[_net()],
+        pads=[
+            PadCandidate("P_F", Point(0, 0), 1.0, 1.0, "C", "F.Cu", None, "N1"),
+            PadCandidate("P_B", Point(0, 0), 1.0, 1.0, "C", "B.Cu", None, "N1"),
+        ],
+        drills=[DrillHit("D1", Point(0, 0), 0.4, "unknown")],
+        metadata={
+            "via_spans": [
+                {
+                    "drill_id": "D1",
+                    "from_layer": "F.Cu",
+                    "to_layer": "B.Cu",
+                    "confidence": 0.95,
+                    "proven": True,
+                    "pad_ids": ["P_B", "P_F"],
+                    "evidence": [],
+                }
+            ]
+        },
+    )
+
+    path, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert report.ok is False
+    assert report.skipped_via_spans == 0
+    assert report.skipped_via_span_ids == []
+    assert any(
+        issue.code == "KICAD_VIA_SPAN_METADATA_INVALID"
+        and issue.object_id == "D1"
+        for issue in report.issues
+    )
+    assert audit["roundtrip_equal"] is False
+    assert audit["source_equivalent"] is False
+    assert any(
+        issue["code"] == "KICAD_ROUNDTRIP_VIA_SPAN_METADATA_INVALID"
+        and issue["object_id"] == "D1"
+        for issue in audit["issues"]
+    )
+
+
 def test_connectivity_roundtrip_detects_unexpected_via(tmp_path):
     board = _board_with_all_connectivity_families()
     path, report = export_kicad_with_report(
