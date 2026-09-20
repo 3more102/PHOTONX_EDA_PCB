@@ -727,8 +727,9 @@ def _observed_track_arcs(readback, net_lookup, issues):
     return out
 
 
-def _via_item(at, size, drill, layers, binding, object_uuid):
+def _via_item(via_type, at, size, drill, layers, binding, object_uuid):
     return {
+        "type": str(via_type),
         "at": list(_point(at)),
         "size": _r(size),
         "drill": _r(drill),
@@ -763,6 +764,7 @@ def _expected_vias(board, via_exportable, exported_ids, issues):
             continue
         out.append(
             _via_item(
+                "through",
                 item["at"],
                 item["size"],
                 item["drill"],
@@ -787,6 +789,7 @@ def _observed_vias(readback, net_lookup, issues):
             )
             out.append(
                 _via_item(
+                    via.get("type", "through"),
                     via.get("at"),
                     via.get("size"),
                     via.get("drill"),
