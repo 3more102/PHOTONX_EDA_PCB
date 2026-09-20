@@ -22,6 +22,7 @@ Current conservative policies include:
 - tracks with a non-empty unresolved `net_id`, or a layer outside the declared canonical KiCad copper set (`F.Cu`, `B.Cu`, `In1.Cu`..`In30.Cu`), are skipped instead of being relabelled or emitted on an undeclared layer;
 - exact straight non-plated Excellon routes with two finite distinct endpoints and positive finite width are exported as deterministic NPTH oval route footprints;
 - exact straight plated Excellon routes are exported only when source copper proves a consistent full-stack plated-slot pad-stack and one unambiguous exported net; generic evidence failure uses `KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN`, unresolved explicit X2 spans use `KICAD_PLATED_ROUTE_SPAN_UNPROVEN`, source-proven partial-depth spans use `KICAD_PLATED_ROUTE_PARTIAL_SPAN_UNSUPPORTED`, and Blind/Buried kind/topology contradictions use `KICAD_PLATED_ROUTE_X2_KIND_MISMATCH`;
+- proven plated via spans are exported only when any source-proven canonical `DrillHit.layer_span` agrees with the proven `via_spans` metadata endpoints; disagreement is omitted as `KICAD_PROVEN_VIA_CANONICAL_SPAN_MISMATCH` rather than widening or replacing source span evidence;
 - unknown-plating, multi-segment, non-finite, or otherwise non-exact routed paths remain preserved in PHOTONX/JSON and omitted from KiCad.
 
 Older manifests remain readable: missing newer list keys are interpreted as empty lists.

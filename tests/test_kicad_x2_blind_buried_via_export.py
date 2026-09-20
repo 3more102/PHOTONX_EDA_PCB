@@ -183,7 +183,38 @@ def test_x2_partial_via_requires_matching_canonical_proven_span():
     assert problems == ()
     assert omitted[0][0:2] == (
         "D1",
-        "KICAD_PROVEN_VIA_X2_SPAN_UNPROVEN",
+        "KICAD_PROVEN_VIA_CANONICAL_SPAN_MISMATCH",
+    )
+
+
+def test_full_stack_via_rejects_conflicting_canonical_source_span():
+    board = BoardModel(
+        nets=[_net()],
+        pads=[
+            _pad("P_F", "F.Cu"),
+            _pad("P_I1", "In1.Cu"),
+            _pad("P_B", "B.Cu"),
+        ],
+        drills=[
+            _drill("pth", ("F.Cu", "In1.Cu"), (1, 2)),
+        ],
+        metadata={
+            "via_spans": [
+                _span("F.Cu", "B.Cu", "P_F", "P_I1", "P_B"),
+            ]
+        },
+    )
+
+    exportable, omitted, problems = proven_via_span_export_plan(board)
+
+    assert exportable == ()
+    assert problems == ()
+    assert omitted == (
+        (
+            "D1",
+            "KICAD_PROVEN_VIA_CANONICAL_SPAN_MISMATCH",
+            "source-proven canonical drill span does not match the proven via-span metadata endpoints",
+        ),
     )
 
 

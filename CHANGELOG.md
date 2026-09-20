@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened proven-via KiCad export against stale or contradictory span metadata. When a `DrillHit` carries a source-proven canonical `layer_span`, it must agree with the proven `via_spans` metadata endpoints for both full-through and partial vias; conflicts now fail closed with `KICAD_PROVEN_VIA_CANONICAL_SPAN_MISMATCH` instead of widening source evidence.
+
 - Preserved Gerber X2 aperture attributes as immutable source evidence. Supported `AD` apertures snapshot current `TA` attributes; D01/D03 geometry carries the frozen aperture evidence; regions snapshot `TA` state at `G36`; and `TD` changes only future tracked state. `.AperFunction` remains source evidence and is not promoted into inferred design intent.
 
 - Added evidence-gated KiCad export for exact straight plated Excellon routed slots. A plated route is emitted as deterministic `PHOTONX:RecoveredPlatedRoute` only when multilayer copper coverage proves one pad-stack and one unambiguous exported net; otherwise it remains an explicit omission. Round-trip verification checks route kind, geometry, net binding, and deterministic identity while keeping route footprints out of the mechanical-slot comparator.
