@@ -51,6 +51,16 @@ def score_signature(features, sig):
             return 0.0
         score += 0.10
 
+    pitch_min = features.get("pitch_min")
+    if "pitch_min_mm" in sig:
+        if pitch_min is None or pitch_min < sig["pitch_min_mm"]:
+            return 0.0
+        score += 0.05
+    if "pitch_max_mm" in sig:
+        if pitch_min is None or pitch_min > sig["pitch_max_mm"]:
+            return 0.0
+        score += 0.05
+
     # Preserve support for custom/legacy signature definitions.
     if "aspect_min" in sig:
         if features.get("aspect", 0.0) < sig["aspect_min"]:
