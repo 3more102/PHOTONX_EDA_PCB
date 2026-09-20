@@ -135,7 +135,7 @@ def build_via_review_descriptors(board) -> tuple[ViaReviewDescriptor, ...]:
             export_code, export_message = omitted_by_id[drill_id]
         else:
             status = "invalid"
-            export_code = "KICAD_PROVEN_VIA_METADATA_INVALID"
+            export_code = "KICAD_VIA_SPAN_METADATA_INVALID"
             export_message = (
                 problem_by_id.get(drill_id)
                 or problem_by_id.get(f"via_spans[{index}]")
