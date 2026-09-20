@@ -8,6 +8,7 @@ import zipfile
 
 import pytest
 
+from photonx_eda_pcb import input_package
 from photonx_eda_pcb.input_package import (
     _copy_member_bounded,
     _safe_extract_tar,
@@ -174,3 +175,79 @@ def test_stream_copy_accepts_exact_member_size():
 
     assert copied == 4
     assert output.getvalue() == b"1234"
+
+
+def test_zip_member_over_per_file_limit_is_rejected_before_extraction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(input_package, "_MAX_ARCHIVE_MEMBER_BYTES", 4)
+    archive = tmp_path / "oversized-member.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("top.gtl", b"12345")
+
+    with pytest.raises(ValueError, match="per-file safety limit"):
+        _safe_extract_zip(archive, tmp_path / "out")
+
+    assert not (tmp_path / "out" / "top.gtl").exists()
+
+
+def test_tar_member_over_per_file_limit_is_rejected_before_extraction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(input_package, "_MAX_ARCHIVE_MEMBER_BYTES", 4)
+    archive = tmp_path / "oversized-member.tar"
+    payload = b"12345"
+
+    with tarfile.open(archive, "w") as tf:
+        info = tarfile.TarInfo("top.gtl")
+        info.size = len(payload)
+        tf.addfile(info, BytesIO(payload))
+
+    with pytest.raises(ValueError, match="per-file safety limit"):
+        _safe_extract_tar(archive, tmp_path / "out")
+
+    assert not (tmp_path / "out" / "top.gtl").exists()
+
+
+def test_zip_extreme_compression_ratio_is_rejected_before_extraction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(input_package, "_MIN_ZIP_RATIO_CHECK_BYTES", 1)
+    monkeypatch.setattr(input_package, "_MAX_ZIP_COMPRESSION_RATIO", 2.0)
+    archive = tmp_path / "high-ratio.zip"
+
+    with zipfile.ZipFile(
+        archive,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as zf:
+        zf.writestr("top.gtl", b"A" * 16_384)
+
+    with pytest.raises(ValueError, match="compression ratio exceeds"):
+        _safe_extract_zip(archive, tmp_path / "out")
+
+    assert not (tmp_path / "out" / "top.gtl").exists()
+
+
+def test_zip_ratio_check_ignores_small_members(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(input_package, "_MIN_ZIP_RATIO_CHECK_BYTES", 1024)
+    monkeypatch.setattr(input_package, "_MAX_ZIP_COMPRESSION_RATIO", 1.0)
+    archive = tmp_path / "small-member.zip"
+
+    with zipfile.ZipFile(
+        archive,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as zf:
+        zf.writestr("tiny.gtl", b"A" * 128)
+
+    destination = tmp_path / "out"
+    _safe_extract_zip(archive, destination)
+
+    assert (destination / "tiny.gtl").read_bytes() == b"A" * 128

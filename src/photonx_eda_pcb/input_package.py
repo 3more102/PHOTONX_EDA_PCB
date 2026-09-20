@@ -11,6 +11,9 @@ import zipfile
 
 _MAX_ARCHIVE_FILES = 20_000
 _MAX_ARCHIVE_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
+_MAX_ARCHIVE_MEMBER_BYTES = 512 * 1024 * 1024
+_MAX_ZIP_COMPRESSION_RATIO = 1_000.0
+_MIN_ZIP_RATIO_CHECK_BYTES = 1024 * 1024
 _COPY_CHUNK_BYTES = 1024 * 1024
 
 
@@ -104,6 +107,34 @@ def _copy_member_bounded(
     return copied
 
 
+def _validate_archive_member_size(member_name: str, size: int) -> None:
+    if size < 0:
+        raise ValueError(f"archive member has invalid negative size: {member_name}")
+    if size > _MAX_ARCHIVE_MEMBER_BYTES:
+        raise ValueError(
+            f"archive member exceeds the PHOTONX per-file safety limit "
+            f"of {_MAX_ARCHIVE_MEMBER_BYTES} bytes: {member_name}"
+        )
+
+
+def _validate_zip_compression_ratio(info: zipfile.ZipInfo) -> None:
+    if info.is_dir() or info.file_size < _MIN_ZIP_RATIO_CHECK_BYTES:
+        return
+
+    compressed = int(info.compress_size)
+    if compressed <= 0:
+        raise ValueError(
+            f"archive member has invalid compressed size: {info.filename}"
+        )
+
+    ratio = float(info.file_size) / float(compressed)
+    if ratio > _MAX_ZIP_COMPRESSION_RATIO:
+        raise ValueError(
+            "archive member compression ratio exceeds the PHOTONX safety "
+            f"limit of {_MAX_ZIP_COMPRESSION_RATIO:g}:1: {info.filename}"
+        )
+
+
 def _validate_zip_member_type(info: zipfile.ZipInfo) -> None:
     if info.flag_bits & 0x1:
         raise ValueError(
@@ -149,6 +180,9 @@ def _safe_extract_zip(archive: Path, destination: Path) -> None:
         planned: list[tuple[zipfile.ZipInfo, Path]] = []
         for info in members:
             _validate_zip_member_type(info)
+            if not info.is_dir():
+                _validate_archive_member_size(info.filename, int(info.file_size))
+                _validate_zip_compression_ratio(info)
             target = _claim_archive_target(
                 destination,
                 info.filename,
@@ -224,6 +258,7 @@ def _safe_extract_tar(archive: Path, destination: Path) -> None:
             )
 
             if info.isfile():
+                _validate_archive_member_size(info.name, int(info.size))
                 declared_total += int(info.size)
                 if declared_total > _MAX_ARCHIVE_UNCOMPRESSED_BYTES:
                     raise ValueError(
@@ -260,8 +295,9 @@ def prepare_input(source: str | Path):
     """Prepare a directory, manufacturing file, ZIP, TAR, TAR.GZ, or TGZ.
 
     Archives are extracted into temporary private directories with path
-    traversal, entry-count, decompressed-size, duplicate-target, and
-    unsafe-member checks. The temporary directory remains valid only for the
+    traversal, entry-count, aggregate/per-member decompressed-size,
+    ZIP compression-ratio, duplicate-target, and unsafe-member checks.
+    The temporary directory remains valid only for the
     lifetime of this context.
     """
 
