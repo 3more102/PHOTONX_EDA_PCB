@@ -79,11 +79,6 @@ def _unexpected_copper_graphics(node):
         if not isinstance(item, list) or not item:
             continue
         token = str(item[0])
-        if not (
-            token.startswith("fp_")
-            or token in {"property", "zone"}
-        ):
-            continue
         layer = child(item, "layer")
         if not layer or len(layer) < 2:
             continue
