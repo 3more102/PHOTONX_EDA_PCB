@@ -42,7 +42,12 @@ def test_file_function_plating_is_applied_to_drill_hits(
     assert result.drills[0].plating == expected
     assert {
         evidence.kind for evidence in result.drills[0].provenance.evidence
-    } == {"excellon_x2_file_plating"}
+    } == {
+        "excellon_x2_file_plating",
+        "excellon_x2_file_span",
+    }
+    assert result.drills[0].layer_span == (1, 2)
+    assert result.drills[0].span_proven is True
 
 
 def test_mixed_file_uses_modal_tool_plating_and_td_clear(tmp_path: Path):
@@ -77,7 +82,11 @@ def test_mixed_file_uses_modal_tool_plating_and_td_clear(tmp_path: Path):
     ]
     assert result.drills[0].provenance.evidence[0].kind == "excellon_x2_tool_plating"
     assert result.drills[1].provenance.evidence[0].kind == "excellon_x2_tool_plating"
-    assert result.drills[2].provenance.evidence == []
+    assert [
+        evidence.kind for evidence in result.drills[2].provenance.evidence
+    ] == ["excellon_x2_file_span"]
+    assert result.drills[2].layer_span == (1, 2)
+    assert result.drills[2].span_proven is True
 
 
 def test_file_function_plating_propagates_to_slots(tmp_path: Path):
