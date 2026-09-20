@@ -110,3 +110,26 @@ def test_macro_aperture_snapshots_ta_attributes_too(tmp_path: Path):
 
     assert len(result.pads) == 1
     assert _details(result.pads[0], "gerber_x2_aperture_function") == ["SMDPad"]
+
+
+def test_user_attribute_name_moves_between_x2_domains(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "%FSLAX24Y24*%\n"
+        "%MOMM*%\n"
+        "%TAVendorTag,aperture_value*%\n"
+        "%TOVendorTag,object_value*%\n"
+        "%ADD10C,0.500*%\n"
+        "D10*\n"
+        "X010000Y010000D03*\n"
+        "M02*\n",
+    )
+
+    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
+
+    pad = result.pads[0]
+    assert _details(pad, "gerber_x2_aperture_attribute") == []
+    object_details = _details(pad, "gerber_x2_object_attribute")
+    assert len(object_details) == 1
+    assert "name=VendorTag" in object_details[0]
+    assert "object_value" in object_details[0]
