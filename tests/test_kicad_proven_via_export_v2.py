@@ -295,3 +295,92 @@ def test_roundtrip_rejects_keep_end_layers_without_remove_unused_layers(tmp_path
     )
     assert audit["roundtrip_equal"] is False
     assert audit["source_equivalent"] is False
+
+
+
+def _source_proven_partial_via_board(kind, from_layer, to_layer):
+    pad_a = "P_A"
+    pad_b = "P_B"
+    return BoardModel(
+        nets=[_net("N1", "GND")],
+        pads=[
+            _pad(pad_a, from_layer),
+            _pad(pad_b, to_layer),
+        ],
+        drills=[
+            DrillHit(
+                "D1",
+                Point(0, 0),
+                0.4,
+                "plated",
+                layer_span=(from_layer, to_layer),
+                span_proven=True,
+                x2_span_kind=kind,
+            )
+        ],
+        metadata={
+            "via_spans": [
+                {
+                    "drill_id": "D1",
+                    "from_layer": from_layer,
+                    "to_layer": to_layer,
+                    "confidence": 1.0,
+                    "proven": True,
+                    "pad_ids": [pad_a, pad_b],
+                    "evidence": [f"source-proven X2 {kind} span"],
+                }
+            ]
+        },
+    )
+
+
+def test_source_proven_blind_span_exports_legacy_blind_token_with_blind_semantics(tmp_path):
+    board = _source_proven_partial_via_board("blind", "F.Cu", "In1.Cu")
+
+    path, report = export_kicad_with_report(board, tmp_path / "blind.kicad_pcb")
+    text = path.read_text(encoding="utf-8")
+    readback = read_kicad_board_text(text)
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert "(via blind " in text
+    assert readback["vias"][0]["type"] == "blind"
+    assert readback["vias"][0]["layers"] == ("F.Cu", "In1.Cu")
+    assert report.exported_via_span_ids == ["D1"]
+    assert report.skipped_via_span_ids == []
+    assert audit["vias"]["equal"] is True
+    assert audit["source_equivalent"] is True
+
+
+def test_source_proven_buried_span_serializes_legacy_blind_but_reads_back_buried(tmp_path):
+    board = _source_proven_partial_via_board("buried", "In1.Cu", "In2.Cu")
+
+    path, report = export_kicad_with_report(board, tmp_path / "buried.kicad_pcb")
+    text = path.read_text(encoding="utf-8")
+    readback = read_kicad_board_text(text)
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert "(via blind " in text
+    assert "(via buried " not in text
+    assert readback["vias"][0]["type"] == "buried"
+    assert readback["vias"][0]["layers"] == ("In1.Cu", "In2.Cu")
+    assert report.exported_via_span_ids == ["D1"]
+    assert report.skipped_via_span_ids == []
+    assert audit["vias"]["equal"] is True
+    assert audit["source_equivalent"] is True
+
+
+def test_source_proven_via_kind_must_match_canonical_layer_topology(tmp_path):
+    board = _source_proven_partial_via_board("blind", "In1.Cu", "In2.Cu")
+
+    path, report = export_kicad_with_report(board, tmp_path / "kind-mismatch.kicad_pcb")
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+
+    assert readback["vias"] == []
+    assert report.exported_via_span_ids == []
+    assert report.skipped_via_span_ids == ["D1"]
+    assert any(
+        issue.code == "KICAD_PROVEN_VIA_X2_KIND_MISMATCH"
+        and issue.object_id == "D1"
+        for issue in report.issues
+    )
+    assert validate_omission_manifest(omission_manifest(report)) == []
