@@ -205,6 +205,143 @@ def test_partial_layer_proven_span_is_not_mislabeled_as_through_via(tmp_path):
     assert validate_omission_manifest(omission_manifest(report)) == []
 
 
+def test_source_proven_blind_span_exports_as_kicad_blind_via(tmp_path):
+    board = BoardModel(
+        nets=[_net("N1", "GND")],
+        pads=[
+            _pad("P_F", "F.Cu"),
+            _pad("P_I1", "In1.Cu"),
+        ],
+        drills=[
+            DrillHit(
+                "D1",
+                Point(0, 0),
+                0.4,
+                "plated",
+                x2_span_kind="blind",
+            )
+        ],
+        metadata={
+            "via_spans": [
+                {
+                    "drill_id": "D1",
+                    "from_layer": "F.Cu",
+                    "to_layer": "In1.Cu",
+                    "confidence": 0.99,
+                    "proven": True,
+                    "pad_ids": ["P_F", "P_I1"],
+                    "evidence": ["X2 declared Blind span"],
+                }
+            ]
+        },
+    )
+
+    path, report = export_kicad_with_report(board, tmp_path / "blind.kicad_pcb")
+    text = path.read_text(encoding="utf-8")
+    readback = read_kicad_board_text(text)
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert "(via blind " in text
+    assert len(readback["vias"]) == 1
+    assert readback["vias"][0]["type"] == "blind"
+    assert readback["vias"][0]["layers"] == ("F.Cu", "In1.Cu")
+    assert report.exported_via_span_ids == ["D1"]
+    assert report.skipped_via_span_ids == []
+    assert audit["vias"]["equal"] is True
+    assert audit["source_equivalent"] is True
+
+
+def test_source_proven_buried_span_exports_as_kicad_buried_via(tmp_path):
+    board = BoardModel(
+        nets=[_net("N1", "GND")],
+        pads=[
+            _pad("P_I1", "In1.Cu"),
+            _pad("P_I2", "In2.Cu"),
+        ],
+        drills=[
+            DrillHit(
+                "D1",
+                Point(0, 0),
+                0.4,
+                "plated",
+                x2_span_kind="buried",
+            )
+        ],
+        metadata={
+            "via_spans": [
+                {
+                    "drill_id": "D1",
+                    "from_layer": "In1.Cu",
+                    "to_layer": "In2.Cu",
+                    "confidence": 0.99,
+                    "proven": True,
+                    "pad_ids": ["P_I1", "P_I2"],
+                    "evidence": ["X2 declared Buried span"],
+                }
+            ]
+        },
+    )
+
+    path, report = export_kicad_with_report(board, tmp_path / "buried.kicad_pcb")
+    text = path.read_text(encoding="utf-8")
+    readback = read_kicad_board_text(text)
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert "(via buried " in text
+    assert len(readback["vias"]) == 1
+    assert readback["vias"][0]["type"] == "buried"
+    assert readback["vias"][0]["layers"] == ("In1.Cu", "In2.Cu")
+    assert report.exported_via_span_ids == ["D1"]
+    assert report.skipped_via_span_ids == []
+    assert audit["vias"]["equal"] is True
+    assert audit["source_equivalent"] is True
+
+
+def test_source_via_kind_must_match_proven_layer_topology(tmp_path):
+    board = BoardModel(
+        nets=[_net("N1", "GND")],
+        pads=[
+            _pad("P_I1", "In1.Cu"),
+            _pad("P_I2", "In2.Cu"),
+        ],
+        drills=[
+            DrillHit(
+                "D1",
+                Point(0, 0),
+                0.4,
+                "plated",
+                x2_span_kind="blind",
+            )
+        ],
+        metadata={
+            "via_spans": [
+                {
+                    "drill_id": "D1",
+                    "from_layer": "In1.Cu",
+                    "to_layer": "In2.Cu",
+                    "confidence": 0.99,
+                    "proven": True,
+                    "pad_ids": ["P_I1", "P_I2"],
+                    "evidence": ["contradictory X2 Blind span"],
+                }
+            ]
+        },
+    )
+
+    path, report = export_kicad_with_report(board, tmp_path / "bad-kind.kicad_pcb")
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+
+    assert readback["vias"] == []
+    assert report.exported_via_span_ids == []
+    assert report.skipped_via_span_ids == ["D1"]
+    assert any(
+        issue.code == "KICAD_PROVEN_VIA_TYPE_CONTRADICTS_SPAN"
+        and issue.object_id == "D1"
+        for issue in report.issues
+    )
+    assert validate_omission_manifest(omission_manifest(report)) == []
+
+
 def test_roundtrip_detects_exported_via_type_drift(tmp_path):
     board = BoardModel(
         nets=[_net("N1", "GND")],
