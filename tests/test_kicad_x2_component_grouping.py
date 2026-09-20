@@ -45,6 +45,8 @@ def _board(pin2="2"):
         1.0,
         ["source-proven Gerber X2 .P"],
         reference="U1",
+        source_pin_map={"P1": "1", "P2": pin2},
+        source_pin_functions={"P1": "VCC", "P2": "GND"},
     )
     return BoardModel(
         pads=[p1, p2],
@@ -137,3 +139,43 @@ def test_duplicate_trusted_pin_numbers_fail_closed_to_independent_pads(tmp_path)
     )
     assert audit["pads"]["equal"] is True
     assert audit["roundtrip_equal"] is True
+
+
+
+def test_incomplete_structured_pin_map_fails_closed_to_independent_pads(tmp_path):
+    board = _board()
+    board.components[0].source_pin_map = {"P1": "1"}
+    board.components[0].source_pin_functions = {"P1": "VCC"}
+
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "x2-incomplete-pin-map.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8")
+
+    assert "PHOTONX:RecoveredX2Component" not in text
+    assert text.count('(footprint "PHOTONX:RecoveredPad"') == 2
+    issue = next(
+        item
+        for item in report.issues
+        if item.code == "KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED"
+    )
+    assert "source pin map is incomplete for pads: P2" in issue.message
+
+
+def test_structured_pin_map_is_the_exported_pin_identity(tmp_path):
+    board = _board()
+    board.components[0].source_pin_map = {"P1": "A1", "P2": "B2"}
+
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "x2-structured-pin-map.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8")
+
+    assert '(pad "A1" smd rect' in text
+    assert '(pad "B2" smd rect' in text
+    assert not any(
+        item.code == "KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED"
+        for item in report.issues
+    )
