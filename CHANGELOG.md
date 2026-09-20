@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added fail-closed KiCad footprint/pad fabrication-override auditing. The reader now preserves footprint `solder_mask_margin`, `solder_paste_margin`, `solder_paste_ratio` and pad `solder_mask_margin`, `solder_paste_margin`, `solder_paste_margin_ratio`; any such override on PhotonX-generated recovered objects is surfaced through `unexpected_fabrication_overrides` instead of silently changing mask/paste Gerber behavior.
+
 - Added exact KiCad file-header round-trip auditing. Board export, reader, and verifier now share the PhotonX board-format version/generator contract; the reader preserves version/generator token counts, and missing, duplicated, or changed header metadata is fail-visible through `file_header` instead of letting the audit silently apply modern-format assumptions to an unverified document header.
 
 - Added fail-closed KiCad special-pad property auditing. The reader now preserves the optional pad `property` token, and the main round-trip audit rejects any such classification on PhotonX-generated recovered pads (including castellated, heatsink, testpoint, BGA, or fiducial semantics) because PhotonX does not emit or infer those fabrication properties.
