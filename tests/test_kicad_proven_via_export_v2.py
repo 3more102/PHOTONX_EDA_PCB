@@ -235,7 +235,8 @@ def _add_via_flag(text, flag):
         if line.lstrip().startswith("(via "):
             marker = "(net 1)"
             assert marker in line
-            lines[index] = line.replace(marker, f"({flag}) {marker}", 1)
+            token = flag if flag == "locked" else f"({flag})"
+            lines[index] = line.replace(marker, f"{token} {marker}", 1)
             return "\n".join(lines) + "\n"
     raise AssertionError("export did not contain a via")
 
