@@ -45,6 +45,8 @@ def _board(pin2="2"):
         1.0,
         ["source-proven Gerber X2 .P"],
         reference="U1",
+        source_pin_map={"P1": "1", "P2": pin2},
+        source_pin_functions={"P1": "VCC", "P2": "GND"},
     )
     return BoardModel(
         pads=[p1, p2],
@@ -137,3 +139,42 @@ def test_duplicate_trusted_pin_numbers_fail_closed_to_independent_pads(tmp_path)
     )
     assert audit["pads"]["equal"] is True
     assert audit["roundtrip_equal"] is True
+
+
+def test_raw_pin_evidence_does_not_substitute_for_missing_canonical_map(tmp_path):
+    board = _board()
+    board.components[0].source_pin_map = {}
+    board.components[0].source_pin_functions = {}
+
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "x2-missing-canonical-map.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8")
+
+    assert "PHOTONX:RecoveredX2Component" not in text
+    assert text.count('(footprint "PHOTONX:RecoveredPad"') == 2
+    assert any(
+        issue.code == "KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED"
+        and "canonical source pin map" in issue.message
+        for issue in report.issues
+    )
+
+
+def test_raw_pin_evidence_conflict_with_canonical_map_fails_closed(tmp_path):
+    board = _board()
+    board.components[0].source_pin_map["P2"] = "9"
+
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "x2-conflicting-canonical-map.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8")
+
+    assert "PHOTONX:RecoveredX2Component" not in text
+    assert text.count('(footprint "PHOTONX:RecoveredPad"') == 2
+    assert any(
+        issue.code == "KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED"
+        and "contradicts canonical source pin map" in issue.message
+        for issue in report.issues
+    )
