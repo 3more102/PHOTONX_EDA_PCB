@@ -17,7 +17,7 @@ def read_board_structure(root):
     paper = children(root, "paper")
     result["paper"] = (
         str(paper[0][1])
-        if len(paper) == 1 and len(paper[0]) >= 2
+        if len(paper) == 1 and len(paper[0]) == 2
         else None
     )
     return result

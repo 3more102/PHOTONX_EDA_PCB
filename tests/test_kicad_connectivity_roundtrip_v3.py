@@ -209,6 +209,27 @@ def test_reader_preserves_singleton_board_section_counts():
     }
 
 
+def test_reader_rejects_malformed_paper_scalar(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    text = path.read_text(encoding="utf-8").replace(
+        '(paper "A4")',
+        '(paper "A4" "extra")',
+    )
+    readback = read_kicad_board_text(text)
+
+    assert readback["file_structure"]["paper_count"] == 1
+    assert readback["file_structure"]["paper"] is None
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["file_structure"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+
+
 def test_reader_exposes_board_and_footprint_fabrication_graphics():
     readback = read_kicad_board_text(
         """
