@@ -1,25 +1,18 @@
 from __future__ import annotations
 
 import json
-import uuid
 from collections import Counter
 from pathlib import Path
 
 from ..exporters.kicad_policy import slot_export_status
 from ..kicad_reader import read_kicad_board_text
+from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
 
 
 _RECOVERED_PAD_FOOTPRINT = "PHOTONX:RecoveredPad"
 _RECOVERED_NPTH_SLOT = "PHOTONX:RecoveredNPTHSlot"
 _RECOVERED_PLATED_SLOT = "PHOTONX:RecoveredPlatedSlot"
-_PHOTONX_UUID_PREFIX = "https://photonx.local/"
-
-
-def _photonx_uuid(name):
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, _PHOTONX_UUID_PREFIX + str(name)))
-
-
 
 
 def _r(value):
@@ -241,7 +234,7 @@ def _expected_tracks(board, exported_track_ids, issues):
                 track.width,
                 track.layer,
                 binding,
-                _photonx_uuid("track:" + str(track.id)),
+                photonx_uuid("track:" + str(track.id)),
             )
         )
     return out
@@ -331,7 +324,7 @@ def _expected_pads(board):
         out.append(
             {
                 "id": str(pad.id),
-                "uuid": _photonx_uuid("fp:" + str(pad.id)),
+                "uuid": photonx_uuid("fp:" + str(pad.id)),
                 "net": binding,
             }
         )
@@ -405,7 +398,7 @@ def _expected_regions(board, exported_ids, issues):
         out.append(
             {
                 "id": str(region.id),
-                "uuid": _photonx_uuid("region:" + str(region.id)),
+                "uuid": photonx_uuid("region:" + str(region.id)),
                 "net": binding,
             }
         )
@@ -462,7 +455,7 @@ def _expected_slots(board, exported_ids, issues):
             out.append(
                 {
                     "id": str(slot.id),
-                    "uuid": _photonx_uuid("slot-fp:" + str(slot.id)),
+                    "uuid": photonx_uuid("slot-fp:" + str(slot.id)),
                     "kind": "npth",
                     "net": {"code": 0, "name": ""},
                 }
@@ -497,7 +490,7 @@ def _expected_slots(board, exported_ids, issues):
         out.append(
             {
                 "id": str(slot.id),
-                "uuid": _photonx_uuid("slot-fp:" + str(slot.id)),
+                "uuid": photonx_uuid("slot-fp:" + str(slot.id)),
                 "kind": "plated",
                 "net": binding,
             }

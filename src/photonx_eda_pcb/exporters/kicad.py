@@ -1,15 +1,15 @@
 from __future__ import annotations
-import re,shutil,subprocess,uuid
+import re,shutil,subprocess
 from pathlib import Path
 from math import isfinite
 from ..models import BoardModel
+from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
 from .kicad_policy import pad_shape_name,slot_geometry,slot_export_status
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
-def _u(name:str)->str:return str(uuid.uuid5(uuid.NAMESPACE_URL,"https://photonx.local/"+name))
 def _q(text:str)->str:return '"'+text.replace("\\","\\\\").replace('"','\\"').replace("\n","\\n").replace("\r","\\r")+'"'
 
 
@@ -70,12 +70,12 @@ def _pad_lines(board,net_num,report):
         shape=pad_shape_name(pad.shape);pad_type="thru_hole" if pad.drill else "smd"
         layers,ref_layer,layer_warning=_pad_export_layers(pad)
         angle=float(getattr(pad,"rotation_deg",getattr(pad,"rotation",0.0)) or 0.0)
-        lines += [f'  (footprint "PHOTONX:RecoveredPad" (layer {_q(pad.layer)}) (uuid {_u("fp:"+pad.id)})',
+        lines += [f'  (footprint "PHOTONX:RecoveredPad" (layer {_q(pad.layer)}) (uuid {photonx_uuid("fp:"+pad.id)})',
                   f'    (at {pad.center.x:.6f} {pad.center.y:.6f})',
-                  f'    (property "Reference" {_q(pad.id)} (at 0 -2 0) (layer {_q(ref_layer)}) hide (uuid {_u("ref:"+pad.id)}))']
+                  f'    (property "Reference" {_q(pad.id)} (at 0 -2 0) (layer {_q(ref_layer)}) hide (uuid {photonx_uuid("ref:"+pad.id)}))']
         drill=f' (drill {pad.drill:.6f})' if pad.drill else ""
         net_clause=f' (net {n} {_q(net_name)})' if net_known else ""
-        lines.append(f'    (pad "1" {pad_type} {shape} (at 0 0 {angle:.6f}) (size {pad.size_x:.6f} {pad.size_y:.6f}){drill} (layers {layers}){net_clause} (uuid {_u("pad:"+pad.id)}))')
+        lines.append(f'    (pad "1" {pad_type} {shape} (at 0 0 {angle:.6f}) (size {pad.size_x:.6f} {pad.size_y:.6f}){drill} (layers {layers}){net_clause} (uuid {photonx_uuid("pad:"+pad.id)}))')
         lines.append('  )')
         if str(pad.shape).upper() not in {"C","R","O"}:report.issues.append(KicadExportIssue("warning","KICAD_PAD_SHAPE_FALLBACK",pad.id,f"unsupported reconstructed pad shape {pad.shape}; exported as rect"))
         if layer_warning:report.issues.append(KicadExportIssue("warning","KICAD_SMD_NON_SURFACE_LAYER",pad.id,layer_warning))
@@ -88,10 +88,10 @@ def _npth_slot_lines(slot,report):
     g=slot_geometry(slot);cx,cy=g["center"];long_dim=g["long_mm"];short_dim=g["short_mm"];angle=g["angle_deg"]
     report.exported_slots+=1;report.exported_npth_slots+=1;report.exported_slot_ids.append(slot.id)
     return [
-      f'  (footprint "PHOTONX:RecoveredNPTHSlot" (layer "F.Cu") (uuid {_u("slot-fp:"+slot.id)})',
+      f'  (footprint "PHOTONX:RecoveredNPTHSlot" (layer "F.Cu") (uuid {photonx_uuid("slot-fp:"+slot.id)})',
       f'    (at {cx:.6f} {cy:.6f})',
-      f'    (property "Reference" {_q(slot.id)} (at 0 -2 0) (layer "F.SilkS") hide (uuid {_u("slot-ref:"+slot.id)}))',
-      f'    (pad "" np_thru_hole oval (at 0 0 {angle:.6f}) (size {long_dim:.6f} {short_dim:.6f}) (drill oval {long_dim:.6f} {short_dim:.6f}) (layers "*.Cu" "*.Mask") (uuid {_u("slot-pad:"+slot.id)}))',
+      f'    (property "Reference" {_q(slot.id)} (at 0 -2 0) (layer "F.SilkS") hide (uuid {photonx_uuid("slot-ref:"+slot.id)}))',
+      f'    (pad "" np_thru_hole oval (at 0 0 {angle:.6f}) (size {long_dim:.6f} {short_dim:.6f}) (drill oval {long_dim:.6f} {short_dim:.6f}) (layers "*.Cu" "*.Mask") (uuid {photonx_uuid("slot-pad:"+slot.id)}))',
       '  )'
     ]
 
@@ -106,10 +106,10 @@ def _plated_slot_lines(board,slot,net_num,report):
     net_clause=f' (net {n} {_q(net_name)})' if net_known else ""
     report.exported_slots+=1;report.exported_plated_slots+=1;report.exported_slot_ids.append(slot.id)
     return [
-      f'  (footprint "PHOTONX:RecoveredPlatedSlot" (layer "F.Cu") (uuid {_u("slot-fp:"+slot.id)})',
+      f'  (footprint "PHOTONX:RecoveredPlatedSlot" (layer "F.Cu") (uuid {photonx_uuid("slot-fp:"+slot.id)})',
       f'    (at {cx:.6f} {cy:.6f})',
-      f'    (property "Reference" {_q(slot.id)} (at 0 -2 0) (layer "F.SilkS") hide (uuid {_u("slot-ref:"+slot.id)}))',
-      f'    (pad "1" thru_hole {shape} (at 0 0 {p.angle_deg:.6f}) (size {pw:.6f} {ph:.6f}) (drill oval {dl:.6f} {ds:.6f}) (layers {layer_tokens}){net_clause} (uuid {_u("slot-pad:"+slot.id)}))',
+      f'    (property "Reference" {_q(slot.id)} (at 0 -2 0) (layer "F.SilkS") hide (uuid {photonx_uuid("slot-ref:"+slot.id)}))',
+      f'    (pad "1" thru_hole {shape} (at 0 0 {p.angle_deg:.6f}) (size {pw:.6f} {ph:.6f}) (drill oval {dl:.6f} {ds:.6f}) (layers {layer_tokens}){net_clause} (uuid {photonx_uuid("slot-pad:"+slot.id)}))',
       '  )'
     ]
 
@@ -187,7 +187,7 @@ def _region_lines(board,net_num,report):
             f"    (net {n})",
             f"    (net_name {_q(net_name)})",
             f"    (layer {_q(region.layer)})",
-            f'    (uuid {_u("region:"+region.id)})',
+            f'    (uuid {photonx_uuid("region:"+region.id)})',
             f'    (name {_q("PHOTONX:"+region.id)})',
             "    (hatch edge 0.500000)",
             "    (connect_pads (clearance 0.500000))",
@@ -264,7 +264,7 @@ def _track_lines(board,net_num,report):
             report.skipped_tracks+=1
             report.skipped_track_ids.append(trk.id)
             continue
-        lines.append(f'  (segment (start {trk.start.x:.6f} {trk.start.y:.6f}) (end {trk.end.x:.6f} {trk.end.y:.6f}) (width {trk.width:.6f}) (layer {_q(trk.layer)}) (net {n}) (uuid {_u("track:"+trk.id)}))')
+        lines.append(f'  (segment (start {trk.start.x:.6f} {trk.start.y:.6f}) (end {trk.end.x:.6f} {trk.end.y:.6f}) (width {trk.width:.6f}) (layer {_q(trk.layer)}) (net {n}) (uuid {photonx_uuid("track:"+trk.id)}))')
         report.exported_tracks+=1
         report.exported_track_ids.append(trk.id)
     return lines
@@ -274,7 +274,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
     lines=['(kicad_pcb (version 20240108) (generator "photonx_eda_pcb")','  (general (thickness 1.6))','  (paper "A4")','  (layers',*_copper_layer_lines(board),'    (36 "B.SilkS" user "b.silkscreen")','    (37 "F.SilkS" user "f.silkscreen")','    (44 "Edge.Cuts" user)','  )','  (setup (pad_to_mask_clearance 0))','  (net 0 "")']
     for net in board.nets:lines.append(f'  (net {net_num[net.id]} {_q(net.label or net.id)})')
     lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));lines.extend(_region_lines(board,net_num,report));lines.extend(_track_lines(board,net_num,report));_record_route_skips(board,report)
-    for seg in board.outline:lines.append(f'  (gr_line (start {seg.start.x:.6f} {seg.start.y:.6f}) (end {seg.end.x:.6f} {seg.end.y:.6f}) (stroke (width 0.1) (type default)) (layer "Edge.Cuts") (uuid {_u("edge:"+seg.id)}))')
+    for seg in board.outline:lines.append(f'  (gr_line (start {seg.start.x:.6f} {seg.start.y:.6f}) (end {seg.end.x:.6f} {seg.end.y:.6f}) (stroke (width 0.1) (type default)) (layer "Edge.Cuts") (uuid {photonx_uuid("edge:"+seg.id)}))')
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
 def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]
 def validate_with_kicad_cli(path:str|Path,*,timeout_s:float=30.0)->tuple[bool|None,str]:

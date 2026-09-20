@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Centralized deterministic KiCad UUID generation in a shared identity helper used by both export and readback verification, with stable contract tests for track, pad-footprint, region, and slot-footprint identities. This removes duplicate UUID logic that could otherwise drift between emission and round-trip expectations.
+
 - Strengthened KiCad connectivity round-trip identity checks: track segment UUIDs are now read back, and deterministic PhotonX UUIDs are compared for tracks, recovered-pad footprints, copper regions, and recovered-slot footprints in addition to geometry/net semantics. UUID drift is therefore fail-visible even when electrical geometry is unchanged.
 
 - Hardened KiCad connectivity round-trip auditing against unexpected `via` objects. The reader now rejects non-integer via net ordinals fail-closed, and the audit treats any via in a generated board as an explicit round-trip difference until PhotonX has a source via export contract with proven net/layer-span semantics.
