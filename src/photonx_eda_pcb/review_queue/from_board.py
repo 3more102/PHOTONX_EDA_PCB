@@ -8,6 +8,7 @@ from ..ids import stable_id
 from ..models import BoardModel
 from .item import ReviewItem
 from .queue import ReviewQueue
+from .via_evidence import build_via_evidence_rows
 
 
 def _review_threshold(name: str, value: float | None) -> float | None:
@@ -26,6 +27,7 @@ def build_board_review_queue(
     net_confidence_below: float | None = None,
     component_confidence_below: float | None = None,
     include_unknown_plating: bool = True,
+    include_via_evidence: bool = True,
     include_unresolved_clearance: bool = True,
     include_diagnostics: bool = True,
     drc_config: DrcConfig | None = None,
@@ -151,6 +153,41 @@ def build_board_review_queue(
                         "plating": slot.plated,
                         "tool": getattr(slot, "tool", None),
                         "width_mm": slot.width_mm,
+                    },
+                )
+            )
+
+    if include_via_evidence:
+        for row in build_via_evidence_rows(board):
+            if row["status"] == "exportable":
+                continue
+            drill_id = str(row["drill_id"])
+            selectable = drill_id if drill_id in object_index else None
+            confidence = row["confidence"]
+            queue.add(
+                ReviewItem(
+                    stable_id(
+                        "review",
+                        "via-span",
+                        row["id"],
+                        row["status"],
+                        row["export_code"],
+                        row["reason"],
+                    ),
+                    "via_span",
+                    drill_id,
+                    row["reason"],
+                    float(confidence) if confidence is not None else 0.0,
+                    metadata={
+                        "confidence_available": confidence is not None,
+                        "status": row["status"],
+                        "plating": row["plating"],
+                        "layer_span": row["layers"],
+                        "net": row["net"],
+                        "net_id": row["net_id"],
+                        "pad_ids": tuple(row["pad_ids"]),
+                        "export_code": row["export_code"],
+                        "selectable_object_id": selectable,
                     },
                 )
             )
