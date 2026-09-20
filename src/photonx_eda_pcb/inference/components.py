@@ -3,6 +3,7 @@ from __future__ import annotations
 from math import hypot
 
 from ..ids import stable_id
+from ..footprints.matcher import match_signature
 from ..models import BoardModel, ComponentHypothesis
 from ..spatial_connectivity.points import build_point_index, radius_queries
 
@@ -11,6 +12,35 @@ _X2_REFDES = "gerber_x2_component_refdes"
 _X2_PIN = "gerber_x2_pin_number"
 _X2_PIN_FUNCTION = "gerber_x2_pin_function"
 _STEP_REPEAT = "gerber_step_repeat"
+
+
+def _package_hint_from_pads(pads):
+    match = match_signature(pads)
+    if match["best"] is not None:
+        return match["best"], [
+            "pad-topology package hint: "
+            f'{match["best"]} '
+            f'(score={match["confidence"]:.3f}, margin={match["margin"]:.3f})'
+        ]
+
+    if match["ambiguous"]:
+        top = ", ".join(
+            f"{name}={score:.3f}"
+            for score, name in match["ranking"][:2]
+        )
+        return None, [
+            "pad-topology package hint unresolved: ambiguous "
+            f"({top})"
+        ]
+
+    candidate = match.get("candidate")
+    score = match.get("candidate_confidence", 0.0)
+    if candidate and score > 0.0:
+        return None, [
+            "pad-topology package hint unresolved: "
+            f"{candidate} score {score:.3f} below acceptance threshold"
+        ]
+    return None, ["pad-topology package hint unresolved: no supported topology"]
 
 
 def _trusted_evidence_values(pad, kind: str) -> tuple[str, ...]:
@@ -108,6 +138,9 @@ def _source_component_hypotheses(pads):
         if pin_details:
             evidence.append("Gerber X2 .P pins: " + ", ".join(pin_details))
 
+        package_hint, package_evidence = _package_hint_from_pads(members)
+        evidence.extend(package_evidence)
+
         components.append(
             ComponentHypothesis(
                 stable_id(
@@ -122,6 +155,7 @@ def _source_component_hypotheses(pads):
                 1.0,
                 evidence,
                 reference=refdes,
+                package_hint=package_hint,
             )
         )
 
@@ -130,6 +164,7 @@ def _source_component_hypotheses(pads):
 
 def _make_pair(a, b, distance):
     both_drilled = a.drill is not None and b.drill is not None
+    package_hint, package_evidence = _package_hint_from_pads([a, b])
     same_layer = a.layer == b.layer
     confidence = (
         0.35
@@ -149,6 +184,7 @@ def _make_pair(a, b, distance):
             else "no complete drill evidence"
         ),
         f"layers: {a.layer}, {b.layer}",
+        *package_evidence,
     ]
     return ComponentHypothesis(
         stable_id("cmp", a.id, b.id),
@@ -156,6 +192,7 @@ def _make_pair(a, b, distance):
         kind,
         confidence,
         evidence,
+        package_hint=package_hint,
     )
 
 
