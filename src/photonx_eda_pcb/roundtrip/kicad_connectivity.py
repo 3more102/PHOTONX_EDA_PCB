@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, pad_shape_name, proven_via_span_omissions, slot_export_status, slot_geometry, track_export_status
+from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, KICAD_DEFAULT_PAPER, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, pad_shape_name, proven_via_span_omissions, slot_export_status, slot_geometry, track_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -84,6 +84,7 @@ def _expected_file_structure():
     return {
         "general_count": 1,
         "paper_count": 1,
+        "paper": KICAD_DEFAULT_PAPER,
         "layers_count": 1,
         "setup_count": 1,
     }
@@ -94,6 +95,7 @@ def _observed_file_structure(readback):
     return {
         "general_count": int(structure.get("general_count", 0)),
         "paper_count": int(structure.get("paper_count", 0)),
+        "paper": structure.get("paper"),
         "layers_count": int(structure.get("layers_count", 0)),
         "setup_count": int(structure.get("setup_count", 0)),
     }

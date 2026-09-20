@@ -184,6 +184,19 @@ def test_connectivity_roundtrip_detects_singleton_section_drift(
     assert audit["roundtrip_equal"] is False
 
 
+def test_connectivity_roundtrip_detects_paper_value_drift(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    assert readback["file_structure"]["paper"] == "A4"
+    readback["file_structure"]["paper"] = "A3"
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["file_structure"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+
+
 def test_reader_preserves_singleton_board_section_counts():
     readback = read_kicad_board_text(
         """
@@ -201,6 +214,7 @@ def test_reader_preserves_singleton_board_section_counts():
     assert readback["file_structure"] == {
         "general_count": 2,
         "paper_count": 1,
+        "paper": "A4",
         "layers_count": 2,
         "setup_count": 1,
     }

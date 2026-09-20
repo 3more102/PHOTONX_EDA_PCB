@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extended singleton board-structure verification from paper-section cardinality to the emitted paper value itself. `KICAD_DEFAULT_PAPER` is shared by export and round-trip policy, the reader preserves a unique `(paper ...)` value, and A4-to-other-paper drift is fail-visible instead of passing count-only structure checks.
+
 - Extended recovered-slot round-trip auditing to the full emitted pad-stack geometry. NPTH and evidence-backed plated slots now compare footprint/pad placement, pad kind/shape/size, oval drill geometry, layer set, UUID identity, and net binding in addition to the independent canonical mechanical-slot comparator; annular copper/layer drift can no longer pass merely because the mechanical drill slot is unchanged.
 
 - Added expected-empty KiCad fabrication-graphics auditing for direct F/B.Mask and F/B.Paste artwork. Top-level `gr_*` objects and footprint `fp_*`/property/zone graphics on mask/paste layers are now surfaced through `unexpected_fabrication_graphics` and fail round-trip verification instead of bypassing copper-only guards.
