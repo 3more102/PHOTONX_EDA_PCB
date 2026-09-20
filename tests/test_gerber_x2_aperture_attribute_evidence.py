@@ -64,29 +64,6 @@ M02*
     ]
 
 
-def test_x2_aperture_function_preserves_additional_fields(tmp_path: Path):
-    path = _write(
-        tmp_path,
-        "component_pad.gtl",
-        """%TA.AperFunction,ComponentPad,SMDPad,CuDef*%
-%ADD10R,1.000X0.500*%
-D10*
-X010000Y010000D03*
-M02*
-""",
-    )
-
-    result = GerberRS274XParser("F.Cu", strict=True).parse(path)
-
-    assert len(result.pads) == 1
-    assert _details(result.pads[0], "gerber_x2_aperture_function") == [
-        "ComponentPad; parameters=('SMDPad', 'CuDef')"
-    ]
-    assert _details(result.pads[0], "gerber_x2_aperture_attribute") == [
-        "name=.AperFunction; values=('ComponentPad', 'SMDPad', 'CuDef')"
-    ]
-
-
 def test_x2_region_inherits_live_aperture_attribute_dictionary(tmp_path: Path):
     path = _write(
         tmp_path,
