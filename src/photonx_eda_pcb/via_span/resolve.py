@@ -51,14 +51,19 @@ def resolve_via_spans(
         if len(uniq) >= 2:
             uniq = sorted(uniq, key=copper.index)
             from_layer, to_layer = uniq[0], uniq[-1]
+            lo = copper.index(from_layer)
+            hi = copper.index(to_layer)
+            layer_ids = tuple(copper[lo : hi + 1])
             proven = drill.plating == "plated"
             confidence = 0.95 if proven else 0.7
         elif len(uniq) == 1:
             from_layer = to_layer = uniq[0]
+            layer_ids = (uniq[0],)
             proven = False
             confidence = 0.35
         else:
             from_layer = to_layer = None
+            layer_ids = ()
             proven = False
             confidence = 0.1
 
@@ -71,6 +76,7 @@ def resolve_via_spans(
                 span_evidence(drill, pads),
                 proven,
                 tuple(sorted(pad.id for pad in copper_pads)),
+                layer_ids,
             )
         )
     return out
