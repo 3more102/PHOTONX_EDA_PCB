@@ -17,6 +17,7 @@ def omission_manifest(report):
       "skipped_tracks":list(getattr(report,"skipped_track_ids",())),
       "exported_routes":list(getattr(report,"exported_route_ids",())),
       "omitted_routes":list(getattr(report,"skipped_route_ids",())),
+      "exported_via_spans":list(getattr(report,"exported_via_span_ids",())),
       "omitted_via_spans":list(getattr(report,"skipped_via_span_ids",())),
       "issues":[{"severity":x.severity,"code":x.code,"object_id":x.object_id,"message":x.message} for x in report.issues]
     }
