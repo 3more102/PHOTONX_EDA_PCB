@@ -18,12 +18,14 @@ _RECOVERED_NPTH_DRILL = "PHOTONX:RecoveredNPTHDrill"
 _RECOVERED_NPTH_SLOT = "PHOTONX:RecoveredNPTHSlot"
 _RECOVERED_PLATED_SLOT = "PHOTONX:RecoveredPlatedSlot"
 _RECOVERED_NPTH_ROUTE = "PHOTONX:RecoveredNPTHRoute"
+_RECOVERED_PLATED_ROUTE = "PHOTONX:RecoveredPlatedRoute"
 _PHOTONX_FOOTPRINT_NAMES = {
     _RECOVERED_PAD_FOOTPRINT,
     _RECOVERED_NPTH_DRILL,
     _RECOVERED_NPTH_SLOT,
     _RECOVERED_PLATED_SLOT,
     _RECOVERED_NPTH_ROUTE,
+    _RECOVERED_PLATED_ROUTE,
 }
 
 
@@ -739,7 +741,6 @@ def _via_item(
     binding,
     object_uuid,
     *,
-    locked=False,
     remove_unused_layers=False,
     keep_end_layers=False,
     free=False,
@@ -752,7 +753,6 @@ def _via_item(
         "layers": [str(layer) for layer in layers],
         "net": binding,
         "uuid": None if object_uuid is None else str(object_uuid),
-        "locked": bool(locked),
         "remove_unused_layers": bool(remove_unused_layers),
         "keep_end_layers": bool(keep_end_layers),
         "free": bool(free),
@@ -800,7 +800,6 @@ def _observed_vias(readback, net_lookup, issues):
     out = []
     for index, via in enumerate(readback.get("vias", ())):
         try:
-            locked = bool(via.get("locked", False))
             remove_unused_layers = bool(via.get("remove_unused_layers", False))
             keep_end_layers = bool(via.get("keep_end_layers", False))
             free = bool(via.get("free", False))
@@ -828,7 +827,6 @@ def _observed_vias(readback, net_lookup, issues):
                     via.get("layers", ()),
                     binding,
                     via.get("uuid"),
-                    locked=locked,
                     remove_unused_layers=remove_unused_layers,
                     keep_end_layers=keep_end_layers,
                     free=free,
@@ -1490,7 +1488,7 @@ def _expected_routes(board, exported_ids, issues):
     for route in getattr(board, "routes", ()):
         if route.id not in exported_ids:
             continue
-        descriptor = route_export_descriptor(route)
+        descriptor = route_export_descriptor(route, board)
         if descriptor is None:
             issues.append(
                 {
@@ -1499,13 +1497,26 @@ def _expected_routes(board, exported_ids, issues):
                 }
             )
             continue
+        if descriptor["net_id"] is None:
+            binding = {"code": 0, "name": ""}
+        else:
+            binding = _source_net_binding(board, descriptor["net_id"])
+            if binding is None:
+                issues.append(
+                    {
+                        "code": "KICAD_ROUNDTRIP_EXPORTED_ROUTE_NET_UNRESOLVED",
+                        "route_id": route.id,
+                        "net_id": descriptor["net_id"],
+                    }
+                )
+                continue
         geometry = _pad_geometry_item(
             descriptor["center"],
             0.0,
             descriptor["footprint_layer"],
-            "",
-            "np_thru_hole",
-            "oval",
+            descriptor["pad_number"],
+            descriptor["pad_kind"],
+            descriptor["pad_shape"],
             (0.0, 0.0),
             descriptor["angle_deg"],
             descriptor["size"],
@@ -1521,8 +1532,9 @@ def _expected_routes(board, exported_ids, issues):
                 "reference_uuid": photonx_uuid("route-ref:" + str(route.id)),
                 "reference_count": 1,
                 "pad_uuid": photonx_uuid("route-pad:" + str(route.id)),
+                "kind": descriptor["kind"],
                 "geometry": geometry,
-                "net": {"code": 0, "name": ""},
+                "net": binding,
             }
         )
     return out
@@ -1530,8 +1542,13 @@ def _expected_routes(board, exported_ids, issues):
 
 def _observed_routes(readback, net_lookup, issues):
     out = []
+    names = {
+        _RECOVERED_NPTH_ROUTE: "npth",
+        _RECOVERED_PLATED_ROUTE: "plated",
+    }
     for fp_index, footprint in enumerate(readback.get("footprints", ())):
-        if footprint.get("name") != _RECOVERED_NPTH_ROUTE:
+        kind = names.get(footprint.get("name"))
+        if kind is None:
             continue
         reference = footprint.get("reference")
         pads = list(footprint.get("pads", ()))
@@ -1540,6 +1557,7 @@ def _observed_routes(readback, net_lookup, issues):
                 {
                     "code": "KICAD_ROUNDTRIP_ROUTE_REFERENCE_MISSING",
                     "footprint_index": fp_index,
+                    "kind": kind,
                 }
             )
             continue
@@ -1549,6 +1567,7 @@ def _observed_routes(readback, net_lookup, issues):
                     "code": "KICAD_ROUNDTRIP_ROUTE_PAD_COUNT_INVALID",
                     "route_id": str(reference),
                     "pad_count": len(pads),
+                    "kind": kind,
                 }
             )
             continue
@@ -1561,6 +1580,7 @@ def _observed_routes(readback, net_lookup, issues):
                     "code": "KICAD_ROUNDTRIP_INVALID_ROUTE_GEOMETRY",
                     "route_id": str(reference),
                     "detail": str(exc),
+                    "kind": kind,
                 }
             )
             continue
@@ -1586,6 +1606,7 @@ def _observed_routes(readback, net_lookup, issues):
                 "reference_uuid": footprint.get("reference_uuid"),
                 "reference_count": int(footprint.get("reference_count", 0)),
                 "pad_uuid": pads[0].get("uuid"),
+                "kind": kind,
                 "geometry": geometry,
                 "net": binding,
             }
@@ -1910,7 +1931,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     source_routes = list(getattr(board, "routes", ()))
     source_route_ids = {route.id for route in source_routes}
     if export_report is None:
-        route_readiness = assess_route_export_readiness(source_routes)
+        route_readiness = assess_route_export_readiness(source_routes, board)
         exported_route_ids = set(route_readiness.exportable)
         skipped_route_ids = set(route_readiness.omitted)
     else:
