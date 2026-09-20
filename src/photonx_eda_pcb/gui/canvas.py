@@ -1,6 +1,7 @@
 from __future__ import annotations
 import tkinter as tk
 from .state import ViewState
+from .via_review import build_via_review_descriptors
 
 
 class BoardCanvas(tk.Canvas):
@@ -19,6 +20,17 @@ class BoardCanvas(tk.Canvas):
             x1,y1=self.xy(trk.start.x,trk.start.y); x2,y2=self.xy(trk.end.x,trk.end.y); width=max(2,trk.width*self.state.scale); dash=() if highlighted in {None,trk.net_id} else (2,3); self.create_line(x1,y1,x2,y2,width=width,capstyle=tk.ROUND,dash=dash,tags=(trk.id,"track"))
         for pad in b.pads:
             x,y=self.xy(pad.center.x,pad.center.y); rx=pad.size_x*self.state.scale/2; ry=pad.size_y*self.state.scale/2; stipple="" if highlighted in {None,pad.net_id} else "gray50"; self.create_oval(x-rx,y-ry,x+rx,y+ry,width=2,stipple=stipple,tags=(pad.id,"pad"))
+        for via in build_via_review_descriptors(b):
+            x,y=self.xy(via.x,via.y); radius=max(3.0,via.diameter*self.state.scale/2)
+            dash={"exportable":(),"omitted":(6,3),"unproven":(2,3),"invalid":(1,2)}.get(via.status,(1,2))
+            stipple="" if highlighted in {None,via.net_id} else "gray50"
+            self.create_oval(
+                x-radius,y-radius,x+radius,y+radius,
+                width=3 if via.proven else 2,
+                dash=dash,
+                stipple=stipple,
+                tags=(via.drill_id,"via",f"via-status:{via.status}"),
+            )
         if self.state.selected_id:
             for item in self.find_withtag(self.state.selected_id): self.itemconfigure(item,width=4)
 
