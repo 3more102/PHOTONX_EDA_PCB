@@ -287,7 +287,8 @@ def test_source_proven_buried_span_exports_as_kicad_buried_via(tmp_path):
     readback = read_kicad_board_text(text)
     audit = compare_kicad_connectivity(board, readback, report)
 
-    assert "(via buried " in text
+    assert "(via blind " in text
+    assert "(via buried " not in text
     assert len(readback["vias"]) == 1
     assert readback["vias"][0]["type"] == "buried"
     assert readback["vias"][0]["layers"] == ("In1.Cu", "In2.Cu")
