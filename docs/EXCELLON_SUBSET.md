@@ -23,7 +23,7 @@ It also recognizes the standard XNC modal tool functions:
 - `; #@! TA.AperFunction,BackDrill`
 - `; #@! TA.AperFunction,ComponentDrill[,PressFit]`
 - `; #@! TA.AperFunction,MechanicalDrill[,Tooling|Breakout|Other]`
-- `; #@! TD` clears the modal tool-function evidence.
+- `; #@! TD.AperFunction` deletes the modal tool function; `; #@! TD` clears the full attribute dictionary.
 
 The file-level copper-layer ordinals are preserved on point drills, G85 slots, and routed paths as normalized raw evidence in `x2_layer_span` plus `x2_span_kind`. Layer numbers are one-based and a span must reference two distinct copper layers. Reversed from/to order is normalized because the Gerber FileFunction definition treats that order as insignificant. The canonical `layer_span` and `span_proven` fields are populated only after those ordinals are safely mapped onto the reconstructed copper stack.
 
