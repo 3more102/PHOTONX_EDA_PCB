@@ -265,30 +265,37 @@ class ExcellonParser:
             self._x2_aperture_source=SourceRef(str(p),line_no,line)
             return
 
-        if command.startswith("TA.APERFUNCTION,"):
+        if command.startswith("TA.APERFUNCTION"):
             fields=command.split(",")
-            if len(fields)>1 and fields[1] in {
-                "VIADRILL","BACKDRILL","COMPONENTDRILL","MECHANICALDRILL"
-            }:
-                self._x2_function_fail(
-                    p,
-                    out,
-                    line_no,
-                    f"malformed XNC AperFunction tool attribute: {command}",
-                )
-            elif len(fields)>1 and fields[1] in {"PLATED","NONPLATED"}:
+            if len(fields)>1 and fields[1] in {"PLATED","NONPLATED"}:
                 self._x2_fail(
                     p,
                     out,
                     line_no,
                     f"malformed legacy Excellon X2 AperFunction plating attribute: {command}",
                 )
+            else:
+                self._x2_function_fail(
+                    p,
+                    out,
+                    line_no,
+                    f"unsupported or malformed XNC AperFunction tool attribute: {command}",
+                )
             return
 
-        if command=="TD":
+        if command in {"TD","TD.APERFUNCTION"}:
             self._x2_aperture_plating=None
             self._x2_aperture_function=None
             self._x2_aperture_source=None
+            return
+
+        if command.startswith("TD.APERFUNCTION"):
+            self._x2_function_fail(
+                p,
+                out,
+                line_no,
+                f"malformed XNC AperFunction delete attribute: {command}",
+            )
 
     def _span_for_tool(self,tool):
         if self.file_layer_span is None:
