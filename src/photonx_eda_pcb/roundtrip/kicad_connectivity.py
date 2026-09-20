@@ -708,6 +708,16 @@ def _region_fill_item(region_id, fill_enabled, filled_polygons):
 def _region_rules_item(region_id, rules):
     return {
         "id": str(region_id),
+        "priority": int(rules.get("priority", 0)),
+        "keepout": bool(rules.get("keepout", False)),
+        "fill_mode": (
+            None
+            if rules.get("fill_mode") is None
+            else str(rules["fill_mode"])
+        ),
+        "filled_areas_thickness": bool(
+            rules.get("filled_areas_thickness", True)
+        ),
         "connect_clearance": (
             None
             if rules.get("connect_clearance") is None
@@ -729,6 +739,11 @@ def _region_rules_item(region_id, rules):
             else _r(rules["thermal_bridge_width"])
         ),
         "island_removal_mode": rules.get("island_removal_mode"),
+        "island_area_min": (
+            None
+            if rules.get("island_area_min") is None
+            else _r(rules["island_area_min"])
+        ),
     }
 
 
@@ -742,11 +757,16 @@ def _expected_region_rules(board, exported_ids):
             _region_rules_item(
                 region.id,
                 {
+                    "priority": 0,
+                    "keepout": False,
+                    "fill_mode": None,
+                    "filled_areas_thickness": True,
                     "connect_clearance": 0.5,
                     "min_thickness": 0.25,
                     "thermal_gap": None if holes else 0.5,
                     "thermal_bridge_width": None if holes else 0.5,
                     "island_removal_mode": None if holes else 1,
+                    "island_area_min": None,
                 },
             )
         )

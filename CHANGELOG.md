@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Expanded KiCad region-rule auditing to semantics that can change repour output without changing the zone polygon: priority, keepout state, solid-vs-hatched fill mode, filled-area-thickness policy, and minimum-island area. Missing/default values are normalized semantically (for example omitted priority equals zero), while meaningful changes now fail `region_rules`.
+
 - Added KiCad board-fabrication setting readback and round-trip verification. Exporter and audit now share the same default board-thickness and global pad-to-mask-clearance constants, and edits to either setting fail `board_settings` even when all copper connectivity objects are otherwise unchanged.
 
 - Generalized the top-level KiCad copper guard beyond `gr_*` tokens. Any board-level object carrying a direct canonical copper layer now fails closed unless it is one of the explicitly audited electrical containers (`segment`, routed `arc`, `zone`, or `footprint`). This also catches copper-layer dimensions, targets, images, and future direct-layer item classes instead of relying on a brittle token list.

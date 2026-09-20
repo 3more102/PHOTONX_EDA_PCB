@@ -45,11 +45,16 @@ def test_kicad_reader_exposes_zone_shell_holes_and_identity(tmp_path: Path):
     assert zone["layers"] == ()
     assert zone["fill_enabled"] is False
     assert zone["rules"] == {
+        "priority": 0,
+        "keepout": False,
+        "fill_mode": None,
+        "filled_areas_thickness": True,
         "connect_clearance": 0.5,
         "min_thickness": 0.25,
         "thermal_gap": None,
         "thermal_bridge_width": None,
         "island_removal_mode": None,
+        "island_area_min": None,
     }
     assert zone["outline"] == ((0.0, 0.0), (4.0, 0.0), (4.0, 3.0), (0.0, 3.0))
     assert zone["holes"] == (
@@ -86,11 +91,16 @@ def test_exported_solid_region_roundtrips_with_saved_fill(tmp_path: Path):
     zone = parsed["zones"][0]
     assert zone["fill_enabled"] is True
     assert zone["rules"] == {
+        "priority": 0,
+        "keepout": False,
+        "fill_mode": None,
+        "filled_areas_thickness": True,
         "connect_clearance": 0.5,
         "min_thickness": 0.25,
         "thermal_gap": 0.5,
         "thermal_bridge_width": 0.5,
         "island_removal_mode": 1,
+        "island_area_min": None,
     }
     assert zone["layer"] == "In2.Cu"
     assert zone["holes"] == ()
@@ -134,3 +144,58 @@ def test_zone_reader_rejects_fractional_net_ordinal():
 
     with pytest.raises(ValueError, match="zone net ordinal must be an integer"):
         read_kicad_board_text(text)
+
+
+
+def test_zone_reader_exposes_priority_keepout_and_fill_semantics():
+    text = """
+    (kicad_pcb
+      (zone
+        (net 0)
+        (net_name "")
+        (layer "F.Cu")
+        (name "PHOTONX:RULE")
+        (priority 3)
+        (filled_areas_thickness no)
+        (keepout
+          (tracks not_allowed)
+          (vias not_allowed)
+          (pads not_allowed)
+          (copperpour not_allowed)
+          (footprints not_allowed)
+        )
+        (connect_pads (clearance 0.4))
+        (min_thickness 0.2)
+        (fill
+          yes
+          (mode hatched)
+          (thermal_gap 0.3)
+          (thermal_bridge_width 0.35)
+          (island_removal_mode 2)
+          (island_area_min 1.25)
+        )
+        (polygon
+          (pts
+            (xy 0 0)
+            (xy 2 0)
+            (xy 2 2)
+            (xy 0 2)
+          )
+        )
+      )
+    )
+    """
+    zone = read_kicad_board_text(text)["zones"][0]
+
+    assert zone["rules"] == {
+        "priority": 3,
+        "keepout": True,
+        "fill_mode": "hatched",
+        "filled_areas_thickness": False,
+        "connect_clearance": 0.4,
+        "min_thickness": 0.2,
+        "thermal_gap": 0.3,
+        "thermal_bridge_width": 0.35,
+        "island_removal_mode": 2,
+        "island_area_min": 1.25,
+    }

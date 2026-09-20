@@ -53,6 +53,27 @@ def _optional_int(node, name, *, label):
     return item[1]
 
 
+def _optional_atom(node, name, *, label):
+    item = child(node, name) if node is not None else None
+    if item is None:
+        return None
+    if len(item) != 2 or isinstance(item[1], list):
+        raise ValueError(f"{label} must contain one scalar value")
+    return str(item[1])
+
+
+def _default_true_flag(node, name, *, label):
+    value = _optional_atom(node, name, label=label)
+    if value is None:
+        return True
+    normalized = value.lower()
+    if normalized == "yes":
+        return True
+    if normalized == "no":
+        return False
+    raise ValueError(f"{label} must be yes or no")
+
+
 def _read_filled_polygon(node):
     layer = child(node, "layer")
     return {
@@ -89,6 +110,25 @@ def read_zones(root):
                 "name": str(name[1]) if name and len(name) >= 2 else None,
                 "fill_enabled": bool(fill and len(fill) >= 2 and str(fill[1]) == "yes"),
                 "rules": {
+                    "priority": (
+                        _optional_int(
+                            zone,
+                            "priority",
+                            label="zone priority",
+                        )
+                        or 0
+                    ),
+                    "keepout": child(zone, "keepout") is not None,
+                    "fill_mode": _optional_atom(
+                        fill,
+                        "mode",
+                        label="zone fill mode",
+                    ),
+                    "filled_areas_thickness": _default_true_flag(
+                        zone,
+                        "filled_areas_thickness",
+                        label="zone filled_areas_thickness",
+                    ),
                     "connect_clearance": _optional_float(
                         connect_pads,
                         "clearance",
@@ -113,6 +153,11 @@ def read_zones(root):
                         fill,
                         "island_removal_mode",
                         label="zone island_removal_mode",
+                    ),
+                    "island_area_min": _optional_float(
+                        fill,
+                        "island_area_min",
+                        label="zone island_area_min",
                     ),
                 },
                 "polygons": polygons,

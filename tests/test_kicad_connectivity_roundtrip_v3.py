@@ -825,6 +825,35 @@ def test_connectivity_roundtrip_detects_region_rule_drift(tmp_path):
     assert audit["roundtrip_equal"] is False
 
 
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("priority", 4),
+        ("keepout", True),
+        ("fill_mode", "hatched"),
+        ("filled_areas_thickness", False),
+        ("island_area_min", 1.0),
+    ],
+)
+def test_connectivity_roundtrip_detects_region_semantic_rule_drift(
+    tmp_path,
+    key,
+    value,
+):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["zones"][0]["rules"][key] = value
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["region_rules"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+
+
 def test_connectivity_roundtrip_detects_region_thermal_rule_drift(tmp_path):
     board = _board_with_all_connectivity_families()
     path, report = export_kicad_with_report(
