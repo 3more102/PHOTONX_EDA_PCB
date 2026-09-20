@@ -36,5 +36,23 @@ validation findings remain inspectable without inventing object identity.
 Diagnostic, validation, and unknown-plating rows display confidence as
 unavailable rather than presenting an invented probability.
 
+Via-span evidence is rendered directly on the board canvas using the same
+conservative policy as KiCad export:
+
+- exportable proven spans are solid;
+- proven-but-omitted spans are dashed;
+- unproven spans use a shorter dash pattern;
+- invalid proven metadata remains visibly distinct instead of being promoted.
+
+Selecting a via drill adds a `via_review` payload in the inspector containing
+the source plating state, proven layer span, supporting pad IDs, confidence,
+evidence strings, reconstructed net when unambiguous, and the exact KiCad
+omission or invalid-metadata code/message. The viewer reuses
+`proven_via_span_export_plan()`; it does not invent a via type, annular copper,
+net, or layer span that the exporter would reject.
+
+The status bar reports deterministic counts for exportable, omitted, unproven,
+and invalid via spans.
+
 Human decisions remain explicit review metadata and do not mutate source
 evidence automatically.
