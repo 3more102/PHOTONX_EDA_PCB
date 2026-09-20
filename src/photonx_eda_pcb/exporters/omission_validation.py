@@ -27,6 +27,9 @@ _REASON_CODES={
     "skipped_tracks":{
         "KICAD_NET_REFERENCE_UNRESOLVED",
         "KICAD_TRACK_LAYER_UNSUPPORTED",
+        "KICAD_TRACK_COORDINATE_INVALID",
+        "KICAD_TRACK_WIDTH_INVALID",
+        "KICAD_TRACK_ZERO_LENGTH",
     },
     "omitted_routes":{
         "KICAD_ARBITRARY_ROUTE_UNSUPPORTED",

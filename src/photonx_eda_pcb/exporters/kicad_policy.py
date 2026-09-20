@@ -101,6 +101,31 @@ def pad_export_descriptor(pad):
         "layers":layers,
     },ref_layer,warning
 
+def track_export_status(board, track):
+    try:
+        sx = float(track.start.x)
+        sy = float(track.start.y)
+        ex = float(track.end.x)
+        ey = float(track.end.y)
+    except (TypeError, ValueError):
+        return "skip-invalid-coordinate"
+    if not all(isfinite(value) for value in (sx, sy, ex, ey)):
+        return "skip-invalid-coordinate"
+
+    try:
+        width = float(track.width)
+    except (TypeError, ValueError):
+        return "skip-invalid-width"
+    if not isfinite(width) or width <= 0:
+        return "skip-invalid-width"
+
+    if sx == ex and sy == ey:
+        return "skip-zero-length"
+    if str(track.layer) not in declared_copper_layer_names(board):
+        return "skip-layer"
+    return "export"
+
+
 def outline_export_status(segment):
     try:
         sx = float(segment.start.x)

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened KiCad track export against invalid geometry before formatting. Tracks with non-numeric/non-finite coordinates, non-positive/non-finite widths, or zero-length centerlines are now omitted with explicit diagnostics and existing `skipped_track_ids` loss accounting; unsupported-layer and unresolved-net diagnostics remain independent so combined defects stay visible without double-counting the skipped object.
+
 - Hardened KiCad `Edge.Cuts` export against invalid source outline geometry. Non-numeric/non-finite coordinates and zero-length `OutlineSegment` objects are now omitted with explicit reasons, tracked through export reports/omission manifests, and surfaced as `skipped_outline_ids` source losses; valid outline segments still round-trip with exact deterministic UUID/geometry checks.
 
 - Added conservative KiCad point-drill export and round-trip auditing. Confirmed non-plated `DrillHit` objects now export as deterministic round NPTH footprints; unknown, plated-without-pad-stack, invalid, or unsupported-plating drills are explicitly omitted and recorded in the omission manifest. Round-trip `losses` now includes `skipped_drill_ids`, and previously uncounted arbitrary routed-milling omissions now surface as `omitted_route_ids` so `source_equivalent` cannot remain true when mechanical source features were dropped.

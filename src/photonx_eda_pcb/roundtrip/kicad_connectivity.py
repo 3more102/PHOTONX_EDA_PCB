@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status
+from ..exporters.kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status, track_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -227,12 +227,11 @@ def _reported_sets(source_ids, exported_ids, skipped_ids, family, issues):
 def _reported_track_sets(board, export_report, issues):
     source_ids = {track.id for track in board.tracks}
     if export_report is None:
-        declared_layers = _declared_track_layers(board)
         exported = {
             track.id
             for track in board.tracks
             if _source_net_binding(board, track.net_id) is not None
-            and str(track.layer) in declared_layers
+            and track_export_status(board, track) == "export"
         }
         return exported, source_ids - exported
 

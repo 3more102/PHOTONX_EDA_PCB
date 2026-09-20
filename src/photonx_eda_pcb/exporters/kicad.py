@@ -6,7 +6,7 @@ from ..models import BoardModel
 from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
-from .kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,proven_via_span_omissions
+from .kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,track_export_status,proven_via_span_omissions
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
@@ -388,22 +388,41 @@ def _slot_lines(board,net_num,report):
 
 def _track_lines(board,net_num,report):
     lines=[]
-    declared_copper_layers=declared_copper_layer_names(board)
     for trk in board.tracks:
-        layer_known=trk.layer in declared_copper_layers
-        if not layer_known:
-            report.issues.append(KicadExportIssue(
-                "warning",
-                "KICAD_TRACK_LAYER_UNSUPPORTED",
-                trk.id,
-                f"track layer {trk.layer!r} is not a declared canonical KiCad copper layer",
-            ))
+        status=track_export_status(board,trk)
+        if status!="export":
+            if status=="skip-layer":
+                code="KICAD_TRACK_LAYER_UNSUPPORTED"
+                message=(
+                    f"track layer {trk.layer!r} is not a declared canonical "
+                    "KiCad copper layer"
+                )
+            elif status=="skip-invalid-width":
+                code="KICAD_TRACK_WIDTH_INVALID"
+                message="track width must be a finite positive number"
+            elif status=="skip-zero-length":
+                code="KICAD_TRACK_ZERO_LENGTH"
+                message="track start and end are identical"
+            else:
+                code="KICAD_TRACK_COORDINATE_INVALID"
+                message="track coordinates must be finite numeric values"
+            report.issues.append(
+                KicadExportIssue("warning",code,trk.id,message)
+            )
         n,_,net_known=_net_binding(board,net_num,trk.net_id,trk.id,report)
-        if not (layer_known and net_known):
+        if status!="export" or not net_known:
             report.skipped_tracks+=1
             report.skipped_track_ids.append(trk.id)
             continue
-        lines.append(f'  (segment (start {trk.start.x:.6f} {trk.start.y:.6f}) (end {trk.end.x:.6f} {trk.end.y:.6f}) (width {trk.width:.6f}) (layer {_q(trk.layer)}) (net {n}) (uuid {photonx_uuid("track:"+trk.id)}))')
+
+        sx=float(trk.start.x);sy=float(trk.start.y)
+        ex=float(trk.end.x);ey=float(trk.end.y);width=float(trk.width)
+        lines.append(
+            f'  (segment (start {sx:.6f} {sy:.6f}) '
+            f'(end {ex:.6f} {ey:.6f}) (width {width:.6f}) '
+            f'(layer {_q(str(trk.layer))}) (net {n}) '
+            f'(uuid {photonx_uuid("track:"+trk.id)}))'
+        )
         report.exported_tracks+=1
         report.exported_track_ids.append(trk.id)
     return lines
