@@ -73,5 +73,23 @@ drill when it exists and highlights its resolved physical net. Exportability is
 presented as an audit status only; it does not mutate evidence or promote an
 unproven span.
 
+
+## Route evidence review
+
+KiCad route export evidence is exposed through the same canonical review surfaces.
+The **Route Evidence** tab and the default Evidence Review queue consume
+`assess_route_export_readiness()` rather than maintaining a GUI-only heuristic.
+The view shows route identity, plating, source/X2 span evidence, X2 span kind,
+segment count, width, resolved exported net when available, and the exact omission
+code used by the KiCad route policy.
+
+Exactly exportable straight NPTH routes and evidence-complete full-stack plated
+routes stay out of the Evidence Review queue. Omitted or invalid routes remain
+reviewable with their backing route object selected when present. Duplicate
+physical route IDs are classified fail-closed with `KICAD_OBJECT_ID_DUPLICATE`
+so the review surface agrees with the exporter before deterministic UUID
+generation. Callers can disable these queue rows with
+`include_route_evidence=False`.
+
 Human decisions remain explicit review metadata and do not mutate source
 evidence automatically.
