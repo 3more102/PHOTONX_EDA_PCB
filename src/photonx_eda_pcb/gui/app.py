@@ -115,7 +115,7 @@ def launch(input_dir: str | Path) -> None:
             nets.set(item.target_id)
             state.selected_id = None
             inspector.show(item.target_id)
-        elif item.kind in {"diagnostic", "validation"}:
+        elif item.kind in {"diagnostic", "validation", "via_span"}:
             selectable = item.metadata.get("selectable_object_id")
             if selectable in result.board.object_index():
                 state.selected_id = selectable
