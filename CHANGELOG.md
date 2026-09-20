@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserved Gerber X2 aperture attributes as immutable source evidence for the supported AD/G36 subset. Each successfully represented aperture freezes the current `TA` dictionary at definition time; D01/D03-derived geometry carries that frozen evidence, G36 regions snapshot the current `TA` dictionary rather than inheriting the selected aperture, and `TD` affects only future dictionary state. `.AperFunction` is preserved as evidence without being promoted into inferred design intent. Aperture blocks (`AB`) remain explicitly unsupported and fail closed.
+
 - Added evidence-gated KiCad export for exact straight plated Excellon routed slots. A plated route is emitted as deterministic `PHOTONX:RecoveredPlatedRoute` only when multilayer copper coverage proves one pad-stack and one unambiguous exported net; otherwise it remains an explicit omission. Round-trip verification checks route kind, geometry, net binding, and deterministic identity while keeping route footprints out of the mechanical-slot comparator.
 
 - Extended KiCad via round-trip auditing to the documented optional `locked` token. PhotonX-exported vias are expected to remain unlocked, the reader now preserves lock state, and post-export locking is surfaced as deterministic via semantic drift instead of being silently ignored.
