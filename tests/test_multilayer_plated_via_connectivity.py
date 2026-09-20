@@ -16,7 +16,10 @@ from photonx_eda_pcb.models import (
     Point,
     Track,
 )
-from photonx_eda_pcb.pipeline import _report_unproven_multilayer_spans
+from photonx_eda_pcb.pipeline import (
+    _report_unproven_multilayer_spans,
+    _serialize_via_spans,
+)
 from photonx_eda_pcb.stackup import infer_stackup
 from photonx_eda_pcb.via_span import resolve_via_spans
 
@@ -114,6 +117,47 @@ def test_unproven_or_nonplated_hole_never_bridges_layers(plating):
     assert len(nets) == 2
 
 
+def test_copper_inside_finished_hole_without_wall_contact_stays_disconnected():
+    board = _board("plated")
+    board.tracks.append(
+        Track(
+            "T_INNER",
+            Point(10.0, 10.0),
+            Point(10.05, 10.0),
+            0.04,
+            "In1.Cu",
+        )
+    )
+    spans = _spans(board)
+
+    assert spans[0].layer_ids == ("F.Cu", "In1.Cu", "B.Cu")
+
+    graph = build_physical_graph(board, via_spans=spans)
+
+    assert graph.has_edge("P_F", "P_B")
+    assert graph.degree["T_INNER"] == 0
+    nets = assign_physical_nets(board, graph)
+    assert len(nets) == 2
+
+
+def test_injected_proven_span_cannot_override_unknown_source_plating():
+    board = _board("unknown")
+    fake_span = NS(
+        drill_id="D1",
+        from_layer="F.Cu",
+        to_layer="B.Cu",
+        confidence=0.99,
+        evidence=("injected",),
+        proven=True,
+        pad_ids=("P_B", "P_F"),
+        layer_ids=("F.Cu", "B.Cu"),
+    )
+
+    graph = build_physical_graph(board, via_spans=[fake_span])
+
+    assert not graph.has_edge("P_F", "P_B")
+
+
 def test_unknown_multilayer_plating_is_fail_visible():
     board = _board("unknown")
     board.metadata["source_input"] = "fixture"
@@ -197,6 +241,17 @@ def test_proven_plated_via_barrel_connects_touching_inner_layer_copper():
     nets = assign_physical_nets(board, graph)
     assert len(nets) == 1
     assert set(nets[0].members) == {"P_F", "P_B", "T_I1", "R_I2"}
+    via_evidence = [
+        item
+        for item in nets[0].provenance.evidence
+        if item.kind == "plated_via_span"
+    ]
+    assert len(via_evidence) == 1
+    assert "pads=P_B,P_F" in via_evidence[0].detail
+    assert "barrel_contacts=R_I2,T_I1" in via_evidence[0].detail
+
+    serialized = _serialize_via_spans(spans)
+    assert serialized[0]["layer_ids"] == ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]
 
 
 def test_unproven_via_never_connects_touching_inner_layer_copper():
