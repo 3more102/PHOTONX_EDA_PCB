@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from math import atan2, degrees, hypot, isfinite
 
 from photonx_eda_pcb.mechanical_features import SlotFeature
-from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
 
 @dataclass(frozen=True)
@@ -83,6 +82,11 @@ def _plated_route_padstack(board, route):
     slot = _route_slot_feature(route)
     if slot is None:
         return None
+
+    # Import lazily to keep models -> excellon_routing.model free of the
+    # plated-slot geometry dependency during package initialization.
+    from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
+
     inference = infer_plated_slot_padstack(board, slot)
     padstack = inference.padstack
     if padstack is None or not _net_is_unambiguous(board, padstack.net_id):
