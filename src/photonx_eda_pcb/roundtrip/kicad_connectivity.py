@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status, track_export_status
+from ..exporters.kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status, track_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -109,18 +109,23 @@ def _observed_layer_rows(readback, issues):
 
 
 def _net_rows_from_board(board):
-    rows = [{"code": 0, "name": ""}]
-    for code, net in enumerate(board.nets, start=1):
-        rows.append({"code": code, "name": str(net.label or net.id)})
-    return rows
+    export_rows, _duplicate_net_ids = kicad_net_export_rows(board)
+    return [
+        {"code": 0, "name": ""},
+        *[
+            {"code": int(row["code"]), "name": str(row["name"])}
+            for row in export_rows
+        ],
+    ]
 
 
 def _source_net_binding(board, net_id):
     if net_id is None:
         return {"code": 0, "name": ""}
-    for code, net in enumerate(board.nets, start=1):
-        if net.id == net_id:
-            return {"code": code, "name": str(net.label or net.id)}
+    export_rows, _duplicate_net_ids = kicad_net_export_rows(board)
+    for row in export_rows:
+        if row["id"] == net_id:
+            return {"code": int(row["code"]), "name": str(row["name"])}
     return None
 
 
@@ -1230,6 +1235,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     """
 
     issues = []
+    _net_rows, ambiguous_net_ids = kicad_net_export_rows(board)
     source_via_span_ids, via_span_metadata_problems = proven_via_span_omissions(board)
     for object_id, message in via_span_metadata_problems:
         issues.append(
@@ -1510,6 +1516,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     )
 
     losses = {
+        "ambiguous_net_ids": [str(net_id) for net_id in ambiguous_net_ids],
         "skipped_drill_ids": sorted(skipped_drill_ids),
         "skipped_outline_ids": sorted(skipped_outline_ids),
         "skipped_pad_ids": sorted(skipped_pad_ids),

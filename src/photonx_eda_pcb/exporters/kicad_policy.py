@@ -1,8 +1,30 @@
 import re
+from collections import Counter
 from math import isfinite
 
 KICAD_DEFAULT_BOARD_THICKNESS_MM = 1.6
 KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM = 0.0
+
+
+def kicad_net_export_rows(board):
+    counts = Counter(net.id for net in board.nets)
+    duplicate_ids = {
+        net_id
+        for net_id, count in counts.items()
+        if count > 1
+    }
+    rows = []
+    for net in board.nets:
+        if net.id in duplicate_ids:
+            continue
+        rows.append(
+            {
+                "id": net.id,
+                "code": len(rows) + 1,
+                "name": str(net.label or net.id),
+            }
+        )
+    return tuple(rows), tuple(sorted(duplicate_ids, key=str))
 from photonx_eda_pcb.mechanical_features.measure import slot_geometry_descriptor
 _INNER_COPPER_LAYER_RE=re.compile(r"^In([1-9]|[12][0-9]|30)\.Cu$")
 

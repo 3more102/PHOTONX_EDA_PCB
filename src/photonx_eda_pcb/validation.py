@@ -35,6 +35,20 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
     ids=[o.id for o in all_objects]
     if len(ids)!=len(set(ids)):r.issues.append(ValidationIssue("error","DUPLICATE_OBJECT_ID","object IDs must be globally unique"))
     idx=board.object_index();net_members=set()
+    duplicate_net_ids=sorted(
+        net_id
+        for net_id,count in Counter(net.id for net in board.nets).items()
+        if count>1
+    )
+    for net_id in duplicate_net_ids:
+        r.issues.append(
+            ValidationIssue(
+                "error",
+                "DUPLICATE_NET_ID",
+                f"duplicate physical net id {net_id}",
+                (str(net_id),),
+            )
+        )
     for net in board.nets:
         if not 0<=net.confidence<=1:r.issues.append(ValidationIssue("error","INVALID_NET_CONFIDENCE",f"invalid confidence for {net.id}",(net.id,)))
         for member in net.members:

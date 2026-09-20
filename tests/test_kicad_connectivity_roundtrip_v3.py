@@ -1071,6 +1071,7 @@ def test_connectivity_roundtrip_separates_export_losses(tmp_path):
     assert audit["source_connectivity_complete"] is False
     assert audit["source_equivalent"] is False
     assert audit["losses"] == {
+        "ambiguous_net_ids": [],
         "skipped_drill_ids": [],
         "skipped_outline_ids": [],
         "skipped_pad_ids": [],
@@ -1174,6 +1175,75 @@ def test_connectivity_roundtrip_marks_drilled_pad_as_source_loss(tmp_path):
     assert audit["source_connectivity_complete"] is False
     assert audit["source_equivalent"] is False
     assert audit["losses"]["skipped_pad_ids"] == ["P_DRILLED"]
+
+
+def test_duplicate_source_net_ids_fail_closed_without_last_one_wins(
+    tmp_path,
+):
+    board = BoardModel(
+        nets=[
+            NetGroup("N_DUP", [], 1.0, "FIRST"),
+            NetGroup("N_DUP", [], 1.0, "SECOND"),
+            NetGroup("N_OK", [], 1.0, "SIG"),
+        ],
+        tracks=[
+            Track(
+                "T_DUP",
+                Point(0, 0),
+                Point(2, 0),
+                0.25,
+                "F.Cu",
+                "N_DUP",
+            ),
+            Track(
+                "T_OK",
+                Point(0, 1),
+                Point(2, 1),
+                0.25,
+                "F.Cu",
+                "N_OK",
+            ),
+        ],
+        pads=[
+            PadCandidate(
+                "P_DUP",
+                Point(1, 2),
+                1.0,
+                1.0,
+                "C",
+                "F.Cu",
+                None,
+                "N_DUP",
+            )
+        ],
+    )
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert readback["nets"] == [
+        {"code": 0, "name": ""},
+        {"code": 1, "name": "SIG"},
+    ]
+    assert report.ok is False
+    assert any(
+        issue.code == "KICAD_NET_ID_DUPLICATE"
+        and issue.object_id == "N_DUP"
+        for issue in report.issues
+    )
+    assert report.skipped_track_ids == ["T_DUP"]
+    assert audit["nets"]["equal"] is True
+    assert audit["tracks"]["equal"] is True
+    assert audit["pads"]["equal"] is True
+    assert audit["roundtrip_equal"] is True
+    assert audit["source_connectivity_complete"] is False
+    assert audit["source_equivalent"] is False
+    assert audit["losses"]["ambiguous_net_ids"] == ["N_DUP"]
+    assert audit["losses"]["skipped_track_ids"] == ["T_DUP"]
+    assert audit["losses"]["unresolved_pad_net_ids"] == ["P_DUP"]
 
 
 def test_connectivity_roundtrip_detects_missing_pad_net_name(tmp_path):

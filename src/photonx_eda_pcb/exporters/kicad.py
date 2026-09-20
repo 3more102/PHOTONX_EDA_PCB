@@ -6,7 +6,7 @@ from ..models import BoardModel
 from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
-from .kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,track_export_status,proven_via_span_omissions
+from .kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,kicad_net_export_rows,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,track_export_status,proven_via_span_omissions
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
@@ -449,7 +449,16 @@ def _track_lines(board,net_num,report):
     return lines
 
 def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadExportReport]:
-    p=Path(path);p.parent.mkdir(parents=True,exist_ok=True);report=KicadExportReport();net_num={net.id:i+1 for i,net in enumerate(board.nets)}
+    p=Path(path);p.parent.mkdir(parents=True,exist_ok=True);report=KicadExportReport()
+    net_rows,duplicate_net_ids=kicad_net_export_rows(board)
+    net_num={row["id"]:row["code"] for row in net_rows}
+    for net_id in duplicate_net_ids:
+        report.issues.append(KicadExportIssue(
+            "error",
+            "KICAD_NET_ID_DUPLICATE",
+            str(net_id),
+            "duplicate source net ID is ambiguous; all definitions with this ID are omitted from the KiCad net table instead of choosing one ordinal",
+        ))
     lines=[
         '(kicad_pcb (version 20240108) (generator "photonx_eda_pcb")',
         f'  (general (thickness {KICAD_DEFAULT_BOARD_THICKNESS_MM:g}))',
@@ -460,7 +469,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
         f'  (setup (pad_to_mask_clearance {KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM:g}))',
         '  (net 0 "")',
     ]
-    for net in board.nets:lines.append(f'  (net {net_num[net.id]} {_q(net.label or net.id)})')
+    for row in net_rows:lines.append(f'  (net {row["code"]} {_q(row["name"])})')
     lines.extend(_drill_lines(board,report));lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));lines.extend(_region_lines(board,net_num,report));lines.extend(_track_lines(board,net_num,report));_record_via_span_skips(board,report);_record_route_skips(board,report)
     lines.extend(_outline_lines(board,report))
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report

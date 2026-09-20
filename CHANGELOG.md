@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened KiCad net-table export against duplicate physical net IDs. Duplicate `NetGroup.id` values are now validation errors and are excluded wholesale from KiCad ordinal assignment instead of silently using the last duplicate in a dictionary; unique nets are compactly renumbered, dependent tracks fail closed, pad net claims remain unresolved, and round-trip reports expose `ambiguous_net_ids` as a source-equivalence loss.
+
 - Hardened recovered-pad KiCad export against malformed geometry. Pad centers must be finite numeric coordinates, sizes must be finite and positive, and rotation must be finite before any footprint text is formatted; failures are explicit `KICAD_PAD_COORDINATE_INVALID`, `KICAD_PAD_SIZE_INVALID`, or `KICAD_PAD_ROTATION_INVALID` omissions using the existing skipped-pad/source-loss surface.
 
 - Hardened KiCad track export against invalid geometry before formatting. Tracks with non-numeric/non-finite coordinates, non-positive/non-finite widths, or zero-length centerlines are now omitted with explicit diagnostics and existing `skipped_track_ids` loss accounting; unsupported-layer and unresolved-net diagnostics remain independent so combined defects stay visible without double-counting the skipped object.

@@ -7,6 +7,7 @@ Round-trip verification canonicalizes reconstructed models and compares stable f
 When KiCad export is requested, PHOTONX re-reads the generated `.kicad_pcb` through its KiCad S-expression reader and compares electrical semantics against the exact `KicadExportReport`.
 
 The connectivity audit checks:
+- fail-closed source-net identity handling: duplicate physical `net.id` values are omitted from KiCad ordinal assignment instead of using dictionary last-one-wins semantics; dependent objects become explicit export losses/unresolved net claims;
 
 - board fabrication defaults emitted by PhotonX: board thickness and global pad-to-mask clearance;
 - exact declared KiCad layer-table ID/name/type identity, including the contiguous inner-copper prefix and generated user layers;
