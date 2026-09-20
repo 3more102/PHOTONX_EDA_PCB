@@ -5,7 +5,7 @@ from .segments import read_segments
 from .track_arcs import read_track_arcs
 from .vias import read_vias
 from .footprints import read_footprints
-from .graphics import read_edge_graphics, read_unexpected_edge_graphics
+from .graphics import read_edge_graphics, read_unexpected_copper_graphics, read_unexpected_edge_graphics
 from .mechanical_slots import read_mechanical_slots
 from .zones import read_zones
 
@@ -27,5 +27,6 @@ def read_kicad_board_text(text):
         "edge_lines": [(item["start"], item["end"]) for item in edge_graphics],
         "edge_graphics": edge_graphics,
         "unexpected_edge_graphics": read_unexpected_edge_graphics(root),
+        "unexpected_copper_graphics": read_unexpected_copper_graphics(root),
         "mechanical_slots": read_mechanical_slots(footprints),
     }

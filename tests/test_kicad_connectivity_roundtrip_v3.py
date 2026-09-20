@@ -76,6 +76,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "track_arcs",
         "board_outline",
         "unexpected_edge_graphics",
+        "unexpected_copper_graphics",
         "foreign_footprints",
         "recovered_pads",
         "copper_regions",
@@ -302,6 +303,42 @@ def test_connectivity_roundtrip_rejects_non_line_edge_graphic():
         {
             "type": "gr_arc",
             "uuid": "00000000-0000-0000-0000-000000000096",
+        }
+    ]
+
+
+def test_connectivity_roundtrip_rejects_top_level_copper_graphic():
+    text = """
+    (kicad_pcb
+      (layers
+        (0 "F.Cu" signal)
+        (31 "B.Cu" signal)
+        (36 "B.SilkS" user "b.silkscreen")
+        (37 "F.SilkS" user "f.silkscreen")
+        (44 "Edge.Cuts" user)
+      )
+      (net 0 "")
+      (gr_line
+        (start 0 0)
+        (end 5 0)
+        (stroke (width 0.4) (type default))
+        (layer "F.Cu")
+        (uuid 00000000-0000-0000-0000-000000000095)
+      )
+    )
+    """
+    readback = read_kicad_board_text(text)
+
+    audit = compare_kicad_connectivity(BoardModel(), readback)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["unexpected_copper_graphics"]["equal"] is False
+    assert audit["unexpected_copper_graphics"]["observed_count"] == 1
+    assert audit["unexpected_copper_graphics"]["unexpected"] == [
+        {
+            "type": "gr_line",
+            "layer": "F.Cu",
+            "uuid": "00000000-0000-0000-0000-000000000095",
         }
     ]
 

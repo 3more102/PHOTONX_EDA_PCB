@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Closed a KiCad copper-graphics audit escape hatch. The board reader now records top-level `gr_*` items placed on canonical copper layers, and connectivity round-trip treats every such object as an unexpected expected-empty family because PhotonX never emits electrical copper as board graphics. Injected `gr_line`, `gr_arc`, `gr_poly`, text, or similar copper graphics can no longer alter fabrication copper while remaining invisible to the audit.
+
 - Added KiCad zone-rule readback and round-trip verification for the exporter’s deterministic repour defaults: connect-pad clearance, minimum thickness, thermal gap, thermal bridge width, and island-removal mode. A board can no longer keep identical zone shell geometry while silently changing the rules that would generate different copper on repour.
 
 - Extended KiCad CopperRegion round-trip auditing beyond shell/hole geometry to the exporter’s fill/cache contract. Solid regions now verify `fill yes` plus the deterministic cached shell polygon, while holed regions verify the intentionally cache-omitted/unfilled state; fill toggles or cached-polygon drift now fail `region_fill_state` instead of passing as geometry-equivalent.

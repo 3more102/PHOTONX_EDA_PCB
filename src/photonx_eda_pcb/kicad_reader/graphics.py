@@ -61,3 +61,42 @@ def read_unexpected_edge_graphics(root):
             }
         )
     return out
+
+
+
+def _is_canonical_copper_layer(name):
+    layer = str(name)
+    if layer in {"F.Cu", "B.Cu"}:
+        return True
+    if not (layer.startswith("In") and layer.endswith(".Cu")):
+        return False
+    number = layer[2:-3]
+    return number.isdigit() and 1 <= int(number) <= 30
+
+
+def read_unexpected_copper_graphics(root):
+    out = []
+    if not isinstance(root, list):
+        return out
+    for index, item in enumerate(root[1:]):
+        if not isinstance(item, list) or not item:
+            continue
+        token = str(item[0])
+        if not token.startswith("gr_"):
+            continue
+        layer = child(item, "layer")
+        if not layer or len(layer) < 2:
+            continue
+        layer_name = str(layer[1])
+        if not _is_canonical_copper_layer(layer_name):
+            continue
+        uuid = child(item, "uuid")
+        out.append(
+            {
+                "type": token,
+                "layer": layer_name,
+                "uuid": str(uuid[1]) if uuid and len(uuid) >= 2 else None,
+                "root_index": index,
+            }
+        )
+    return out
