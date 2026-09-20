@@ -67,3 +67,18 @@ The structured pin maps and `package_hint` coexist on the same component object 
 - `package_hint` remains a geometry-backed package-shape hypothesis.
 - Geometry never invents or renumbers source pins.
 - Conflicting trusted pin numbers fail closed for that pad without discarding an otherwise proven component reference.
+
+
+## KiCad grouped export contract
+
+Source-proven Gerber X2 components are grouped into
+`PHOTONX:RecoveredX2Component` footprints only when the canonical
+`ComponentHypothesis.source_pin_map` covers every member pad with one valid,
+unique source pin number. `source_pin_functions` remains optional per pad, but
+any retained function must match the trusted per-pad X2 evidence.
+
+The KiCad exporter cross-checks the structured maps against the original trusted
+pad provenance. Missing, extra, conflicting, blank, or stale structured identity
+fails closed to independent pad export and emits
+`KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED`; the exporter does not reconstruct a
+second pin map from geometry or silently repair the component identity.
