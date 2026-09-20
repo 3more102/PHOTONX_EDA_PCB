@@ -223,6 +223,14 @@ class GerberRS274XParser:
         self.aperture_mirror_source: SourceRef | None = None
         self.aperture_rotation_source: SourceRef | None = None
         self.aperture_scale_source: SourceRef | None = None
+        self.aperture_attributes: dict[str, tuple[str, ...]] = {}
+        self.aperture_attribute_sources: dict[str, SourceRef] = {}
+        self.aperture_attribute_snapshots: dict[
+            int, dict[str, tuple[str, ...]]
+        ] = {}
+        self.aperture_attribute_source_snapshots: dict[
+            int, dict[str, SourceRef]
+        ] = {}
         self.object_attributes: dict[str, tuple[str, ...]] = {}
         self.object_attribute_sources: dict[str, SourceRef] = {}
         self.image_body_started = False
@@ -507,7 +515,41 @@ class GerberRS274XParser:
             parts.extend(["ls", self.aperture_scale])
         return parts
 
+    def _add_aperture_attribute_provenance(self, prov: Provenance) -> None:
+        """Attach X2 aperture attributes fixed when the selected aperture was defined."""
+
+        aperture_code = self.current_aperture
+        if aperture_code is None:
+            return
+
+        attributes = self.aperture_attribute_snapshots.get(aperture_code, {})
+        sources = self.aperture_attribute_source_snapshots.get(aperture_code, {})
+        for name in sorted(attributes):
+            source = sources.get(name)
+            if source is None:
+                continue
+            values = attributes[name]
+            prov.add_source(source)
+            prov.add_evidence(
+                Evidence(
+                    "gerber_x2_aperture_attribute",
+                    f"aperture=D{aperture_code}; name={name}; values={values!r}",
+                    1.0,
+                    source,
+                )
+            )
+            if name == ".AperFunction":
+                prov.add_evidence(
+                    Evidence(
+                        "gerber_x2_aperture_function",
+                        ",".join(values),
+                        1.0,
+                        source,
+                    )
+                )
+
     def _add_aperture_transform_provenance(self, prov: Provenance) -> None:
+        self._add_aperture_attribute_provenance(prov)
         if self.aperture_mirror != "N" and self.aperture_mirror_source is not None:
             prov.add_source(self.aperture_mirror_source)
             prov.add_evidence(
@@ -2098,6 +2140,41 @@ class GerberRS274XParser:
             out,
         )
         self.unsupported_apertures.add(code)
+
+    def _update_aperture_attribute_state(
+        self,
+        command: str,
+        name: str,
+        values: list[str],
+        source: SourceRef,
+    ) -> None:
+        """Apply X2 TA/TD dictionary semantics for future aperture definitions."""
+
+        if command == "TA":
+            self.aperture_attributes[name] = tuple(values)
+            self.aperture_attribute_sources[name] = source
+            return
+
+        if command != "TD":
+            return
+
+        if name:
+            self.aperture_attributes.pop(name, None)
+            self.aperture_attribute_sources.pop(name, None)
+            return
+
+        self.aperture_attributes.clear()
+        self.aperture_attribute_sources.clear()
+
+    def _snapshot_aperture_attributes(self, aperture_code: int) -> None:
+        """Freeze the active TA dictionary onto one newly created aperture."""
+
+        self.aperture_attribute_snapshots[aperture_code] = dict(
+            self.aperture_attributes
+        )
+        self.aperture_attribute_source_snapshots[aperture_code] = dict(
+            self.aperture_attribute_sources
+        )
 
     def _update_object_attribute_state(
         self,
@@ -4347,12 +4424,20 @@ class GerberRS274XParser:
                     if not self.strict:
                         self._disable_image_geometry(out)
                     continue
+                source = SourceRef(str(p), line_no, line)
+                if command in {"TA", "TD"}:
+                    self._update_aperture_attribute_state(
+                        command,
+                        name,
+                        values,
+                        source,
+                    )
                 if command in {"TO", "TD"}:
                     self._update_object_attribute_state(
                         command,
                         name,
                         values,
-                        SourceRef(str(p), line_no, line),
+                        source,
                     )
                 out.diagnostics.append(
                     ParseDiagnostic(
@@ -4453,8 +4538,9 @@ class GerberRS274XParser:
                 if not self._require_units(p, line_no, line, out):
                     continue
                 code, shape, modifiers = m.groups()
+                aperture_code = int(code)
                 self._instantiate_standard_aperture(
-                    int(code),
+                    aperture_code,
                     shape,
                     modifiers,
                     p,
@@ -4462,6 +4548,11 @@ class GerberRS274XParser:
                     line,
                     out,
                 )
+                if (
+                    aperture_code in self.apertures
+                    and aperture_code not in self.unsupported_apertures
+                ):
+                    self._snapshot_aperture_attributes(aperture_code)
                 continue
 
             m = _AD_MACRO.match(line)
@@ -4469,8 +4560,9 @@ class GerberRS274XParser:
                 if not self._require_units(p, line_no, line, out):
                     continue
                 code, name, modifiers = m.groups()
+                aperture_code = int(code)
                 self._instantiate_macro_aperture(
-                    int(code),
+                    aperture_code,
                     name,
                     modifiers,
                     p,
@@ -4478,6 +4570,11 @@ class GerberRS274XParser:
                     line,
                     out,
                 )
+                if (
+                    aperture_code in self.apertures
+                    and aperture_code not in self.unsupported_apertures
+                ):
+                    self._snapshot_aperture_attributes(aperture_code)
                 continue
 
             m = _SELECT.match(line)
