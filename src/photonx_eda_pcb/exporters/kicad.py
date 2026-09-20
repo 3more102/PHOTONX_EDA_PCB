@@ -300,11 +300,63 @@ def _npth_slot_lines(slot,report):
       '  )'
     ]
 
+def _ordered_copper_layers(board):
+    return tuple(
+        str(row["name"])
+        for row in kicad_board_layer_specs(board)
+        if str(row["name"]).endswith(".Cu")
+    )
+
+
+def _plated_feature_depth_status(board,feature):
+    if getattr(feature,"x2_layer_span",None) is None:
+        return "legacy"
+    if (
+        not bool(getattr(feature,"span_proven",False))
+        or getattr(feature,"layer_span",None) is None
+    ):
+        return "unproven"
+    copper=_ordered_copper_layers(board)
+    if len(copper)<2:
+        return "unproven"
+    if tuple(feature.layer_span)!=(copper[0],copper[-1]):
+        return "partial"
+    return "full"
+
+
 def _plated_slot_lines(board,slot,net_num,report):
+    depth_status=_plated_feature_depth_status(board,slot)
+    if depth_status=="unproven":
+        _record_skip(
+            report,
+            slot,
+            "KICAD_SLOT_X2_SPAN_UNPROVEN",
+            "explicit X2 plated-slot layer span could not be resolved safely",
+        )
+        return []
+    if depth_status=="partial":
+        _record_skip(
+            report,
+            slot,
+            "KICAD_SLOT_PARTIAL_DEPTH_UNREPRESENTABLE",
+            "source-proven partial-depth plated slot cannot be represented faithfully by a KiCad through-hole slotted pad",
+        )
+        return []
+
     inf=infer_plated_slot_padstack(board,slot)
     if inf.padstack is None:
         _record_skip(report,slot,"KICAD_SLOT_PLATED_UNSUPPORTED",";".join(inf.blockers));return []
-    p=inf.padstack;shape=pad_shape_name(p.pad_shape)
+    p=inf.padstack
+    if tuple(p.layers)!=_ordered_copper_layers(board):
+        _record_skip(
+            report,
+            slot,
+            "KICAD_SLOT_PARTIAL_DEPTH_UNREPRESENTABLE",
+            "plated-slot copper support does not cover the full board stack required by KiCad through-hole slot semantics",
+        )
+        return []
+
+    shape=pad_shape_name(p.pad_shape)
     n,net_name,net_known=_net_binding(board,net_num,p.net_id,slot.id,report)
     layer_tokens=" ".join(_q(x) for x in p.layers)+' "*.Mask"'
     cx,cy=p.center;pw,ph=p.pad_size;dl,ds=p.drill_size
@@ -485,27 +537,37 @@ def _via_span_lines(board,net_num,report,exportable,omitted,problems):
         report.exported_via_span_ids.append(drill_id)
     return lines
 
-def _npth_route_lines(route,report):
-    descriptor=route_export_descriptor(route)
+def _recovered_route_lines(board,net_num,route,report):
+    descriptor=route_export_descriptor(route,board)
     if descriptor is None:
         return []
     cx,cy=descriptor["center"]
-    long_dim,short_dim=descriptor["size"]
+    size_x,size_y=descriptor["size"]
+    drill_x,drill_y=descriptor["drill_size"]
     angle=descriptor["angle_deg"]
+    layers=" ".join(_q(layer) for layer in descriptor["layers"])
+    net_clause=""
+    if descriptor["net_id"] is not None:
+        n,net_name,net_known=_net_binding(
+            board,net_num,descriptor["net_id"],route.id,report
+        )
+        if not net_known:
+            return []
+        net_clause=f' (net {n} {_q(net_name)})'
     report.exported_routes+=1
     report.exported_route_ids.append(route.id)
     return [
-      f'  (footprint "PHOTONX:RecoveredNPTHRoute" (layer "F.Cu") (uuid {photonx_uuid("route-fp:"+route.id)})',
+      f'  (footprint {_q(descriptor["footprint_name"])} (layer {_q(descriptor["footprint_layer"])}) (uuid {photonx_uuid("route-fp:"+route.id)})',
       f'    (at {cx:.6f} {cy:.6f})',
-      f'    (property "Reference" {_q(route.id)} (at 0 -2 0) (layer "F.SilkS") hide (uuid {photonx_uuid("route-ref:"+route.id)}))',
-      f'    (pad "" np_thru_hole oval (at 0 0 {angle:.6f}) (size {long_dim:.6f} {short_dim:.6f}) (drill oval {long_dim:.6f} {short_dim:.6f}) (layers "*.Cu" "*.Mask") (uuid {photonx_uuid("route-pad:"+route.id)}))',
+      f'    (property "Reference" {_q(route.id)} (at 0 -2 0) (layer {_q(descriptor["reference_layer"])}) hide (uuid {photonx_uuid("route-ref:"+route.id)}))',
+      f'    (pad {_q(descriptor["pad_number"])} {descriptor["pad_kind"]} {descriptor["pad_shape"]} (at 0 0 {angle:.6f}) (size {size_x:.6f} {size_y:.6f}) (drill oval {drill_x:.6f} {drill_y:.6f}) (layers {layers}){net_clause} (uuid {photonx_uuid("route-pad:"+route.id)}))',
       '  )'
     ]
 
 
-def _route_lines(board,report,duplicate_object_ids=()):
+def _route_lines(board,net_num,report,duplicate_object_ids=()):
     routes=getattr(board,"routes",())
-    readiness=assess_route_export_readiness(routes)
+    readiness=assess_route_export_readiness(routes,board)
     exportable=set(readiness.exportable)
     duplicate_object_ids=set(duplicate_object_ids)
     lines=[]
@@ -516,15 +578,41 @@ def _route_lines(board,report,duplicate_object_ids=()):
                 report.skipped_route_ids.append(route.id)
             continue
         if route.id in exportable:
-            lines.extend(_npth_route_lines(route,report))
-            continue
+            emitted=_recovered_route_lines(board,net_num,route,report)
+            if emitted:
+                lines.extend(emitted)
+                continue
         report.skipped_routes+=1
         report.skipped_route_ids.append(route.id)
+        code=readiness.reasons.get(route.id,"KICAD_ARBITRARY_ROUTE_UNSUPPORTED")
+        if code=="KICAD_PLATED_ROUTE_SPAN_UNPROVEN":
+            message=(
+                "explicit X2 plated-route layer span could not be resolved safely; "
+                "route omitted instead of widening the drill depth"
+            )
+        elif code=="KICAD_PLATED_ROUTE_PARTIAL_DEPTH_UNREPRESENTABLE":
+            message=(
+                "source-proven partial-depth plated route cannot be represented "
+                "faithfully by a KiCad through-hole slotted pad; route omitted "
+                "instead of widening it across the board stack"
+            )
+        elif code=="KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN":
+            message=(
+                "straight plated routed slot lacks a source-proven full-depth "
+                "copper pad-stack with one unambiguous exported net; route omitted"
+            )
+        else:
+            message=(
+                "routed milling is preserved in PHOTONX but only exact straight "
+                "non-plated routes or source-proven full-depth plated routed slots "
+                "can be represented faithfully by the current KiCad exporter; "
+                "route omitted"
+            )
         report.issues.append(KicadExportIssue(
             "warning",
-            readiness.reasons.get(route.id,"KICAD_ARBITRARY_ROUTE_UNSUPPORTED"),
+            code,
             route.id,
-            "routed milling is preserved in PHOTONX but only exact straight non-plated routes can be represented faithfully by the current KiCad exporter; route omitted",
+            message,
         ))
     return lines
 
@@ -632,7 +720,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
         '  (net 0 "")',
     ]
     for row in net_rows:lines.append(f'  (net {row["code"]} {_q(row["name"])})')
-    lines.extend(_drill_lines(board,report,duplicate_object_ids,via_export_ids));lines.extend(_x2_component_lines(board,net_num,report,x2_groups));lines.extend(_pad_lines(board,net_num,report,duplicate_object_ids,grouped_pad_ids));lines.extend(_slot_lines(board,net_num,report,duplicate_object_ids));lines.extend(_region_lines(board,net_num,report,duplicate_object_ids));lines.extend(_track_lines(board,net_num,report,duplicate_object_ids));lines.extend(_route_lines(board,report,duplicate_object_ids));lines.extend(_via_span_lines(board,net_num,report,via_exportable,via_omitted,via_problems))
+    lines.extend(_drill_lines(board,report,duplicate_object_ids,via_export_ids));lines.extend(_x2_component_lines(board,net_num,report,x2_groups));lines.extend(_pad_lines(board,net_num,report,duplicate_object_ids,grouped_pad_ids));lines.extend(_slot_lines(board,net_num,report,duplicate_object_ids));lines.extend(_region_lines(board,net_num,report,duplicate_object_ids));lines.extend(_track_lines(board,net_num,report,duplicate_object_ids));lines.extend(_route_lines(board,net_num,report,duplicate_object_ids));lines.extend(_via_span_lines(board,net_num,report,via_exportable,via_omitted,via_problems))
     lines.extend(_outline_lines(board,report,duplicate_object_ids))
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
 def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]
