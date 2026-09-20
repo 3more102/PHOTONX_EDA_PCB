@@ -155,8 +155,11 @@ def _filename_layer(path: Path) -> str | None:
 
 
 def infer_layer(path: str | Path, text: str | None = None) -> str | None:
-    """Infer a KiCad-like layer from X2 metadata first, then filename hints."""
-    x2 = _x2_file_function_layer(text or "")
+    """Infer a layer unless immutable X2 FileFunction metadata is ambiguous."""
+    source = text or ""
+    if len(x2_file_function_declarations(source)) > 1:
+        return None
+    x2 = _x2_file_function_layer(source)
     if x2 is not None:
         return x2
     return _filename_layer(Path(path))
