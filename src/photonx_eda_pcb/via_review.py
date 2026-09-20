@@ -27,6 +27,8 @@ class ViaReviewDescriptor:
 
 
 def _finite_float(value) -> float | None:
+    if isinstance(value, bool):
+        return None
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -36,10 +38,11 @@ def _finite_float(value) -> float | None:
 
 def _common_net_id(board, pad_ids: tuple[str, ...]) -> str | None:
     pads = {str(pad.id): pad for pad in getattr(board, "pads", ())}
+    if any(pad_id not in pads for pad_id in pad_ids):
+        return None
     nets = {
         getattr(pads[pad_id], "net_id", None)
         for pad_id in pad_ids
-        if pad_id in pads
     }
     if len(nets) != 1:
         return None
