@@ -6,6 +6,7 @@ from tkinter import ttk
 
 from ..pipeline import reconstruct
 from ..review_queue import build_board_review_queue
+from ..via_review import via_review_summary
 from .canvas import BoardCanvas
 from .inspector import Inspector
 from .state import ViewState
@@ -119,11 +120,16 @@ def launch(input_dir: str | Path) -> None:
 
     review.bind("<<TreeviewSelect>>", inspect_review)
 
+    via_summary = via_review_summary(result.board)
     status = (
         f"validation={'PASS' if result.validation.ok else 'FAIL'} | "
         f"errors={len(result.validation.errors)} | "
         f"warnings={len(result.validation.warnings)} | "
-        f"review={len(review_queue.open_items())}"
+        f"review={len(review_queue.open_items())} | "
+        f"via_exportable={via_summary['exportable']} | "
+        f"via_omitted={via_summary['omitted']} | "
+        f"via_unproven={via_summary['unproven']} | "
+        f"via_invalid={via_summary['invalid']}"
     )
     ttk.Label(side, text=status).grid(row=2, column=0, sticky="ew")
 
