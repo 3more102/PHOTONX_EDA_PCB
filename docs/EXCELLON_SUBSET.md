@@ -19,7 +19,7 @@ PhotonX recognizes the bounded KiCad-style X2-compatible structured comments use
 - `; #@! TA.AperFunction,Plated|NonPlated,PTH|NPTH|Blind|Buried,ViaDrill|ComponentDrill`
 - `; #@! TD` to clear the modal aperture-function evidence.
 
-The file-level copper-layer ordinals are preserved on each point drill as normalized raw evidence in `x2_layer_span` plus `x2_span_kind`. Layer numbers are one-based and a span must reference two distinct copper layers. Reversed from/to order is normalized because the Gerber FileFunction definition treats that order as insignificant. The canonical `layer_span` and `span_proven` fields are populated only after those ordinals are safely mapped onto the reconstructed copper stack.
+The file-level copper-layer ordinals are preserved on point drills, G85 slots, and routed paths as normalized raw evidence in `x2_layer_span` plus `x2_span_kind`. Layer numbers are one-based and a span must reference two distinct copper layers. Reversed from/to order is normalized because the Gerber FileFunction definition treats that order as insignificant. The canonical `layer_span` and `span_proven` fields are populated only after those ordinals are safely mapped onto the reconstructed copper stack.
 
 A specific file-level `Plated` or `NonPlated` claim applies when a tool has no stronger tool-level claim. `MixedPlating` deliberately resolves to `unknown` unless a tool-level `TA.AperFunction` proves the tool's plating. Conflicting specific file/tool claims, conflicting file claims, and malformed recognized plating attributes fail closed; permissive mode emits `INVALID_EXCELLON_X2_PLATING` and suppresses file geometry.
 
@@ -28,6 +28,6 @@ The resolved plating state is carried into drill hits, G85 slots, and routed pat
 
 ## X2 layer-span resolution
 
-Explicit drill spans are not converted directly into KiCad layer names unless the copper stack order is itself ordinal-addressable. The preferred mapping source is a conflict-free Gerber X2 copper stackup with a declared bottom-layer ordinal. For legacy two-layer packages, `PTH/NPTH L1..L2` may map to `F.Cu..B.Cu` when those are the only reconstructed copper layers.
+Explicit drill, slot, and routed-path spans are not converted directly into KiCad layer names unless the copper stack order is itself ordinal-addressable. The preferred mapping source is a conflict-free Gerber X2 copper stackup with a declared bottom-layer ordinal. For legacy two-layer packages, `PTH/NPTH L1..L2` may map to `F.Cu..B.Cu` when those are the only reconstructed copper layers.
 
-Blind or buried spans never use the two-layer shortcut. If an explicit span exceeds the declared stackup or cannot be mapped safely, PhotonX suppresses vertical connectivity for that drill and emits `X2_DRILL_SPAN_UNRESOLVED`; it does not fall back to a wider geometry-derived via span.
+Blind or buried spans never use the two-layer shortcut. If an explicit point-drill span exceeds the declared stackup or cannot be mapped safely, PhotonX suppresses vertical connectivity and emits `X2_DRILL_SPAN_UNRESOLVED`; it does not fall back to a wider geometry-derived via span. G85 slots and routed paths use the same ordinal mapper and retain `layer_span=None`/`span_proven=False` with `X2_SLOT_SPAN_UNRESOLVED` or `X2_ROUTE_SPAN_UNRESOLVED` when their explicit X2 spans cannot be mapped.

@@ -497,11 +497,25 @@ class ExcellonParser:
         if self.tool is None or self.tool not in self.tools:raise ParseError(f"{p}:{line_no}: route before valid tool selection")
         rid=stable_id("route",p.name,pts,self.tool,self.tools[self.tool])
         plating,plating_evidence=self._plating_for_tool(self.tool)
+        x2_layer_span,x2_span_proven,x2_span_kind,span_evidence=self._span_for_tool(self.tool)
+        if not x2_span_proven:
+            x2_layer_span=None
         prov=Provenance(
             list(self._route_sources),
-            [*self._route_evidence,*plating_evidence],
+            [*self._route_evidence,*plating_evidence,*span_evidence],
         )
-        out.routes.append(RoutedPath(rid,pts,self.tools[self.tool],plating,f"T{self.tool}",prov))
+        out.routes.append(
+            RoutedPath(
+                rid,
+                pts,
+                self.tools[self.tool],
+                plating,
+                f"T{self.tool}",
+                prov,
+                x2_layer_span=x2_layer_span,
+                x2_span_kind=x2_span_kind,
+            )
+        )
         self._route_sources=[];self._route_evidence=[]
 
     def parse(self,path:str|Path)->ExcellonResult:
@@ -594,8 +608,24 @@ class ExcellonParser:
                     src=SourceRef(str(p),line_no,line)
                 slot_id=stable_id("slot",p.name,line_no,x1,y1,x2,y2,self.tool)
                 plating,plating_evidence=self._plating_for_tool(self.tool)
+                x2_layer_span,x2_span_proven,x2_span_kind,span_evidence=self._span_for_tool(self.tool)
+                if not x2_span_proven:
+                    x2_layer_span=None
                 evidence.extend(plating_evidence)
-                out.slots.append(SlotFeature(slot_id,(x1,y1),(x2,y2),self.tools[self.tool],plating,f"T{self.tool}",Provenance([src],evidence)))
+                evidence.extend(span_evidence)
+                out.slots.append(
+                    SlotFeature(
+                        slot_id,
+                        (x1,y1),
+                        (x2,y2),
+                        self.tools[self.tool],
+                        plating,
+                        f"T{self.tool}",
+                        Provenance([src],evidence),
+                        x2_layer_span=x2_layer_span,
+                        x2_span_kind=x2_span_kind,
+                    )
+                )
                 self.current=Point(x2,y2);continue
             if line.startswith(("G02","G03")):
                 self._route_arc(p,out,line_no,line);continue

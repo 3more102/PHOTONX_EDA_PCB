@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import re
 
@@ -13,6 +13,7 @@ from .parsers import discover_manufacturing_files, GerberRS274XParser, ExcellonP
 from .stackup import infer_stackup
 from .validation import ValidationReport, validate_board
 from .via_span import resolve_via_spans
+from .x2_span import mapped_x2_span_layers
 
 
 _X2_COPPER_ORDINAL = re.compile(r"^L([1-9][0-9]*)$", re.IGNORECASE)
@@ -239,6 +240,69 @@ def _apply_x2_copper_stackup_evidence(board: BoardModel, files) -> None:
     board.metadata["x2_copper_stackup"] = metadata
 
 
+def _x2_span_source(feature):
+    provenance = getattr(feature, "provenance", None)
+    for evidence in getattr(provenance, "evidence", ()):
+        if getattr(evidence, "kind", None) != "excellon_x2_file_span":
+            continue
+        source = getattr(evidence, "source", None)
+        if source is not None:
+            return source
+    sources = getattr(provenance, "sources", ())
+    return sources[0] if sources else None
+
+
+def _resolve_explicit_x2_feature_spans(board: BoardModel, stackup) -> None:
+    families = (
+        ("slots", "slot", "X2_SLOT_SPAN_UNRESOLVED"),
+        ("routes", "route", "X2_ROUTE_SPAN_UNRESOLVED"),
+    )
+    default_path = str(board.metadata.get("source_input", ""))
+
+    for collection_name, feature_kind, diagnostic_code in families:
+        resolved = []
+        for feature in getattr(board, collection_name, ()):
+            mapped_span, span_issue = mapped_x2_span_layers(
+                board,
+                stackup,
+                feature,
+            )
+            if mapped_span is None:
+                resolved.append(feature)
+                continue
+
+            if span_issue is not None or len(mapped_span) < 2:
+                resolved.append(
+                    replace(
+                        feature,
+                        layer_span=None,
+                        span_proven=False,
+                    )
+                )
+                source = _x2_span_source(feature)
+                detail = span_issue or "mapped X2 span contains fewer than two copper layers"
+                board.diagnostics.append(
+                    ParseDiagnostic(
+                        "warning",
+                        diagnostic_code,
+                        f"{feature.id}: X2 span unresolved: {detail}",
+                        default_path if source is None else str(source.path),
+                        None if source is None else source.line,
+                    )
+                )
+                continue
+
+            resolved.append(
+                replace(
+                    feature,
+                    layer_span=(mapped_span[0], mapped_span[-1]),
+                    span_proven=True,
+                )
+            )
+
+        setattr(board, collection_name, resolved)
+
+
 def _report_unresolved_x2_drill_spans(board: BoardModel, spans) -> None:
     source_path = str(board.metadata.get("source_input", ""))
     for span in spans:
@@ -364,6 +428,7 @@ def reconstruct(
         attach_drills(board, cfg.drill_attach_tolerance_mm)
 
         stackup = infer_stackup(board)
+        _resolve_explicit_x2_feature_spans(board, stackup)
         via_spans = resolve_via_spans(
             board,
             stackup,
