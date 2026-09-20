@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added exact recovered-pad geometry verification to KiCad connectivity round-trip auditing. Export and readback now share one pad export descriptor and compare footprint/pad placement, layers, type, shape, size, angle, drill shape/size/offset, UUIDs, and net binding; malformed pad geometry is fail-visible instead of raising an unchecked readback error.
+
 - Extended deterministic KiCad identity verification into recovered pad/slot child pads. The KiCad reader now preserves pad UUIDs, and connectivity round-trip checks compare both footprint UUIDs and child-pad UUIDs so nested identity drift cannot pass when geometry and net bindings remain unchanged.
 
 - Made proven plated via-span loss explicit across KiCad export reporting and round-trip source-equivalence checks. The exporter now records `KICAD_PROVEN_VIA_SPAN_UNSUPPORTED`, `kicad_omissions.json` includes `omitted_via_spans`, and connectivity audits expose `omitted_proven_via_span_drill_ids`. PhotonX still does not invent KiCad annular via geometry from drill/span evidence alone.

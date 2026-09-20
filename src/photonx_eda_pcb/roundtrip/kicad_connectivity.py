@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import proven_via_span_omissions, slot_export_status
+from ..exporters.kicad_policy import pad_export_descriptor, proven_via_span_omissions, slot_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -313,6 +313,75 @@ def _observed_vias(readback, net_lookup, issues):
     return out
 
 
+def _pad_geometry_item(
+    footprint_at,
+    footprint_angle,
+    footprint_layer,
+    pad_number,
+    pad_kind,
+    pad_shape,
+    pad_at,
+    pad_angle,
+    pad_size,
+    drill_shape,
+    drill_size,
+    drill_offset,
+    layers,
+):
+    return {
+        "footprint_at": list(_point(footprint_at)),
+        "footprint_angle": _r(footprint_angle),
+        "footprint_layer": str(footprint_layer),
+        "number": str(pad_number),
+        "kind": str(pad_kind),
+        "shape": str(pad_shape),
+        "pad_at": list(_point(pad_at)),
+        "pad_angle": _r(pad_angle),
+        "size": list(_point(pad_size)),
+        "drill_shape": None if drill_shape is None else str(drill_shape),
+        "drill_size": None if drill_size is None else list(_point(drill_size)),
+        "drill_offset": list(_point(drill_offset)),
+        "layers": sorted(str(layer) for layer in layers),
+    }
+
+
+def _expected_pad_geometry(pad):
+    descriptor, _ref_layer, _warning = pad_export_descriptor(pad)
+    return _pad_geometry_item(
+        (pad.center.x, pad.center.y),
+        0.0,
+        descriptor["footprint_layer"],
+        descriptor["number"],
+        descriptor["kind"],
+        descriptor["shape"],
+        descriptor["pad_at"],
+        descriptor["pad_angle"],
+        descriptor["size"],
+        descriptor["drill_shape"],
+        descriptor["drill_size"],
+        descriptor["drill_offset"],
+        descriptor["layers"],
+    )
+
+
+def _observed_pad_geometry(footprint, pad):
+    return _pad_geometry_item(
+        footprint.get("at"),
+        footprint.get("angle", 0.0),
+        footprint.get("layer"),
+        pad.get("number"),
+        pad.get("kind"),
+        pad.get("shape"),
+        pad.get("at"),
+        pad.get("angle", 0.0),
+        pad.get("size"),
+        pad.get("drill_shape"),
+        pad.get("drill_size"),
+        pad.get("drill_offset", (0.0, 0.0)),
+        pad.get("layers", ()),
+    )
+
+
 def _expected_pads(board):
     out = []
     unresolved = []
@@ -326,6 +395,7 @@ def _expected_pads(board):
                 "id": str(pad.id),
                 "uuid": photonx_uuid("fp:" + str(pad.id)),
                 "pad_uuid": photonx_uuid("pad:" + str(pad.id)),
+                "geometry": _expected_pad_geometry(pad),
                 "net": binding,
             }
         )
@@ -357,6 +427,18 @@ def _observed_pads(readback, net_lookup, issues):
             )
             continue
 
+        try:
+            geometry = _observed_pad_geometry(footprint, pads[0])
+        except (TypeError, ValueError, IndexError, KeyError) as exc:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_INVALID_PAD_GEOMETRY",
+                    "pad_id": str(reference),
+                    "detail": str(exc),
+                }
+            )
+            continue
+
         binding = _binding_from_code(
             pads[0].get("net"),
             net_lookup,
@@ -376,6 +458,7 @@ def _observed_pads(readback, net_lookup, issues):
                 "id": str(reference),
                 "uuid": footprint.get("uuid"),
                 "pad_uuid": pads[0].get("uuid"),
+                "geometry": geometry,
                 "net": binding,
             }
         )
@@ -571,7 +654,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     and recovered slots. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
-    object identity for emitted tracks, recovered pad/slot footprints and their child pads, regions, and slots.
+    object identity for emitted tracks, recovered pad/slot footprints and their child pads, regions, and slots. Recovered-pad emitted geometry is compared exactly as read back.
     Without a report,
     the legacy fallback can still validate net/track/pad connectivity, but
     it fails closed when region or slot objects are present because their

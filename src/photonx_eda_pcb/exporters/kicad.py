@@ -6,7 +6,7 @@ from ..models import BoardModel
 from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
-from .kicad_policy import pad_shape_name,slot_geometry,slot_export_status,proven_via_span_omissions
+from .kicad_policy import pad_export_descriptor,pad_shape_name,slot_geometry,slot_export_status,proven_via_span_omissions
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
@@ -50,27 +50,16 @@ def _copper_layer_lines(board):
         '    (31 "B.Cu" signal)',
     ]
 
-def _pad_export_layers(pad):
-    layer=str(pad.layer)
-    ref_layer="B.SilkS" if layer=="B.Cu" else "F.SilkS"
-    if pad.drill:
-        return '"*.Cu" "*.Mask"',ref_layer,None
-    if layer=="F.Cu":
-        return '"F.Cu" "F.Paste" "F.Mask"',ref_layer,None
-    if layer=="B.Cu":
-        return '"B.Cu" "B.Paste" "B.Mask"',ref_layer,None
-    return _q(layer),ref_layer,(
-        "SMD pad is on a non-surface copper layer; paste/mask layers were not invented"
-    )
 
 def _pad_lines(board,net_num,report):
     lines=[]
     for pad in board.pads:
         n,net_name,net_known=_net_binding(board,net_num,pad.net_id,pad.id,report)
-        shape=pad_shape_name(pad.shape);pad_type="thru_hole" if pad.drill else "smd"
-        layers,ref_layer,layer_warning=_pad_export_layers(pad)
-        angle=float(getattr(pad,"rotation_deg",getattr(pad,"rotation",0.0)) or 0.0)
-        lines += [f'  (footprint "PHOTONX:RecoveredPad" (layer {_q(pad.layer)}) (uuid {photonx_uuid("fp:"+pad.id)})',
+        descriptor,ref_layer,layer_warning=pad_export_descriptor(pad)
+        shape=descriptor["shape"];pad_type=descriptor["kind"]
+        layers=" ".join(_q(x) for x in descriptor["layers"])
+        angle=descriptor["pad_angle"]
+        lines += [f'  (footprint "PHOTONX:RecoveredPad" (layer {_q(descriptor["footprint_layer"])}) (uuid {photonx_uuid("fp:"+pad.id)})',
                   f'    (at {pad.center.x:.6f} {pad.center.y:.6f})',
                   f'    (property "Reference" {_q(pad.id)} (at 0 -2 0) (layer {_q(ref_layer)}) hide (uuid {photonx_uuid("ref:"+pad.id)}))']
         drill=f' (drill {pad.drill:.6f})' if pad.drill else ""

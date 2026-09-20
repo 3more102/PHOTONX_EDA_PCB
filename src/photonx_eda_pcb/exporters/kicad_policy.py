@@ -5,6 +5,41 @@ def pad_shape_name(shape):
     if s=="O":return "oval"
     if s=="R":return "rect"
     return "rect"
+def pad_export_descriptor(pad):
+    layer=str(pad.layer)
+    ref_layer="B.SilkS" if layer=="B.Cu" else "F.SilkS"
+    drill=float(pad.drill) if pad.drill else None
+    if drill is not None:
+        layers=("*.Cu","*.Mask")
+        warning=None
+        kind="thru_hole"
+    elif layer=="F.Cu":
+        layers=("F.Cu","F.Paste","F.Mask")
+        warning=None
+        kind="smd"
+    elif layer=="B.Cu":
+        layers=("B.Cu","B.Paste","B.Mask")
+        warning=None
+        kind="smd"
+    else:
+        layers=(layer,)
+        warning="SMD pad is on a non-surface copper layer; paste/mask layers were not invented"
+        kind="smd"
+    angle=float(getattr(pad,"rotation_deg",getattr(pad,"rotation",0.0)) or 0.0)
+    return {
+        "footprint_layer":layer,
+        "number":"1",
+        "kind":kind,
+        "shape":pad_shape_name(pad.shape),
+        "pad_at":(0.0,0.0),
+        "pad_angle":angle,
+        "size":(float(pad.size_x),float(pad.size_y)),
+        "drill_shape":"round" if drill is not None else None,
+        "drill_size":(drill,drill) if drill is not None else None,
+        "drill_offset":(0.0,0.0),
+        "layers":layers,
+    },ref_layer,warning
+
 def slot_geometry(slot):return slot_geometry_descriptor(slot)
 def slot_export_status(slot):
     plating=str(getattr(slot,"plated","unknown")).lower().replace("_","-")
