@@ -113,9 +113,27 @@ class ExcellonParser:
 
         match=_X2_FILE_FUNCTION.fullmatch(command)
         if match:
-            plating=self._x2_plating_name(match.group(1))
+            plating_token=match.group(1)
+            plating=self._x2_plating_name(plating_token)
             declared_span=tuple(sorted((int(match.group(2)),int(match.group(3)))))
             declared_kind=match.group(4).lower()
+            if (
+                (plating_token=="PLATED" and declared_kind=="npth")
+                or (
+                    plating_token=="NONPLATED"
+                    and declared_kind=="pth"
+                )
+            ):
+                self._x2_fail(
+                    p,
+                    out,
+                    line_no,
+                    (
+                        "Excellon X2 FileFunction plating/span-kind "
+                        f"contradiction: {plating_token}/{declared_kind.upper()}"
+                    ),
+                )
+                return
             if declared_span[0]==declared_span[1]:
                 self._x2_fail(
                     p,
