@@ -117,3 +117,45 @@ def test_plated_route_requires_board_evidence_context():
     assert readiness.exportable == ()
     assert readiness.omitted == ("ROUTE_PTH",)
     assert readiness.reasons["ROUTE_PTH"] == "KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN"
+
+def test_plated_route_on_undeclared_copper_layers_fails_closed():
+    route = RoutedPath(
+        "ROUTE_BAD_LAYER",
+        ((0.0, 0.0), (4.0, 0.0)),
+        1.0,
+        plated="plated",
+    )
+    board = BoardModel(
+        pads=[
+            PadCandidate(
+                "TOP",
+                Point(2.0, 0.0),
+                6.0,
+                2.0,
+                "O",
+                "Top",
+                net_id="N1",
+            ),
+            PadCandidate(
+                "BOT",
+                Point(2.0, 0.0),
+                6.0,
+                2.0,
+                "O",
+                "Bottom",
+                net_id="N1",
+            ),
+        ],
+        routes=[route],
+        nets=[NetGroup("N1", ["TOP", "BOT"], 0.99, "SIG")],
+    )
+
+    readiness = assess_route_export_readiness(board.routes, board)
+
+    assert readiness.exportable == ()
+    assert readiness.omitted == ("ROUTE_BAD_LAYER",)
+    assert (
+        readiness.reasons["ROUTE_BAD_LAYER"]
+        == "KICAD_PLATED_ROUTE_PADSTACK_UNPROVEN"
+    )
+
