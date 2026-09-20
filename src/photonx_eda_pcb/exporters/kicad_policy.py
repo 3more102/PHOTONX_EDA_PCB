@@ -351,6 +351,7 @@ def x2_component_export_plan(board):
                     "pad_id": row["pad_id"],
                     "number": row["number"],
                     "function": row["function"],
+                    "net_id": getattr(pad, "net_id", None),
                     "at": (
                         float(pad.center.x) - origin[0],
                         float(pad.center.y) - origin[1],
