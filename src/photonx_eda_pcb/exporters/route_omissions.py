@@ -2,7 +2,10 @@ from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
 
 
 def route_omission_manifest(board):
-    readiness = assess_route_export_readiness(getattr(board, "routes", ()))
+    readiness = assess_route_export_readiness(
+        getattr(board, "routes", ()),
+        board,
+    )
     return {
         "exported_routes": list(readiness.exportable),
         "omitted_routes": list(readiness.omitted),
