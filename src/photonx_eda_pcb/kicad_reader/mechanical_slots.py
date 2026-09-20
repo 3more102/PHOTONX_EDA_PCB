@@ -22,6 +22,8 @@ def _slot_from_pad(fp,index,pad):
 def read_mechanical_slots(footprints):
     out=[]
     for fi,fp in enumerate(footprints):
+        if fp.get("name") == "PHOTONX:RecoveredNPTHRoute":
+            continue
         for pi,pad in enumerate(fp.get("pads",())):
             slot=_slot_from_pad(fp,f"{fi}:{pi}",pad)
             if slot is not None:out.append(slot)
