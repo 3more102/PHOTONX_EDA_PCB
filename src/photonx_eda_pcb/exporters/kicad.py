@@ -170,10 +170,19 @@ def _drill_lines(board, report, duplicate_object_ids=(), via_export_ids=()):
     return lines
 
 
-def _pad_lines(board,net_num,report,duplicate_object_ids=()):
+def _pad_lines(
+    board,
+    net_num,
+    report,
+    duplicate_object_ids=(),
+    represented_via_pad_ids=(),
+):
     lines=[]
     duplicate_object_ids=set(duplicate_object_ids)
+    represented_via_pad_ids=set(represented_via_pad_ids)
     for pad in board.pads:
+        if pad.id in represented_via_pad_ids:
+            continue
         if pad.id in duplicate_object_ids:
             report.skipped_pads+=1
             if pad.id not in report.skipped_pad_ids:
@@ -554,6 +563,12 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
     duplicate_object_ids=kicad_duplicate_object_ids(board)
     via_exportable,via_omitted,via_problems=proven_via_span_export_plan(board)
     via_export_ids={item["drill_id"] for item in via_exportable}
+    represented_via_pad_ids={
+        pad_id
+        for item in via_exportable
+        for pad_id in item.get("pad_ids",())
+    }
+    report.represented_via_pad_ids.extend(sorted(represented_via_pad_ids))
     net_num={row["id"]:row["code"] for row in net_rows}
     for object_id in duplicate_object_ids:
         report.issues.append(KicadExportIssue(
@@ -580,7 +595,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
         '  (net 0 "")',
     ]
     for row in net_rows:lines.append(f'  (net {row["code"]} {_q(row["name"])})')
-    lines.extend(_drill_lines(board,report,duplicate_object_ids,via_export_ids));lines.extend(_pad_lines(board,net_num,report,duplicate_object_ids));lines.extend(_slot_lines(board,net_num,report,duplicate_object_ids));lines.extend(_region_lines(board,net_num,report,duplicate_object_ids));lines.extend(_track_lines(board,net_num,report,duplicate_object_ids));lines.extend(_route_lines(board,report,duplicate_object_ids));lines.extend(_via_span_lines(board,net_num,report,via_exportable,via_omitted,via_problems))
+    lines.extend(_drill_lines(board,report,duplicate_object_ids,via_export_ids));lines.extend(_pad_lines(board,net_num,report,duplicate_object_ids,represented_via_pad_ids));lines.extend(_slot_lines(board,net_num,report,duplicate_object_ids));lines.extend(_region_lines(board,net_num,report,duplicate_object_ids));lines.extend(_track_lines(board,net_num,report,duplicate_object_ids));lines.extend(_route_lines(board,report,duplicate_object_ids));lines.extend(_via_span_lines(board,net_num,report,via_exportable,via_omitted,via_problems))
     lines.extend(_outline_lines(board,report,duplicate_object_ids))
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
 def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]
