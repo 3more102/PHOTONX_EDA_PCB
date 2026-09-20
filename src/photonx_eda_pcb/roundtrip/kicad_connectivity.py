@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from collections import Counter
 from pathlib import Path
 
@@ -12,6 +13,13 @@ from ..plated_slot_inference import infer_plated_slot_padstack
 _RECOVERED_PAD_FOOTPRINT = "PHOTONX:RecoveredPad"
 _RECOVERED_NPTH_SLOT = "PHOTONX:RecoveredNPTHSlot"
 _RECOVERED_PLATED_SLOT = "PHOTONX:RecoveredPlatedSlot"
+_PHOTONX_UUID_PREFIX = "https://photonx.local/"
+
+
+def _photonx_uuid(name):
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, _PHOTONX_UUID_PREFIX + str(name)))
+
+
 
 
 def _r(value):
@@ -199,7 +207,7 @@ def _reported_track_sets(board, export_report, issues):
     )
 
 
-def _track_item(start, end, width, layer, binding):
+def _track_item(start, end, width, layer, binding, object_uuid):
     a, b = sorted((_point(start), _point(end)))
     return {
         "start": list(a),
@@ -207,6 +215,7 @@ def _track_item(start, end, width, layer, binding):
         "width": _r(width),
         "layer": str(layer),
         "net": binding,
+        "uuid": None if object_uuid is None else str(object_uuid),
     }
 
 
@@ -232,6 +241,7 @@ def _expected_tracks(board, exported_track_ids, issues):
                 track.width,
                 track.layer,
                 binding,
+                _photonx_uuid("track:" + str(track.id)),
             )
         )
     return out
@@ -255,6 +265,7 @@ def _observed_tracks(readback, net_lookup, issues):
                     segment.get("width"),
                     segment.get("layer"),
                     binding,
+                    segment.get("uuid"),
                 )
             )
         except (TypeError, ValueError, IndexError, KeyError) as exc:
@@ -317,7 +328,13 @@ def _expected_pads(board):
         if binding is None:
             unresolved.append(pad.id)
             binding = {"code": 0, "name": ""}
-        out.append({"id": str(pad.id), "net": binding})
+        out.append(
+            {
+                "id": str(pad.id),
+                "uuid": _photonx_uuid("fp:" + str(pad.id)),
+                "net": binding,
+            }
+        )
     return out, sorted(unresolved)
 
 
@@ -360,7 +377,13 @@ def _observed_pads(readback, net_lookup, issues):
             "pad",
             reference,
         )
-        out.append({"id": str(reference), "net": binding})
+        out.append(
+            {
+                "id": str(reference),
+                "uuid": footprint.get("uuid"),
+                "net": binding,
+            }
+        )
     return out
 
 
@@ -379,7 +402,13 @@ def _expected_regions(board, exported_ids, issues):
                 }
             )
             continue
-        out.append({"id": str(region.id), "net": binding})
+        out.append(
+            {
+                "id": str(region.id),
+                "uuid": _photonx_uuid("region:" + str(region.id)),
+                "net": binding,
+            }
+        )
     return out
 
 
@@ -411,7 +440,13 @@ def _observed_regions(readback, net_lookup, issues):
             "zone",
             region_id,
         )
-        out.append({"id": region_id, "net": binding})
+        out.append(
+            {
+                "id": region_id,
+                "uuid": zone.get("uuid"),
+                "net": binding,
+            }
+        )
     return out
 
 
@@ -427,6 +462,7 @@ def _expected_slots(board, exported_ids, issues):
             out.append(
                 {
                     "id": str(slot.id),
+                    "uuid": _photonx_uuid("slot-fp:" + str(slot.id)),
                     "kind": "npth",
                     "net": {"code": 0, "name": ""},
                 }
@@ -458,7 +494,14 @@ def _expected_slots(board, exported_ids, issues):
         if binding is None:
             unresolved.append(slot.id)
             binding = {"code": 0, "name": ""}
-        out.append({"id": str(slot.id), "kind": "plated", "net": binding})
+        out.append(
+            {
+                "id": str(slot.id),
+                "uuid": _photonx_uuid("slot-fp:" + str(slot.id)),
+                "kind": "plated",
+                "net": binding,
+            }
+        )
     return out, sorted(unresolved)
 
 
@@ -510,6 +553,7 @@ def _observed_slots(readback, net_lookup, issues):
         out.append(
             {
                 "id": str(reference),
+                "uuid": footprint.get("uuid"),
                 "kind": kind,
                 "net": binding,
             }
@@ -526,7 +570,9 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     With an export report, the audit covers the net table plus tracks,
     rejects unexpected KiCad vias, and compares recovered pads, copper regions,
-    and recovered slots. Without a report,
+    and recovered slots. Deterministic PhotonX UUIDs are part of the supported
+    object identity for emitted tracks, recovered pads, regions, and slots.
+    Without a report,
     the legacy fallback can still validate net/track/pad connectivity, but
     it fails closed when region or slot objects are present because their
     omission decisions cannot be reconstructed as reliably as the report.

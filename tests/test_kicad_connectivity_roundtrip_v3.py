@@ -113,6 +113,65 @@ def test_connectivity_roundtrip_detects_unexpected_via(tmp_path):
     }
 
 
+def test_connectivity_roundtrip_detects_track_uuid_drift(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["segments"][0]["uuid"] = "00000000-0000-0000-0000-000000000000"
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["tracks"]["equal"] is False
+    assert audit["tracks"]["missing"][0]["uuid"] != audit["tracks"]["unexpected"][0]["uuid"]
+
+
+@pytest.mark.parametrize(
+    ("family", "comparison_key"),
+    [
+        ("pad", "pads"),
+        ("region", "regions"),
+        ("slot", "slots"),
+    ],
+)
+def test_connectivity_roundtrip_detects_recovered_object_uuid_drift(
+    tmp_path,
+    family,
+    comparison_key,
+):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+
+    if family == "pad":
+        target = next(
+            footprint
+            for footprint in readback["footprints"]
+            if footprint["name"] == "PHOTONX:RecoveredPad"
+        )
+    elif family == "region":
+        target = readback["zones"][0]
+    else:
+        target = next(
+            footprint
+            for footprint in readback["footprints"]
+            if footprint["name"] == "PHOTONX:RecoveredNPTHSlot"
+        )
+
+    target["uuid"] = "00000000-0000-0000-0000-000000000000"
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit[comparison_key]["equal"] is False
+    assert audit[comparison_key]["missing"][0]["uuid"] != audit[comparison_key]["unexpected"][0]["uuid"]
+
+
 def test_connectivity_roundtrip_detects_zone_net_drift(tmp_path):
     board = _board_with_all_connectivity_families()
     path, report = export_kicad_with_report(

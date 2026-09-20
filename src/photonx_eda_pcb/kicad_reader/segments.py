@@ -25,6 +25,7 @@ def read_segments(root):
         width = child(segment, "width")
         layer = child(segment, "layer")
         net = child(segment, "net")
+        uuid = child(segment, "uuid")
         out.append(
             {
                 "start": _xy(start),
@@ -32,6 +33,7 @@ def read_segments(root):
                 "width": float(width[1]),
                 "layer": str(layer[1]),
                 "net": _net_ordinal(net),
+                "uuid": str(uuid[1]) if uuid and len(uuid) >= 2 else None,
             }
         )
     return out

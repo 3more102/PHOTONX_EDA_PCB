@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Strengthened KiCad connectivity round-trip identity checks: track segment UUIDs are now read back, and deterministic PhotonX UUIDs are compared for tracks, recovered-pad footprints, copper regions, and recovered-slot footprints in addition to geometry/net semantics. UUID drift is therefore fail-visible even when electrical geometry is unchanged.
+
 - Hardened KiCad connectivity round-trip auditing against unexpected `via` objects. The reader now rejects non-integer via net ordinals fail-closed, and the audit treats any via in a generated board as an explicit round-trip difference until PhotonX has a source via export contract with proven net/layer-span semantics.
 
 - Added a fail-visible, omission-aware KiCad connectivity round-trip audit for `photonx reconstruct --kicad`. The CLI now re-reads the generated board and checks the exact net table plus emitted track, recovered-pad, copper-region, and recovered-slot electrical bindings, including embedded net-name consistency and preserved PHOTONX identities. The audit distinguishes policy-preserving `roundtrip_equal` from `source_connectivity_complete` and full `source_equivalent`, exposing skipped tracks/regions/slots and unresolved pad/slot net claims without changing reconstruction exit-code semantics.
