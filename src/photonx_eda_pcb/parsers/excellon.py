@@ -772,7 +772,9 @@ class ExcellonParser:
                 pt=Point(x,y)
                 src=SourceRef(str(p),line_no,line);obj_id=stable_id("drill",p.name,line_no,pt.x,pt.y,self.tool)
                 plating,plating_evidence=self._plating_for_tool(self.tool)
-                layer_span,span_proven,span_kind,span_evidence=self._span_for_tool(self.tool)
+                x2_layer_span,x2_span_proven,x2_span_kind,span_evidence=self._span_for_tool(self.tool)
+                if not x2_span_proven:
+                    x2_layer_span=None
                 out.drills.append(
                     DrillHit(
                         obj_id,
@@ -784,9 +786,8 @@ class ExcellonParser:
                             [src],
                             [*plating_evidence,*span_evidence],
                         ),
-                        layer_span=layer_span,
-                        span_proven=span_proven,
-                        span_kind=span_kind,
+                        x2_layer_span=x2_layer_span,
+                        x2_span_kind=x2_span_kind,
                     )
                 )
                 self.current=pt;continue
