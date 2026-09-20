@@ -78,6 +78,7 @@ def validate_omission_manifest(data):
     skipped_drills=list(data.get("skipped_drills",()))
     exported_pads=list(data.get("exported_pads",()))
     skipped_pads=list(data.get("skipped_pads",()))
+    represented_via_pads=list(data.get("represented_via_pads",()))
     skipped_slots=list(data.get("skipped_slots",()))
     exported_regions=list(data.get("exported_regions",()))
     skipped_regions=list(data.get("skipped_regions",()))
@@ -96,6 +97,7 @@ def validate_omission_manifest(data):
         ("OMISSION_SKIPPED_DRILL_DUPLICATE_ID",skipped_drills),
         ("OMISSION_EXPORTED_PAD_DUPLICATE_ID",exported_pads),
         ("OMISSION_SKIPPED_PAD_DUPLICATE_ID",skipped_pads),
+        ("OMISSION_REPRESENTED_VIA_PAD_DUPLICATE_ID",represented_via_pads),
         ("OMISSION_SKIPPED_SLOT_DUPLICATE_ID",skipped_slots),
         ("OMISSION_EXPORTED_REGION_DUPLICATE_ID",exported_regions),
         ("OMISSION_SKIPPED_REGION_DUPLICATE_ID",skipped_regions),
@@ -114,6 +116,8 @@ def validate_omission_manifest(data):
         ("OMISSION_DRILL_BOTH_EXPORTED_AND_SKIPPED",exported_drills,skipped_drills),
         ("OMISSION_OUTLINE_BOTH_EXPORTED_AND_SKIPPED",exported_outline,skipped_outline),
         ("OMISSION_PAD_BOTH_EXPORTED_AND_SKIPPED",exported_pads,skipped_pads),
+        ("OMISSION_PAD_BOTH_EXPORTED_AND_VIA_REPRESENTED",exported_pads,represented_via_pads),
+        ("OMISSION_PAD_BOTH_SKIPPED_AND_VIA_REPRESENTED",skipped_pads,represented_via_pads),
         ("OMISSION_REGION_BOTH_EXPORTED_AND_SKIPPED",exported_regions,skipped_regions),
         ("OMISSION_TRACK_BOTH_EXPORTED_AND_SKIPPED",exported_tracks,skipped_tracks),
         ("OMISSION_ROUTE_BOTH_EXPORTED_AND_SKIPPED",exported_routes,omitted_routes),
