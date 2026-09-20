@@ -6,7 +6,7 @@ from ..models import BoardModel
 from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
-from .kicad_policy import KICAD_BOARD_FORMAT_VERSION,KICAD_GENERATOR,KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,kicad_duplicate_object_ids,kicad_net_export_rows,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,track_export_status,proven_via_span_omissions
+from .kicad_policy import KICAD_BOARD_FORMAT_VERSION,KICAD_GENERATOR,KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,KICAD_DEFAULT_PAPER,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,kicad_duplicate_object_ids,kicad_net_export_rows,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,track_export_status,proven_via_span_export_plan
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
@@ -104,14 +104,17 @@ def _record_drill_skip(report, drill, code, message):
     )
 
 
-def _drill_lines(board, report, duplicate_object_ids=()):
+def _drill_lines(board, report, duplicate_object_ids=(), via_export_ids=()):
     lines = []
     duplicate_object_ids=set(duplicate_object_ids)
+    via_export_ids=set(via_export_ids)
     for drill in board.drills:
         if drill.id in duplicate_object_ids:
             report.skipped_drills += 1
             if drill.id not in report.skipped_drill_ids:
                 report.skipped_drill_ids.append(drill.id)
+            continue
+        if drill.id in via_export_ids:
             continue
         status = drill_export_status(drill)
         if status != "export-npth":
@@ -390,8 +393,8 @@ def _region_lines(board,net_num,report,duplicate_object_ids=()):
         ))
     return lines
 
-def _record_via_span_skips(board,report):
-    omitted,problems=proven_via_span_omissions(board)
+def _via_span_lines(board,net_num,report,exportable,omitted,problems):
+    lines=[]
     for object_id,message in problems:
         report.issues.append(KicadExportIssue(
             "error",
@@ -399,15 +402,43 @@ def _record_via_span_skips(board,report):
             object_id,
             message,
         ))
-    for drill_id in omitted:
+    for drill_id,code,message in omitted:
         report.skipped_via_spans+=1
         report.skipped_via_span_ids.append(drill_id)
         report.issues.append(KicadExportIssue(
             "warning",
-            "KICAD_PROVEN_VIA_SPAN_UNSUPPORTED",
+            code,
             drill_id,
-            "proven plated via span is part of source connectivity, but the current KiCad exporter does not synthesize drill-derived annular via geometry; vertical bridge omitted",
+            message,
         ))
+    for item in exportable:
+        drill_id=item["drill_id"]
+        n,_,net_known=_net_binding(
+            board,net_num,item["net_id"],drill_id,report
+        )
+        if not net_known:
+            report.skipped_via_spans+=1
+            report.skipped_via_span_ids.append(drill_id)
+            report.issues.append(KicadExportIssue(
+                "warning",
+                "KICAD_PROVEN_VIA_NET_UNRESOLVED",
+                drill_id,
+                "proven via span net disappeared from the exported net table; via omitted",
+            ))
+            continue
+        x,y=item["at"]
+        from_layer,to_layer=item["layers"]
+        lines.append(
+            f'  (via (at {x:.6f} {y:.6f}) '
+            f'(size {item["size"]:.6f}) '
+            f'(drill {item["drill"]:.6f}) '
+            f'(layers {_q(from_layer)} {_q(to_layer)}) '
+            f'(net {n}) '
+            f'(uuid {photonx_uuid("via:"+drill_id)}))'
+        )
+        report.exported_via_spans+=1
+        report.exported_via_span_ids.append(drill_id)
+    return lines
 
 def _record_route_skips(board,report):
     readiness=assess_route_export_readiness(getattr(board,"routes",()))
@@ -488,6 +519,8 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
     p=Path(path);p.parent.mkdir(parents=True,exist_ok=True);report=KicadExportReport()
     net_rows,duplicate_net_ids=kicad_net_export_rows(board)
     duplicate_object_ids=kicad_duplicate_object_ids(board)
+    via_exportable,via_omitted,via_problems=proven_via_span_export_plan(board)
+    via_export_ids={item["drill_id"] for item in via_exportable}
     net_num={row["id"]:row["code"] for row in net_rows}
     for object_id in duplicate_object_ids:
         report.issues.append(KicadExportIssue(
@@ -506,7 +539,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
     lines=[
         f'(kicad_pcb (version {KICAD_BOARD_FORMAT_VERSION}) (generator {_q(KICAD_GENERATOR)})',
         f'  (general (thickness {KICAD_DEFAULT_BOARD_THICKNESS_MM:g}))',
-        '  (paper "A4")',
+        f'  (paper {_q(KICAD_DEFAULT_PAPER)})',
         '  (layers',
         *_board_layer_lines(board),
         '  )',
@@ -514,7 +547,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
         '  (net 0 "")',
     ]
     for row in net_rows:lines.append(f'  (net {row["code"]} {_q(row["name"])})')
-    lines.extend(_drill_lines(board,report,duplicate_object_ids));lines.extend(_pad_lines(board,net_num,report,duplicate_object_ids));lines.extend(_slot_lines(board,net_num,report,duplicate_object_ids));lines.extend(_region_lines(board,net_num,report,duplicate_object_ids));lines.extend(_track_lines(board,net_num,report,duplicate_object_ids));_record_via_span_skips(board,report);_record_route_skips(board,report)
+    lines.extend(_drill_lines(board,report,duplicate_object_ids,via_export_ids));lines.extend(_pad_lines(board,net_num,report,duplicate_object_ids));lines.extend(_slot_lines(board,net_num,report,duplicate_object_ids));lines.extend(_region_lines(board,net_num,report,duplicate_object_ids));lines.extend(_track_lines(board,net_num,report,duplicate_object_ids));lines.extend(_via_span_lines(board,net_num,report,via_exportable,via_omitted,via_problems));_record_route_skips(board,report)
     lines.extend(_outline_lines(board,report,duplicate_object_ids))
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
 def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]
