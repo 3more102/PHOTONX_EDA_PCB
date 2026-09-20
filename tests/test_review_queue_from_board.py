@@ -6,6 +6,7 @@ from photonx_eda_pcb.models import (
     ComponentHypothesis,
     DrillHit,
     NetGroup,
+    PadCandidate,
     ParseDiagnostic,
     Point,
 )
@@ -118,3 +119,79 @@ def test_confidence_review_thresholds_are_explicit_and_opt_in():
 def test_review_thresholds_reject_invalid_values(value):
     with pytest.raises(ValueError):
         build_board_review_queue(_board(), net_confidence_below=value)
+
+
+
+def _via_review_board(*, proven=True, conflict=False) -> BoardModel:
+    second_net = "N2" if conflict else "N1"
+    nets = [NetGroup("N1", [], 1.0, label="GND")]
+    if conflict:
+        nets.append(NetGroup("N2", [], 1.0, label="VCC"))
+    return BoardModel(
+        pads=[
+            PadCandidate("P_F", Point(0, 0), 1.0, 1.0, "C", "F.Cu", None, "N1"),
+            PadCandidate("P_B", Point(0, 0), 1.0, 1.0, "C", "B.Cu", None, second_net),
+        ],
+        drills=[DrillHit("DV", Point(0, 0), 0.4, "plated")],
+        nets=nets,
+        metadata={
+            "via_spans": [
+                {
+                    "drill_id": "DV",
+                    "from_layer": "F.Cu",
+                    "to_layer": "B.Cu",
+                    "confidence": 0.9,
+                    "proven": proven,
+                    "pad_ids": ["P_F", "P_B"],
+                    "layer_ids": ["F.Cu", "B.Cu"],
+                    "evidence": ["test evidence"],
+                }
+            ]
+        },
+    )
+
+
+def test_canonical_review_queue_skips_exactly_exportable_via_span():
+    queue = build_board_review_queue(
+        _via_review_board(),
+        include_unresolved_clearance=False,
+        include_diagnostics=False,
+    )
+
+    assert not any(item.kind == "via_span" for item in queue.all())
+
+
+def test_canonical_review_queue_surfaces_kicad_via_omission_reason():
+    queue = build_board_review_queue(
+        _via_review_board(conflict=True),
+        include_unresolved_clearance=False,
+        include_diagnostics=False,
+    )
+
+    item = next(item for item in queue.all() if item.kind == "via_span")
+    assert item.target_id == "DV"
+    assert item.metadata["status"] == "omitted"
+    assert item.metadata["export_code"] == "KICAD_PROVEN_VIA_NET_CONFLICT"
+    assert item.metadata["selectable_object_id"] == "DV"
+    assert item.metadata["confidence_available"] is True
+
+
+def test_canonical_review_queue_surfaces_unproven_via_span_and_can_disable_it():
+    board = _via_review_board(proven=False)
+
+    queue = build_board_review_queue(
+        board,
+        include_unresolved_clearance=False,
+        include_diagnostics=False,
+    )
+    item = next(item for item in queue.all() if item.kind == "via_span")
+    assert item.metadata["status"] == "unproven"
+    assert item.confidence == pytest.approx(0.9)
+
+    disabled = build_board_review_queue(
+        board,
+        include_via_evidence=False,
+        include_unresolved_clearance=False,
+        include_diagnostics=False,
+    )
+    assert not any(item.kind == "via_span" for item in disabled.all())
