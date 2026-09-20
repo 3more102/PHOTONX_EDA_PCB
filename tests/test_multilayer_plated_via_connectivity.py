@@ -8,7 +8,14 @@ from photonx_eda_pcb.connectivity.graph import (
 )
 from photonx_eda_pcb.connectivity.nets import assign_physical_nets
 from photonx_eda_pcb.copper_solver.layer_rules import vertical_connection_allowed
-from photonx_eda_pcb.models import (\n    BoardModel,\n    CopperRegion,\n    DrillHit,\n    PadCandidate,\n    Point,\n    Track,\n)
+from photonx_eda_pcb.models import (
+    BoardModel,
+    CopperRegion,
+    DrillHit,
+    PadCandidate,
+    Point,
+    Track,
+)
 from photonx_eda_pcb.pipeline import _report_unproven_multilayer_spans
 from photonx_eda_pcb.stackup import infer_stackup
 from photonx_eda_pcb.via_span import resolve_via_spans
