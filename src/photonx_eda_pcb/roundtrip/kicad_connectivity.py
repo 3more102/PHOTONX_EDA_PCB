@@ -268,6 +268,47 @@ def _observed_tracks(readback, net_lookup, issues):
     return out
 
 
+def _via_item(at, size, drill, layers, binding):
+    return {
+        "at": list(_point(at)),
+        "size": _r(size),
+        "drill": _r(drill),
+        "layers": [str(layer) for layer in layers],
+        "net": binding,
+    }
+
+
+def _observed_vias(readback, net_lookup, issues):
+    out = []
+    for index, via in enumerate(readback.get("vias", ())):
+        try:
+            binding = _binding_from_code(
+                via.get("net"),
+                net_lookup,
+                issues,
+                "via",
+                index,
+            )
+            out.append(
+                _via_item(
+                    via.get("at"),
+                    via.get("size"),
+                    via.get("drill"),
+                    via.get("layers", ()),
+                    binding,
+                )
+            )
+        except (TypeError, ValueError, IndexError, KeyError) as exc:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_INVALID_VIA",
+                    "via_index": index,
+                    "detail": str(exc),
+                }
+            )
+    return out
+
+
 def _expected_pads(board):
     out = []
     unresolved = []
@@ -484,7 +525,8 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
     With an export report, the audit covers the net table plus tracks,
-    recovered pads, copper regions, and recovered slots. Without a report,
+    rejects unexpected KiCad vias, and compares recovered pads, copper regions,
+    and recovered slots. Without a report,
     the legacy fallback can still validate net/track/pad connectivity, but
     it fails closed when region or slot objects are present because their
     omission decisions cannot be reconstructed as reliably as the report.
@@ -509,6 +551,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     tracks = _compare_multiset(
         _expected_tracks(board, exported_track_ids, issues),
         _observed_tracks(readback, net_lookup, issues),
+    )
+
+    vias = _compare_multiset(
+        [],
+        _observed_vias(readback, net_lookup, issues),
     )
 
     expected_pads, unresolved_pad_ids = _expected_pads(board)
@@ -581,6 +628,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     roundtrip_equal = bool(
         nets["equal"]
         and tracks["equal"]
+        and vias["equal"]
         and pads["equal"]
         and regions["equal"]
         and slots["equal"]
@@ -600,6 +648,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "scope": [
             "net_table",
             "tracks",
+            "vias",
             "recovered_pads",
             "copper_regions",
             "recovered_slots",
@@ -611,6 +660,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         ),
         "nets": nets,
         "tracks": tracks,
+        "vias": vias,
         "pads": pads,
         "regions": regions,
         "slots": slots,

@@ -69,6 +69,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
     assert audit["scope"] == [
         "net_table",
         "tracks",
+        "vias",
         "recovered_pads",
         "copper_regions",
         "recovered_slots",
@@ -81,6 +82,35 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
     assert audit["slots"]["equal"] is True
     assert audit["slots"]["expected_count"] == 1
     assert audit["issues"] == []
+
+
+def test_connectivity_roundtrip_detects_unexpected_via(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["vias"].append(
+        {
+            "at": (2.0, 0.0),
+            "size": 0.8,
+            "drill": 0.4,
+            "layers": ("F.Cu", "B.Cu"),
+            "net": 1,
+        }
+    )
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["vias"]["equal"] is False
+    assert audit["vias"]["expected_count"] == 0
+    assert audit["vias"]["observed_count"] == 1
+    assert audit["vias"]["unexpected"][0]["net"] == {
+        "code": 1,
+        "name": "GND",
+    }
 
 
 def test_connectivity_roundtrip_detects_zone_net_drift(tmp_path):
@@ -253,6 +283,23 @@ def test_kicad_reader_rejects_fractional_segment_net_ordinal():
     )
     """
     with pytest.raises(ValueError, match="segment net ordinal must be an integer"):
+        read_kicad_board_text(text)
+
+
+def test_kicad_reader_rejects_fractional_via_net_ordinal():
+    text = """
+    (kicad_pcb
+      (net 1 "GND")
+      (via
+        (at 0 0)
+        (size 0.8)
+        (drill 0.4)
+        (layers "F.Cu" "B.Cu")
+        (net 1.5)
+      )
+    )
+    """
+    with pytest.raises(ValueError, match="via net ordinal must be an integer"):
         read_kicad_board_text(text)
 
 
