@@ -44,6 +44,13 @@ def test_kicad_reader_exposes_zone_shell_holes_and_identity(tmp_path: Path):
     assert zone["layer"] == "F.Cu"
     assert zone["layers"] == ()
     assert zone["fill_enabled"] is False
+    assert zone["rules"] == {
+        "connect_clearance": 0.5,
+        "min_thickness": 0.25,
+        "thermal_gap": None,
+        "thermal_bridge_width": None,
+        "island_removal_mode": None,
+    }
     assert zone["outline"] == ((0.0, 0.0), (4.0, 0.0), (4.0, 3.0), (0.0, 3.0))
     assert zone["holes"] == (
         ((1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0)),
@@ -78,6 +85,13 @@ def test_exported_solid_region_roundtrips_with_saved_fill(tmp_path: Path):
 
     zone = parsed["zones"][0]
     assert zone["fill_enabled"] is True
+    assert zone["rules"] == {
+        "connect_clearance": 0.5,
+        "min_thickness": 0.25,
+        "thermal_gap": 0.5,
+        "thermal_bridge_width": 0.5,
+        "island_removal_mode": 1,
+    }
     assert zone["layer"] == "In2.Cu"
     assert zone["holes"] == ()
     assert zone["filled_polygons"] == (

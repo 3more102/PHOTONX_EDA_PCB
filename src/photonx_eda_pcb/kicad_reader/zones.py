@@ -32,6 +32,27 @@ def _read_net_code(zone):
     return net[1]
 
 
+def _optional_float(node, name, *, label):
+    item = child(node, name) if node is not None else None
+    if item is None:
+        return None
+    if len(item) != 2:
+        raise ValueError(f"{label} must contain one numeric value")
+    value = float(item[1])
+    if not isfinite(value):
+        raise ValueError(f"{label} must be finite")
+    return value
+
+
+def _optional_int(node, name, *, label):
+    item = child(node, name) if node is not None else None
+    if item is None:
+        return None
+    if len(item) != 2 or isinstance(item[1], bool) or not isinstance(item[1], int):
+        raise ValueError(f"{label} must be an integer")
+    return item[1]
+
+
 def _read_filled_polygon(node):
     layer = child(node, "layer")
     return {
@@ -49,6 +70,7 @@ def read_zones(root):
         uuid = child(zone, "uuid")
         name = child(zone, "name")
         fill = child(zone, "fill")
+        connect_pads = child(zone, "connect_pads")
 
         polygons = tuple(
             _read_xy_ring(polygon, label="zone polygon")
@@ -66,6 +88,33 @@ def read_zones(root):
                 "uuid": str(uuid[1]) if uuid and len(uuid) >= 2 else None,
                 "name": str(name[1]) if name and len(name) >= 2 else None,
                 "fill_enabled": bool(fill and len(fill) >= 2 and str(fill[1]) == "yes"),
+                "rules": {
+                    "connect_clearance": _optional_float(
+                        connect_pads,
+                        "clearance",
+                        label="zone connect_pads clearance",
+                    ),
+                    "min_thickness": _optional_float(
+                        zone,
+                        "min_thickness",
+                        label="zone min_thickness",
+                    ),
+                    "thermal_gap": _optional_float(
+                        fill,
+                        "thermal_gap",
+                        label="zone thermal_gap",
+                    ),
+                    "thermal_bridge_width": _optional_float(
+                        fill,
+                        "thermal_bridge_width",
+                        label="zone thermal_bridge_width",
+                    ),
+                    "island_removal_mode": _optional_int(
+                        fill,
+                        "island_removal_mode",
+                        label="zone island_removal_mode",
+                    ),
+                },
                 "polygons": polygons,
                 "outline": polygons[0],
                 "holes": polygons[1:],

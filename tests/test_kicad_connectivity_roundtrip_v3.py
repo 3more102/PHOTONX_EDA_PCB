@@ -81,6 +81,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "copper_regions",
         "region_geometry",
         "region_fill_state",
+        "region_rules",
         "recovered_slots",
         "slot_geometry",
     ]
@@ -90,6 +91,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
     assert audit["regions"]["equal"] is True
     assert audit["regions"]["expected_count"] == 1
     assert audit["region_fill_state"]["equal"] is True
+    assert audit["region_rules"]["equal"] is True
     assert audit["slots"]["equal"] is True
     assert audit["slots"]["expected_count"] == 1
     assert audit["issues"] == []
@@ -651,6 +653,45 @@ def test_connectivity_roundtrip_preserves_holed_region_fill_policy(tmp_path):
     assert audit["region_geometry"]["equal"] is True
     assert audit["region_fill_state"]["equal"] is True
     assert audit["roundtrip_equal"] is True
+
+
+def test_connectivity_roundtrip_detects_region_rule_drift(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    zone = readback["zones"][0]
+    zone["rules"]["connect_clearance"] = 0.75
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["regions"]["equal"] is True
+    assert audit["region_geometry"]["equal"] is True
+    assert audit["region_fill_state"]["equal"] is True
+    assert audit["region_rules"]["equal"] is False
+    assert audit["region_rules"]["missing"][0]["connect_clearance"] == 0.5
+    assert audit["region_rules"]["unexpected"][0]["connect_clearance"] == 0.75
+    assert audit["roundtrip_equal"] is False
+
+
+def test_connectivity_roundtrip_detects_region_thermal_rule_drift(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    zone = readback["zones"][0]
+    zone["rules"]["thermal_gap"] = 0.9
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["region_rules"]["equal"] is False
+    assert audit["region_rules"]["missing"][0]["thermal_gap"] == 0.5
+    assert audit["region_rules"]["unexpected"][0]["thermal_gap"] == 0.9
+    assert audit["roundtrip_equal"] is False
 
 
 def test_connectivity_roundtrip_detects_zone_net_drift(tmp_path):

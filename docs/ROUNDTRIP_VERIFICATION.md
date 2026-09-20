@@ -18,6 +18,7 @@ The connectivity audit checks:
 - recovered-pad identity, deterministic footprint/child-pad UUIDs, emitted geometry (position, layer, type, shape, size, angle, drill semantics, and layer set), and net bindings; pads on undeclared/noncanonical copper layers, shapes outside the exact C/R/O mapping, or pads carrying only drill-overlap evidence without an explicit pad-stack contract are omitted explicitly rather than emitted with invalid layers, invented rectangle geometry, or speculative `thru_hole *.Cu` copper;
 - exported copper-region identity, zone net binding, and canonical shell/hole geometry using the existing start/winding-invariant region comparator;
 - emitted region fill/cache policy: solid regions must retain `(fill yes)` plus the deterministic cached shell polygon, while holed regions must retain the intentionally unfilled-cache state that forces KiCad to repour from exact shell/hole contours;
+- exporter-default zone-rule values that control repour behavior: connect-pad clearance, minimum thickness, thermal gap/bridge width, and island-removal mode;
 - recovered NPTH/plated-slot identity, kind, net binding, and canonical mechanical geometry using the existing slot round-trip comparator;
 - consistency between embedded KiCad net names and the board net table where the file format carries both;
 - proven plated via spans that are part of source physical connectivity but are not emitted by the current KiCad exporter.
