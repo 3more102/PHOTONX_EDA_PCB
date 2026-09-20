@@ -508,6 +508,12 @@ def outline_export_status(segment):
 
 
 def drill_export_status(drill):
+    function = str(
+        getattr(drill, "x2_aperture_function", "") or ""
+    ).lower().replace("_", "").replace("-", "")
+    if function == "backdrill":
+        return "skip-backdrill"
+
     try:
         diameter = float(drill.diameter)
     except (TypeError, ValueError):
@@ -527,6 +533,8 @@ def drill_export_status(drill):
 
 def slot_geometry(slot):return slot_geometry_descriptor(slot)
 def slot_export_status(slot):
+    function=str(getattr(slot,"x2_aperture_function","") or "").lower().replace("_","").replace("-","")
+    if function=="backdrill":return "skip-backdrill"
     plating=str(getattr(slot,"plated","unknown")).lower().replace("_","-")
     if plating=="non-plated":return "export-npth"
     if plating=="plated":return "infer-plated-padstack"
