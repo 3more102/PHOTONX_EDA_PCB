@@ -133,6 +133,9 @@ def test_exact_multilayer_proven_via_exports_through_declared_inner_layer(tmp_pa
     assert readback["vias"][0]["size"] == 1.0
     assert readback["vias"][0]["drill"] == 0.4
     assert readback["vias"][0]["net"] == 1
+    assert readback["vias"][0]["remove_unused_layers"] is False
+    assert readback["vias"][0]["keep_end_layers"] is False
+    assert readback["vias"][0]["free"] is False
     assert report.exported_via_span_ids == ["D1"]
     assert report.skipped_via_span_ids == []
     assert audit["vias"]["equal"] is True
@@ -220,5 +223,73 @@ def test_roundtrip_detects_exported_via_type_drift(tmp_path):
     audit = compare_kicad_connectivity(board, readback, report)
 
     assert audit["vias"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+    assert audit["source_equivalent"] is False
+
+
+
+def _add_via_flag(text, flag):
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if line.lstrip().startswith("(via "):
+            marker = "(net 1)"
+            assert marker in line
+            lines[index] = line.replace(marker, f"({flag}) {marker}", 1)
+            return "\n".join(lines) + "\n"
+    raise AssertionError("export did not contain a via")
+
+
+def test_roundtrip_detects_exported_via_behavior_flag_drift(tmp_path):
+    board = BoardModel(
+        nets=[_net("N1", "GND")],
+        pads=[
+            _pad("P_F", "F.Cu"),
+            _pad("P_B", "B.Cu"),
+        ],
+        drills=[DrillHit("D1", Point(0, 0), 0.4, "plated")],
+        metadata={"via_spans": [_span("P_F", "P_B")]},
+    )
+
+    path, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
+    original = path.read_text(encoding="utf-8")
+
+    for flag in ("remove_unused_layers", "free"):
+        readback = read_kicad_board_text(_add_via_flag(original, flag))
+        assert readback["vias"][0][flag] is True
+
+        audit = compare_kicad_connectivity(board, readback, report)
+
+        assert audit["vias"]["equal"] is False
+        assert audit["roundtrip_equal"] is False
+        assert audit["source_equivalent"] is False
+
+
+def test_roundtrip_rejects_keep_end_layers_without_remove_unused_layers(tmp_path):
+    board = BoardModel(
+        nets=[_net("N1", "GND")],
+        pads=[
+            _pad("P_F", "F.Cu"),
+            _pad("P_B", "B.Cu"),
+        ],
+        drills=[DrillHit("D1", Point(0, 0), 0.4, "plated")],
+        metadata={"via_spans": [_span("P_F", "P_B")]},
+    )
+
+    path, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
+    mutated = _add_via_flag(
+        path.read_text(encoding="utf-8"),
+        "keep_end_layers",
+    )
+    readback = read_kicad_board_text(mutated)
+
+    assert readback["vias"][0]["keep_end_layers"] is True
+    assert readback["vias"][0]["remove_unused_layers"] is False
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert any(
+        issue["code"] == "KICAD_ROUNDTRIP_INVALID_VIA_BEHAVIOR"
+        for issue in audit["issues"]
+    )
     assert audit["roundtrip_equal"] is False
     assert audit["source_equivalent"] is False
