@@ -6,7 +6,7 @@ from ..models import BoardModel
 from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
-from .kicad_policy import KICAD_BOARD_FORMAT_VERSION,KICAD_GENERATOR,KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,KICAD_DEFAULT_PAPER,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,kicad_duplicate_object_ids,kicad_net_export_rows,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,track_export_status,proven_via_span_export_plan,x2_component_export_plan
+from .kicad_policy import KICAD_BOARD_FORMAT_VERSION,KICAD_GENERATOR,KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,KICAD_DEFAULT_PAPER,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,kicad_duplicate_object_ids,kicad_net_export_rows,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,kicad_footprint_local_pad_angle,slot_geometry,slot_export_status,track_export_status,proven_via_span_export_plan,x2_component_export_plan
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness,route_export_descriptor
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
@@ -273,7 +273,7 @@ def _pad_lines(board,net_num,report,duplicate_object_ids=(),grouped_pad_ids=()):
         descriptor,ref_layer,layer_warning=pad_export_descriptor(pad)
         shape=descriptor["shape"];pad_type=descriptor["kind"]
         layers=" ".join(_q(x) for x in descriptor["layers"])
-        angle=descriptor["pad_angle"]
+        angle=kicad_footprint_local_pad_angle(descriptor)
         lines += [f'  (footprint "PHOTONX:RecoveredPad" (layer {_q(descriptor["footprint_layer"])}) (uuid {photonx_uuid("fp:"+pad.id)})',
                   f'    (at {pad.center.x:.6f} {pad.center.y:.6f})',
                   f'    (property "Reference" {_q(pad.id)} (at 0 -2 0) (layer {_q(ref_layer)}) hide (uuid {photonx_uuid("ref:"+pad.id)}))']

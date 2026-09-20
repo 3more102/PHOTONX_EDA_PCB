@@ -184,6 +184,15 @@ def pad_export_descriptor(pad):
         "layers":layers,
     },ref_layer,warning
 
+
+def kicad_footprint_local_pad_angle(descriptor):
+    """Return the child-pad angle KiCad expects in a footprint-local frame."""
+    angle=float(descriptor["pad_angle"])
+    if descriptor["footprint_layer"]=="B.Cu":
+        return -angle if angle != 0.0 else 0.0
+    return angle
+
+
 _X2_REFDES_EVIDENCE = "gerber_x2_component_refdes"
 _X2_PIN_EVIDENCE = "gerber_x2_pin_number"
 _X2_PIN_FUNCTION_EVIDENCE = "gerber_x2_pin_function"
@@ -436,9 +445,8 @@ def x2_component_export_plan(board):
                 # frame, then mirrors the footprint across its local X axis
                 # when it is placed on B.Cu. Invert that transform here.
                 local_y = -local_y if local_y != 0.0 else 0.0
-                pad_angle = float(descriptor["pad_angle"])
-                descriptor["pad_angle"] = (
-                    -pad_angle if pad_angle != 0.0 else 0.0
+                descriptor["pad_angle"] = kicad_footprint_local_pad_angle(
+                    descriptor
                 )
             planned_pads.append(
                 {

@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, KICAD_DEFAULT_PAPER, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_export_plan, slot_export_status, track_export_status, x2_component_export_plan
+from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, KICAD_DEFAULT_PAPER, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, kicad_footprint_local_pad_angle, proven_via_span_export_plan, slot_export_status, track_export_status, x2_component_export_plan
 from ..excellon_routing import assess_route_export_readiness, route_export_descriptor
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
@@ -891,7 +891,7 @@ def _expected_pad_geometry(pad):
         descriptor["kind"],
         descriptor["shape"],
         descriptor["pad_at"],
-        descriptor["pad_angle"],
+        kicad_footprint_local_pad_angle(descriptor),
         descriptor["size"],
         descriptor["drill_shape"],
         descriptor["drill_size"],

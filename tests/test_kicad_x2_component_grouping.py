@@ -284,11 +284,12 @@ def test_duplicate_x2_component_ids_fail_closed_before_uuid_generation(tmp_path)
                 Point(x_offset + dx, 10.0),
                 1.0,
                 1.0,
-                "C",
-                "F.Cu",
+                "R",
+                "B.Cu",
                 None,
                 net_id,
             )
+            pad.rotation_deg = 10.0 * index
             pad.provenance.add_evidence(
                 Evidence("gerber_x2_component_refdes", refdes, 1.0)
             )
@@ -325,6 +326,8 @@ def test_duplicate_x2_component_ids_fail_closed_before_uuid_generation(tmp_path)
 
     assert "PHOTONX:RecoveredX2Component" not in text
     assert text.count('(footprint "PHOTONX:RecoveredPad"') == 4
+    assert text.count('(pad "1" smd rect (at 0 0 -10.000000)') == 2
+    assert text.count('(pad "1" smd rect (at 0 0 -20.000000)') == 2
     issues = [
         item
         for item in report.issues
