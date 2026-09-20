@@ -87,6 +87,17 @@ SIGNATURES = [
         "pitch_max_mm": 10.0,
         "base_score": 0.10,
     },
+    {
+        "name": "GRID_ARRAY_SMD",
+        "pad_count_min": 9,
+        "pad_count_max": 400,
+        "drilled_max": 0.01,
+        "grid_rows_min": 3,
+        "grid_columns_min": 3,
+        "grid_occupancy_min": 0.80,
+        "symmetry_min": 0.75,
+        "base_score": 0.20,
+    },
 ]
 
 
