@@ -152,3 +152,30 @@ def test_malformed_recognized_plating_attribute_fails_closed(tmp_path: Path):
         diagnostic.code == "INVALID_EXCELLON_X2_PLATING"
         for diagnostic in permissive.diagnostics
     )
+
+
+
+def test_file_function_plating_propagates_to_routed_paths(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "M48\n"
+        "; #@! TF.FileFunction,Plated,1,2,PTH\n"
+        "METRIC\n"
+        "T01C0.800\n"
+        "%\n"
+        "T01\n"
+        "G00X1.000Y1.000\n"
+        "M15\n"
+        "G01X3.000Y1.000\n"
+        "M16\n"
+        "M30\n",
+    )
+
+    result = ExcellonParser(strict=True).parse(path)
+
+    assert len(result.routes) == 1
+    assert result.routes[0].plated == "plated"
+    assert any(
+        evidence.kind == "excellon_x2_file_plating"
+        for evidence in result.routes[0].provenance.evidence
+    )
