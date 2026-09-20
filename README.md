@@ -427,9 +427,9 @@ PHOTONX contains infrastructure for:
 - deterministic coordinate and tolerance handling;
 - board-material reconstruction from outlines and cutouts;
 - spatial candidate indexing;
-- same-layer copper connectivity;
+- same-layer copper connectivity plus evidence-gated cross-layer edges through proven plated via spans;
 - drill-to-pad association;
-- evidence-backed via-span and multilayer reasoning;
+- via-span evidence that preserves the exact supporting pad identities and fails closed when plating is unknown;
 - copper-zone contact analysis;
 - annular-ring checks;
 - drill-to-copper clearance;
@@ -754,7 +754,7 @@ The current roadmap keeps the highest-risk gaps explicit rather than masking the
 - broader Gerber support, including regions, more aperture macro primitives/blocks, and additional legacy/vendor arc dialects;
 - richer Gerber X2 attribute handling;
 - broader Excellon route/slot dialect support beyond standard XNC, including additional vendor variants;
-- stronger multilayer via-span reasoning;
+- broader multilayer via-span reasoning beyond the current pad-evidenced plated-barrel bridge;
 - stronger footprint clustering and component evidence;
 - more validation against boards with independently known ground truth.
 
