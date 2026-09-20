@@ -41,8 +41,8 @@ _HIT = re.compile(
 )
 _X2_FILE_FUNCTION = re.compile(
     r"^TF\.FILEFUNCTION,(PLATED|NONPLATED|MIXEDPLATING),"
-    r"([0-9]+),([0-9]+),(PTH|NPTH|BLIND|BURIED)"
-    r"(?:,(DRILL|ROUTE|MIXED))?$"
+    r"([1-9][0-9]*),([1-9][0-9]*),(PTH|NPTH|BLIND|BURIED)"
+    r"(?:,(DRILL|ROUT|ROUTE|MIXED))?$"
 )
 _X2_APER_FUNCTION = re.compile(
     r"^TA\.APERFUNCTION,(PLATED|NONPLATED),"
@@ -73,6 +73,8 @@ class ExcellonParser:
         self.route=LinearRouteState();self._route_sources=[];self._route_evidence=[]
         self.geometry_enabled=True
         self.file_plating="unknown";self._file_plating_source=None
+        self.file_layer_span=None;self._file_layer_span_source=None
+        self.file_span_kind=None
         self._x2_aperture_plating=None;self._x2_aperture_source=None
         self.tool_plating={};self._tool_plating_source={}
 
@@ -111,7 +113,64 @@ class ExcellonParser:
 
         match=_X2_FILE_FUNCTION.fullmatch(command)
         if match:
-            plating=self._x2_plating_name(match.group(1))
+            plating_token=match.group(1)
+            plating=self._x2_plating_name(plating_token)
+            declared_span=tuple(sorted((int(match.group(2)),int(match.group(3)))))
+            declared_kind=match.group(4).lower()
+            if (
+                (plating_token=="PLATED" and declared_kind=="npth")
+                or (
+                    plating_token=="NONPLATED"
+                    and declared_kind=="pth"
+                )
+            ):
+                self._x2_fail(
+                    p,
+                    out,
+                    line_no,
+                    (
+                        "Excellon X2 FileFunction plating/span-kind "
+                        f"contradiction: {plating_token}/{declared_kind.upper()}"
+                    ),
+                )
+                return
+            if declared_span[0]==declared_span[1]:
+                self._x2_fail(
+                    p,
+                    out,
+                    line_no,
+                    (
+                        "Excellon X2 FileFunction layer span must reference "
+                        "two distinct copper layers"
+                    ),
+                )
+                return
+            if (
+                self.file_layer_span is not None
+                and self.file_layer_span!=declared_span
+            ):
+                self._x2_fail(
+                    p,
+                    out,
+                    line_no,
+                    (
+                        "conflicting Excellon X2 file layer-span evidence: "
+                        f"L{self.file_layer_span[0]}..L{self.file_layer_span[1]} "
+                        f"vs L{declared_span[0]}..L{declared_span[1]}"
+                    ),
+                )
+                return
+            if self.file_span_kind is not None and self.file_span_kind!=declared_kind:
+                self._x2_fail(
+                    p,
+                    out,
+                    line_no,
+                    (
+                        "conflicting Excellon X2 file span-kind evidence: "
+                        f"{self.file_span_kind} vs {declared_kind}"
+                    ),
+                )
+                return
             if self.file_plating!="unknown" and self.file_plating!=plating:
                 self._x2_fail(
                     p,
@@ -136,8 +195,12 @@ class ExcellonParser:
                             ),
                         )
                         return
+            source=SourceRef(str(p),line_no,line)
             self.file_plating=plating
-            self._file_plating_source=SourceRef(str(p),line_no,line)
+            self._file_plating_source=source
+            self.file_layer_span=declared_span
+            self._file_layer_span_source=source
+            self.file_span_kind=declared_kind
             return
 
         if command.startswith("TF.FILEFUNCTION,"):
@@ -174,6 +237,26 @@ class ExcellonParser:
         if command=="TD":
             self._x2_aperture_plating=None
             self._x2_aperture_source=None
+
+    def _span_for_tool(self,tool):
+        if self.file_layer_span is None:
+            return None,False,None,[]
+        source=self._file_layer_span_source
+        evidence=[]
+        if source is not None:
+            evidence.append(
+                Evidence(
+                    "excellon_x2_file_span",
+                    (
+                        f"tool=T{tool}; copper_span="
+                        f"L{self.file_layer_span[0]}..L{self.file_layer_span[1]}; "
+                        f"kind={self.file_span_kind}"
+                    ),
+                    1.0,
+                    source,
+                )
+            )
+        return self.file_layer_span,True,self.file_span_kind,evidence
 
     def _plating_for_tool(self,tool):
         if tool in self.tool_plating:
@@ -707,7 +790,25 @@ class ExcellonParser:
                 pt=Point(x,y)
                 src=SourceRef(str(p),line_no,line);obj_id=stable_id("drill",p.name,line_no,pt.x,pt.y,self.tool)
                 plating,plating_evidence=self._plating_for_tool(self.tool)
-                out.drills.append(DrillHit(obj_id,pt,self.tools[self.tool],plating,f"T{self.tool}",Provenance([src],plating_evidence)));self.current=pt;continue
+                x2_layer_span,x2_span_proven,x2_span_kind,span_evidence=self._span_for_tool(self.tool)
+                if not x2_span_proven:
+                    x2_layer_span=None
+                out.drills.append(
+                    DrillHit(
+                        obj_id,
+                        pt,
+                        self.tools[self.tool],
+                        plating,
+                        f"T{self.tool}",
+                        Provenance(
+                            [src],
+                            [*plating_evidence,*span_evidence],
+                        ),
+                        x2_layer_span=x2_layer_span,
+                        x2_span_kind=x2_span_kind,
+                    )
+                )
+                self.current=pt;continue
             if line.startswith(("X", "Y")):
                 message = f"malformed Excellon coordinate statement: {line}"
                 if self.strict:
