@@ -202,13 +202,14 @@ def _trusted_pad_evidence_values(pad, kind):
 
 
 def x2_component_export_plan(board):
-    """Plan exact multi-pad KiCad footprints from source-proven Gerber X2 .P data.
+    """Plan exact multi-pad KiCad footprints from canonical source X2 identity.
 
-    Only source-proven component hypotheses with one unambiguous refdes, one
-    unique trusted pin number per pad, one surface side, and individually
-    exportable pad geometry are grouped. Anything ambiguous is returned as a
-    rejected identity group so callers can fall back to independent pad export
-    without inventing component semantics.
+    ComponentHypothesis.source_pin_map is the machine-readable authority for
+    pin identity. Raw pad provenance is never used as a fallback; when trusted
+    raw X2 evidence is present, it is only cross-checked for contradiction.
+    Grouping therefore fails closed on incomplete/malformed canonical maps,
+    contradictory evidence, duplicate pins, ambiguous ownership, unsupported
+    geometry, or mixed surface sides.
     """
     source_components = [
         component
@@ -233,6 +234,9 @@ def x2_component_export_plan(board):
         component_id = str(component.id)
         reference = getattr(component, "reference", None)
         pad_ids = [str(pad_id) for pad_id in getattr(component, "pad_ids", ())]
+        pad_id_set = set(pad_ids)
+        pin_map = getattr(component, "source_pin_map", {})
+        pin_functions = getattr(component, "source_pin_functions", {})
         reasons = []
 
         if getattr(component, "confidence", None) != 1.0:
@@ -241,10 +245,37 @@ def x2_component_export_plan(board):
             reasons.append("component reference is missing")
         if not pad_ids:
             reasons.append("component has no pads")
-        if len(set(pad_ids)) != len(pad_ids):
+        if len(pad_id_set) != len(pad_ids):
             reasons.append("component repeats a pad ID")
         if any(pad_claims[pad_id] != 1 for pad_id in pad_ids):
             reasons.append("one or more pads are claimed by multiple X2 components")
+
+        if not isinstance(pin_map, dict):
+            reasons.append("canonical source pin map is not a dictionary")
+            pin_map = {}
+        if not isinstance(pin_functions, dict):
+            reasons.append("canonical source pin function map is not a dictionary")
+            pin_functions = {}
+
+        if set(pin_map) != pad_id_set:
+            reasons.append(
+                "canonical source pin map does not exactly cover component pads"
+            )
+        for pad_id in pad_ids:
+            pin_number = pin_map.get(pad_id)
+            if not isinstance(pin_number, str) or not pin_number.strip():
+                reasons.append(
+                    f"{pad_id} has no valid canonical source pin number"
+                )
+        for pad_id, pin_function in pin_functions.items():
+            if pad_id not in pad_id_set or pad_id not in pin_map:
+                reasons.append(
+                    f"canonical source pin function references unmapped pad {pad_id}"
+                )
+            if not isinstance(pin_function, str) or not pin_function.strip():
+                reasons.append(
+                    f"{pad_id} has an invalid canonical source pin function"
+                )
 
         missing = sorted(pad_id for pad_id in pad_ids if pad_id not in pad_by_id)
         if missing:
@@ -260,52 +291,60 @@ def x2_component_export_plan(board):
                 reasons.append(f"{pad_id} is not exactly exportable ({status})")
                 continue
 
-            refdes_values = tuple(
+            raw_refdes = tuple(
                 value
                 for value in _trusted_pad_evidence_values(
                     pad, _X2_REFDES_EVIDENCE
                 )
                 if value
             )
-            if refdes_values != (reference,):
+            if raw_refdes and raw_refdes != (reference,):
                 reasons.append(
-                    f"{pad_id} does not carry exactly the component refdes"
+                    f"{pad_id} raw X2 refdes evidence contradicts canonical component identity"
                 )
 
-            pin_values = tuple(
+            pin_number = pin_map.get(pad_id)
+            if not isinstance(pin_number, str) or not pin_number.strip():
+                continue
+            raw_pins = tuple(
                 value
                 for value in _trusted_pad_evidence_values(
                     pad, _X2_PIN_EVIDENCE
                 )
                 if value
             )
-            if len(pin_values) != 1:
+            if raw_pins and raw_pins != (pin_number,):
                 reasons.append(
-                    f"{pad_id} does not carry exactly one trusted pin number"
+                    f"{pad_id} raw X2 pin evidence contradicts canonical source pin map"
                 )
-                continue
 
-            function_values = tuple(
+            pin_function = pin_functions.get(pad_id)
+            raw_functions = tuple(
                 value
                 for value in _trusted_pad_evidence_values(
                     pad, _X2_PIN_FUNCTION_EVIDENCE
                 )
                 if value
             )
-            if len(function_values) > 1:
-                reasons.append(
-                    f"{pad_id} carries conflicting trusted pin functions"
-                )
+            if raw_functions:
+                if (
+                    not isinstance(pin_function, str)
+                    or not pin_function.strip()
+                    or raw_functions != (pin_function,)
+                ):
+                    reasons.append(
+                        f"{pad_id} raw X2 pin-function evidence contradicts canonical source pin function map"
+                    )
 
             descriptor, _ref_layer, _warning = pad_export_descriptor(pad)
             rows.append(
                 {
                     "pad": pad,
                     "pad_id": pad_id,
-                    "number": pin_values[0],
+                    "number": pin_number,
                     "function": (
-                        function_values[0]
-                        if len(function_values) == 1
+                        pin_function
+                        if isinstance(pin_function, str) and pin_function.strip()
                         else None
                     ),
                     "descriptor": descriptor,
@@ -316,7 +355,7 @@ def x2_component_export_plan(board):
             pin_numbers = [row["number"] for row in rows]
             if len(set(pin_numbers)) != len(pin_numbers):
                 reasons.append(
-                    "trusted X2 pin numbers are not unique within the component"
+                    "canonical source pin numbers are not unique within the component"
                 )
             footprint_layers = {
                 row["descriptor"]["footprint_layer"] for row in rows
@@ -374,7 +413,6 @@ def x2_component_export_plan(board):
         )
 
     return tuple(groups), tuple(rejected)
-
 
 def track_export_status(board, track):
     try:
