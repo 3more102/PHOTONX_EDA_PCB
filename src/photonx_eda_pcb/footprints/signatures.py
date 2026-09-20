@@ -4,6 +4,7 @@ SIGNATURES = [
         "pad_count": 2,
         "drilled_min": 0.99,
         "row_count": 1,
+        "pitch_max_mm": 25.0,
         "base_score": 0.45,
     },
     {
@@ -11,6 +12,7 @@ SIGNATURES = [
         "pad_count": 2,
         "drilled_max": 0.01,
         "row_count": 1,
+        "pitch_max_mm": 15.0,
         "base_score": 0.45,
     },
     {
@@ -21,6 +23,8 @@ SIGNATURES = [
         "row_size": 4,
         "row_balance_min": 0.95,
         "pitch_cv_max": 0.08,
+        "pitch_min_mm": 0.3,
+        "pitch_max_mm": 5.0,
         "base_score": 0.45,
     },
     {
@@ -31,6 +35,8 @@ SIGNATURES = [
         "row_size": 4,
         "row_balance_min": 0.95,
         "pitch_cv_max": 0.08,
+        "pitch_min_mm": 0.3,
+        "pitch_max_mm": 5.0,
         "base_score": 0.45,
     },
     {
@@ -40,6 +46,8 @@ SIGNATURES = [
         "drilled_min": 0.99,
         "row_count": 1,
         "pitch_cv_max": 0.15,
+        "pitch_min_mm": 0.3,
+        "pitch_max_mm": 10.0,
         "base_score": 0.25,
     },
     {
@@ -49,6 +57,8 @@ SIGNATURES = [
         "drilled_max": 0.01,
         "row_count": 1,
         "pitch_cv_max": 0.15,
+        "pitch_min_mm": 0.3,
+        "pitch_max_mm": 10.0,
         "base_score": 0.25,
     },
     {
@@ -60,6 +70,8 @@ SIGNATURES = [
         "row_count": 2,
         "row_balance_min": 0.80,
         "pitch_cv_max": 0.15,
+        "pitch_min_mm": 0.3,
+        "pitch_max_mm": 10.0,
         "base_score": 0.25,
     },
     {
@@ -71,6 +83,8 @@ SIGNATURES = [
         "row_count": 2,
         "row_balance_min": 0.80,
         "pitch_cv_max": 0.15,
+        "pitch_min_mm": 0.3,
+        "pitch_max_mm": 10.0,
         "base_score": 0.25,
     },
 ]
