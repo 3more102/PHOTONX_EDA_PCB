@@ -69,8 +69,16 @@ The structured pin maps and `package_hint` coexist on the same component object 
 - Conflicting trusted pin numbers fail closed for that pad without discarding an otherwise proven component reference.
 
 
-### KiCad grouping authority
+## KiCad grouped export contract
 
-When PhotonX groups a source-proven X2 component into `PHOTONX:RecoveredX2Component`, the exporter consumes `ComponentHypothesis.source_pin_map` and `source_pin_functions` as the canonical machine-readable pin identity produced by reconstruction. It does not independently re-derive pin numbers from pad provenance during export.
+Source-proven Gerber X2 components are grouped into
+`PHOTONX:RecoveredX2Component` footprints only when the canonical
+`ComponentHypothesis.source_pin_map` covers every member pad with one valid,
+unique source pin number. `source_pin_functions` remains optional per pad, but
+any retained function must match the trusted per-pad X2 evidence.
 
-Grouping remains fail-closed: the pin map must be a dictionary, cover every component pad exactly once by membership, contain non-empty string pin numbers, keep function entries bound to mapped pads, use unique pin numbers within the component, and retain matching trusted X2 refdes evidence on every grouped pad. Any violation falls back to independent recovered pads with an explicit `KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED` issue.
+The KiCad exporter cross-checks the structured maps against the original trusted
+pad provenance. Missing, extra, conflicting, blank, or stale structured identity
+fails closed to independent pad export and emits
+`KICAD_X2_COMPONENT_IDENTITY_NOT_GROUPED`; the exporter does not reconstruct a
+second pin map from geometry or silently repair the component identity.
