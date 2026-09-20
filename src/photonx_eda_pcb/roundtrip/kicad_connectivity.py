@@ -325,6 +325,7 @@ def _expected_pads(board):
             {
                 "id": str(pad.id),
                 "uuid": photonx_uuid("fp:" + str(pad.id)),
+                "pad_uuid": photonx_uuid("pad:" + str(pad.id)),
                 "net": binding,
             }
         )
@@ -374,6 +375,7 @@ def _observed_pads(readback, net_lookup, issues):
             {
                 "id": str(reference),
                 "uuid": footprint.get("uuid"),
+                "pad_uuid": pads[0].get("uuid"),
                 "net": binding,
             }
         )
@@ -456,6 +458,7 @@ def _expected_slots(board, exported_ids, issues):
                 {
                     "id": str(slot.id),
                     "uuid": photonx_uuid("slot-fp:" + str(slot.id)),
+                    "pad_uuid": photonx_uuid("slot-pad:" + str(slot.id)),
                     "kind": "npth",
                     "net": {"code": 0, "name": ""},
                 }
@@ -491,6 +494,7 @@ def _expected_slots(board, exported_ids, issues):
             {
                 "id": str(slot.id),
                 "uuid": photonx_uuid("slot-fp:" + str(slot.id)),
+                "pad_uuid": photonx_uuid("slot-pad:" + str(slot.id)),
                 "kind": "plated",
                 "net": binding,
             }
@@ -547,6 +551,7 @@ def _observed_slots(readback, net_lookup, issues):
             {
                 "id": str(reference),
                 "uuid": footprint.get("uuid"),
+                "pad_uuid": pads[0].get("uuid"),
                 "kind": kind,
                 "net": binding,
             }
@@ -566,7 +571,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     and recovered slots. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
-    object identity for emitted tracks, recovered pads, regions, and slots.
+    object identity for emitted tracks, recovered pad/slot footprints and their child pads, regions, and slots.
     Without a report,
     the legacy fallback can still validate net/track/pad connectivity, but
     it fails closed when region or slot objects are present because their

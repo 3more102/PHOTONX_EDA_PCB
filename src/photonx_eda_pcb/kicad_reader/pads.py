@@ -51,6 +51,7 @@ def read_pads(footprint):
         drill = child(pad, "drill")
         layers = child(pad, "layers")
         net_code, net_name = _read_net(child(pad, "net"))
+        uuid = child(pad, "uuid")
         info = _read_drill(drill)
         out.append(
             {
@@ -67,6 +68,7 @@ def read_pads(footprint):
                 "layers": tuple(map(str, layers[1:])) if layers else (),
                 "net": net_code,
                 "net_name": net_name,
+                "uuid": str(uuid[1]) if uuid and len(uuid) >= 2 else None,
             }
         )
     return out
