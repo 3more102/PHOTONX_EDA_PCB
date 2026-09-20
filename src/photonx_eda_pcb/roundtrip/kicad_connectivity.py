@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status, track_export_status
+from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status, track_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -58,6 +58,25 @@ def _compare_multiset(expected, observed):
         "observed_count": len(observed),
         "missing": missing,
         "unexpected": unexpected,
+    }
+
+
+def _expected_file_header():
+    return {
+        "version": KICAD_BOARD_FORMAT_VERSION,
+        "generator": KICAD_GENERATOR,
+        "version_count": 1,
+        "generator_count": 1,
+    }
+
+
+def _observed_file_header(readback):
+    header = dict(readback.get("file_header", {}))
+    return {
+        "version": header.get("version"),
+        "generator": header.get("generator"),
+        "version_count": header.get("version_count", 0),
+        "generator_count": header.get("generator_count", 0),
     }
 
 
@@ -1290,6 +1309,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         )
     net_lookup = _observed_net_lookup(readback, issues)
 
+    file_header = _compare_multiset(
+        [_expected_file_header()],
+        [_observed_file_header(readback)],
+    )
+
     board_settings = _compare_multiset(
         [
             {
@@ -1584,7 +1608,8 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         )
 
     roundtrip_equal = bool(
-        board_settings["equal"]
+        file_header["equal"]
+        and board_settings["equal"]
         and layer_table["equal"]
         and nets["equal"]
         and tracks["equal"]
@@ -1627,6 +1652,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     return {
         "scope": [
+            "file_header",
             "board_settings",
             "layer_table",
             "net_table",
@@ -1655,6 +1681,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "source_equivalent": bool(
             roundtrip_equal and source_connectivity_complete
         ),
+        "file_header": file_header,
         "board_settings": board_settings,
         "layer_table": layer_table,
         "nets": nets,

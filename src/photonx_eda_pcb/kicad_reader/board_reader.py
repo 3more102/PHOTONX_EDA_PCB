@@ -9,6 +9,7 @@ from .graphics import read_edge_graphics, read_unexpected_copper_graphics, read_
 from .mechanical_slots import read_mechanical_slots
 from .zones import read_zones
 from .settings import read_board_settings
+from .header import read_board_header
 
 
 def read_kicad_board_text(text):
@@ -18,6 +19,7 @@ def read_kicad_board_text(text):
     footprints = read_footprints(root)
     edge_graphics = read_edge_graphics(root)
     return {
+        "file_header": read_board_header(root),
         "board_settings": read_board_settings(root),
         "layers": read_layers(root),
         "nets": read_nets(root),

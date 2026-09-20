@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added exact KiCad file-header round-trip auditing. Board export, reader, and verifier now share the PhotonX board-format version/generator contract; the reader preserves version/generator token counts, and missing, duplicated, or changed header metadata is fail-visible through `file_header` instead of letting the audit silently apply modern-format assumptions to an unverified document header.
+
 - Added fail-closed KiCad special-pad property auditing. The reader now preserves the optional pad `property` token, and the main round-trip audit rejects any such classification on PhotonX-generated recovered pads (including castellated, heatsink, testpoint, BGA, or fiducial semantics) because PhotonX does not emit or infer those fabrication properties.
 
 - Added fail-closed KiCad footprint net-tie auditing. The reader now preserves `net_tie_pad_groups`, and the main round-trip audit rejects any net-tie group attached to a PhotonX-generated recovered footprint because PhotonX never emits this semantic override and KiCad uses it to allow distinct pad nets in a group to short.

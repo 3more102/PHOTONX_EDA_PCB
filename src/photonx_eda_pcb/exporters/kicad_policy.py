@@ -2,6 +2,8 @@ import re
 from collections import Counter
 from math import isfinite
 
+KICAD_BOARD_FORMAT_VERSION = 20240108
+KICAD_GENERATOR = "photonx_eda_pcb"
 KICAD_DEFAULT_BOARD_THICKNESS_MM = 1.6
 KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM = 0.0
 

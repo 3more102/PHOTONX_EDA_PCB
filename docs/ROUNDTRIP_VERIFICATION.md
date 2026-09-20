@@ -7,6 +7,7 @@ Round-trip verification canonicalizes reconstructed models and compares stable f
 When KiCad export is requested, PHOTONX re-reads the generated `.kicad_pcb` through its KiCad S-expression reader and compares electrical semantics against the exact `KicadExportReport`.
 
 The connectivity audit checks:
+- exact generated KiCad file-header contract: one board-format `version` token and one third-party `generator` token matching the shared PhotonX export constants; missing, duplicated, or drifted header metadata fails round-trip verification before format assumptions are trusted;
 - fail-closed source-net identity handling: duplicate physical `net.id` values are omitted from KiCad ordinal assignment instead of using dictionary last-one-wins semantics; dependent objects become explicit export losses/unresolved net claims;
 - fail-closed source-object identity handling: any duplicate physical object ID among tracks, pads, point drills, outline segments, slots, or copper regions is omitted from every affected export family before deterministic UUID generation; the collision appears as `duplicate_object_ids` source loss;
 
