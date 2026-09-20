@@ -37,3 +37,27 @@ def read_edge_lines(root):
         (item["start"], item["end"])
         for item in read_edge_graphics(root)
     ]
+
+
+def read_unexpected_edge_graphics(root):
+    out = []
+    if not isinstance(root, list):
+        return out
+    for index, item in enumerate(root[1:]):
+        if not isinstance(item, list) or not item:
+            continue
+        token = str(item[0])
+        if not token.startswith("gr_") or token == "gr_line":
+            continue
+        layer = child(item, "layer")
+        if not layer or len(layer) < 2 or str(layer[1]) != "Edge.Cuts":
+            continue
+        uuid = child(item, "uuid")
+        out.append(
+            {
+                "type": token,
+                "uuid": str(uuid[1]) if uuid and len(uuid) >= 2 else None,
+                "root_index": index,
+            }
+        )
+    return out

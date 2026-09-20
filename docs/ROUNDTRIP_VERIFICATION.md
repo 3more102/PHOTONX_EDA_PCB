@@ -13,6 +13,7 @@ The connectivity audit checks:
 - net bindings on track segments the exporter reported as emitted;
 - fail-closed rejection of unexpected top-level KiCad routed `arc` track objects (distinct from graphical `gr_arc` / footprint `fp_arc` objects);
 - exact emitted `Edge.Cuts` line geometry/stroke semantics and deterministic outline UUID identity while preserving the legacy `edge_lines` reader surface;
+- fail-closed rejection of any non-`gr_line` top-level `gr_*` object placed on `Edge.Cuts` (for example an injected `gr_arc` or `gr_rect`);
 - fail-closed rejection of any foreign footprint outside the three PhotonX-generated recovered footprint families, including a machine-readable summary of nested pad/net claims;
 - recovered-pad identity, deterministic footprint/child-pad UUIDs, emitted geometry (position, layer, type, shape, size, angle, drill semantics, and layer set), and net bindings;
 - exported copper-region identity, zone net binding, and canonical shell/hole geometry using the existing start/winding-invariant region comparator;

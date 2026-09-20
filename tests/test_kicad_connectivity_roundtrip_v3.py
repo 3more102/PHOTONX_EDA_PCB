@@ -75,6 +75,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "vias",
         "track_arcs",
         "board_outline",
+        "unexpected_edge_graphics",
         "foreign_footprints",
         "recovered_pads",
         "copper_regions",
@@ -263,6 +264,42 @@ def test_connectivity_roundtrip_detects_outline_uuid_drift(tmp_path):
         audit["outline"]["missing"][0]["uuid"]
         != audit["outline"]["unexpected"][0]["uuid"]
     )
+
+
+def test_connectivity_roundtrip_rejects_non_line_edge_graphic():
+    text = """
+    (kicad_pcb
+      (layers
+        (0 "F.Cu" signal)
+        (31 "B.Cu" signal)
+        (36 "B.SilkS" user "b.silkscreen")
+        (37 "F.SilkS" user "f.silkscreen")
+        (44 "Edge.Cuts" user)
+      )
+      (net 0 "")
+      (gr_arc
+        (start 0 0)
+        (mid 1 1)
+        (end 2 0)
+        (layer "Edge.Cuts")
+        (stroke (width 0.1) (type default))
+        (uuid 00000000-0000-0000-0000-000000000096)
+      )
+    )
+    """
+    readback = read_kicad_board_text(text)
+
+    audit = compare_kicad_connectivity(BoardModel(), readback)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["unexpected_edge_graphics"]["equal"] is False
+    assert audit["unexpected_edge_graphics"]["observed_count"] == 1
+    assert audit["unexpected_edge_graphics"]["unexpected"] == [
+        {
+            "type": "gr_arc",
+            "uuid": "00000000-0000-0000-0000-000000000096",
+        }
+    ]
 
 
 def test_connectivity_roundtrip_rejects_foreign_footprint(tmp_path):

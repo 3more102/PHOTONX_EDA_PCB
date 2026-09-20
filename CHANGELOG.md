@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Closed the remaining KiCad `Edge.Cuts` shape escape hatch: the reader now records any top-level `gr_*` object on `Edge.Cuts` other than the `gr_line` family emitted by PhotonX, and the main round-trip audit treats those unexpected arcs/rectangles/circles/polygons/text graphics as expected-empty differences instead of silently ignoring contour-changing geometry.
+
 - Added fail-closed KiCad routed-track arc readback. Top-level `arc` objects are now parsed separately from graphics/footprint arcs with strict integer net ordinals and machine-readable start/mid/end/width/layer/net/identifier fields; because the current PhotonX exporter emits no routed KiCad arcs, any observed track arc is an explicit round-trip difference instead of silently escaping the connectivity audit.
 
 - Hardened KiCad readback against injected/foreign footprints. Because the generated board is expected to contain only `PHOTONX:RecoveredPad`, `PHOTONX:RecoveredNPTHSlot`, and `PHOTONX:RecoveredPlatedSlot`, any other footprint is now surfaced in a machine-readable `foreign_footprints` comparison (including nested pad/net summaries) and fails `roundtrip_equal` instead of being silently ignored.

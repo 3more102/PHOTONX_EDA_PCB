@@ -833,7 +833,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
     With an export report, the audit covers the declared KiCad layer table, net table, and tracks,
-    rejects unexpected KiCad vias, routed track arcs, and foreign footprints, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry,
+    rejects unexpected KiCad vias, routed track arcs, foreign footprints, and non-line Edge.Cuts graphics, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry,
     and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
@@ -897,6 +897,17 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     foreign_footprints = _compare_multiset(
         [],
         _observed_foreign_footprints(readback, issues),
+    )
+
+    unexpected_edge_graphics = _compare_multiset(
+        [],
+        [
+            {
+                "type": str(item.get("type")),
+                "uuid": item.get("uuid"),
+            }
+            for item in readback.get("unexpected_edge_graphics", ())
+        ],
     )
 
     expected_pads, unresolved_pad_ids = _expected_pads(board)
@@ -998,6 +1009,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and vias["equal"]
         and track_arcs["equal"]
         and outline["equal"]
+        and unexpected_edge_graphics["equal"]
         and foreign_footprints["equal"]
         and pads["equal"]
         and regions["equal"]
@@ -1025,6 +1037,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "vias",
             "track_arcs",
             "board_outline",
+            "unexpected_edge_graphics",
             "foreign_footprints",
             "recovered_pads",
             "copper_regions",
@@ -1043,6 +1056,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "vias": vias,
         "track_arcs": track_arcs,
         "outline": outline,
+        "unexpected_edge_graphics": unexpected_edge_graphics,
         "foreign_footprints": foreign_footprints,
         "pads": pads,
         "regions": regions,
