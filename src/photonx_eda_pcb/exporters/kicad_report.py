@@ -34,6 +34,7 @@ class KicadExportReport:
     skipped_outline_ids:list[str]=field(default_factory=list)
     exported_pad_ids:list[str]=field(default_factory=list)
     skipped_pad_ids:list[str]=field(default_factory=list)
+    represented_via_pad_ids:list[str]=field(default_factory=list)
     exported_region_ids:list[str]=field(default_factory=list)
     skipped_region_ids:list[str]=field(default_factory=list)
     exported_track_ids:list[str]=field(default_factory=list)
