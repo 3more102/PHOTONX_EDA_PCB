@@ -51,6 +51,9 @@ def test_reader_exposes_board_fabrication_settings():
         "solder_mask_min_width": None,
         "pad_to_paste_clearance": None,
         "pad_to_paste_clearance_ratio": None,
+        "aux_axis_origin": None,
+        "grid_origin": None,
+        "pcbplotparams_present": False,
         "stackup_present": False,
     }
 

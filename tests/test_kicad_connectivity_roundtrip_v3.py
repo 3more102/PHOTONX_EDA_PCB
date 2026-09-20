@@ -343,6 +343,9 @@ def test_kicad_reader_preserves_optional_manufacturing_settings():
         "solder_mask_min_width": 0.1,
         "pad_to_paste_clearance": -0.05,
         "pad_to_paste_clearance_ratio": 90.0,
+        "aux_axis_origin": None,
+        "grid_origin": None,
+        "pcbplotparams_present": False,
         "stackup_present": True,
     }
 
