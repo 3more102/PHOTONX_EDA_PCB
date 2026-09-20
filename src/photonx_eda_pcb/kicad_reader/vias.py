@@ -34,7 +34,7 @@ def read_vias(root):
                 "layers": tuple(map(str, layers[1:])),
                 "net": _net_ordinal(net),
                 "uuid": None if object_uuid is None else str(object_uuid[1]),
-                "locked": child(via, "locked") is not None,
+                "locked": "locked" in via[1:] or child(via, "locked") is not None,
                 "remove_unused_layers": child(via, "remove_unused_layers") is not None,
                 "keep_end_layers": child(via, "keep_end_layers") is not None,
                 "free": child(via, "free") is not None,
