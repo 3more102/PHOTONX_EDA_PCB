@@ -52,6 +52,7 @@ class DrillHit:
     span_proven: bool = False
     x2_layer_span: tuple[int, int] | None = None
     x2_span_kind: str | None = None
+    x2_aperture_function: str | None = None
 
 @dataclass
 class OutlineSegment:
