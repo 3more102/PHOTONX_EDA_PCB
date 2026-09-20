@@ -11,6 +11,7 @@ The connectivity audit checks:
 - exact declared KiCad layer-table ID/name/type identity, including the contiguous inner-copper prefix and generated user layers;
 - exact KiCad net-table code/name identity;
 - net bindings on track segments the exporter reported as emitted;
+- exact emitted `Edge.Cuts` line geometry/stroke semantics and deterministic outline UUID identity while preserving the legacy `edge_lines` reader surface;
 - recovered-pad identity, deterministic footprint/child-pad UUIDs, emitted geometry (position, layer, type, shape, size, angle, drill semantics, and layer set), and net bindings;
 - exported copper-region identity, zone net binding, and canonical shell/hole geometry using the existing start/winding-invariant region comparator;
 - recovered NPTH/plated-slot identity, kind, net binding, and canonical mechanical geometry using the existing slot round-trip comparator;

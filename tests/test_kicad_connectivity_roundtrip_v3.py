@@ -9,6 +9,7 @@ from photonx_eda_pcb.models import (
     CopperRegion,
     DrillHit,
     NetGroup,
+    OutlineSegment,
     PadCandidate,
     Point,
     Track,
@@ -72,6 +73,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "net_table",
         "tracks",
         "vias",
+        "board_outline",
         "recovered_pads",
         "copper_regions",
         "region_geometry",
@@ -204,6 +206,61 @@ def test_connectivity_roundtrip_detects_layer_table_drift(tmp_path):
     assert audit["layer_table"]["missing"] == [
         {"id": 1, "name": "In1.Cu", "type": "signal"}
     ]
+
+
+def test_connectivity_roundtrip_detects_outline_geometry_drift(tmp_path):
+    board = BoardModel(
+        outline=[
+            OutlineSegment(
+                "E1",
+                Point(0, 0),
+                Point(4, 0),
+            )
+        ]
+    )
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    assert readback["edge_lines"] == [((0.0, 0.0), (4.0, 0.0))]
+    readback["edge_graphics"][0]["end"] = (5.0, 0.0)
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["outline"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+    assert audit["outline"]["missing"][0]["end"] == [4.0, 0.0]
+    assert audit["outline"]["unexpected"][0]["end"] == [5.0, 0.0]
+
+
+def test_connectivity_roundtrip_detects_outline_uuid_drift(tmp_path):
+    board = BoardModel(
+        outline=[
+            OutlineSegment(
+                "E1",
+                Point(0, 0),
+                Point(4, 0),
+            )
+        ]
+    )
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["edge_graphics"][0]["uuid"] = (
+        "00000000-0000-0000-0000-000000000000"
+    )
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["outline"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+    assert (
+        audit["outline"]["missing"][0]["uuid"]
+        != audit["outline"]["unexpected"][0]["uuid"]
+    )
 
 
 def test_connectivity_roundtrip_detects_unexpected_via(tmp_path):

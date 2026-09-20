@@ -310,6 +310,57 @@ def _observed_tracks(readback, net_lookup, issues):
     return out
 
 
+def _outline_item(start, end, width, layer, stroke_type, object_uuid):
+    a, b = sorted((_point(start), _point(end)))
+    return {
+        "start": list(a),
+        "end": list(b),
+        "width": _r(width),
+        "layer": str(layer),
+        "stroke_type": str(stroke_type),
+        "uuid": None if object_uuid is None else str(object_uuid),
+    }
+
+
+def _expected_outline(board):
+    return [
+        _outline_item(
+            (segment.start.x, segment.start.y),
+            (segment.end.x, segment.end.y),
+            0.1,
+            "Edge.Cuts",
+            "default",
+            photonx_uuid("edge:" + str(segment.id)),
+        )
+        for segment in board.outline
+    ]
+
+
+def _observed_outline(readback, issues):
+    out = []
+    for index, item in enumerate(readback.get("edge_graphics", ())):
+        try:
+            out.append(
+                _outline_item(
+                    item.get("start"),
+                    item.get("end"),
+                    item.get("width"),
+                    item.get("layer"),
+                    item.get("stroke_type"),
+                    item.get("uuid"),
+                )
+            )
+        except (TypeError, ValueError, IndexError, KeyError) as exc:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_INVALID_EDGE_GRAPHIC",
+                    "edge_index": index,
+                    "detail": str(exc),
+                }
+            )
+    return out
+
+
 def _via_item(at, size, drill, layers, binding):
     return {
         "at": list(_point(at)),
@@ -688,7 +739,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
     With an export report, the audit covers the declared KiCad layer table, net table, and tracks,
-    rejects unexpected KiCad vias, and compares recovered pads, copper regions including canonical shell/hole geometry,
+    rejects unexpected KiCad vias, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry,
     and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
@@ -737,6 +788,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     vias = _compare_multiset(
         [],
         _observed_vias(readback, net_lookup, issues),
+    )
+
+    outline = _compare_multiset(
+        _expected_outline(board),
+        _observed_outline(readback, issues),
     )
 
     expected_pads, unresolved_pad_ids = _expected_pads(board)
@@ -836,6 +892,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and nets["equal"]
         and tracks["equal"]
         and vias["equal"]
+        and outline["equal"]
         and pads["equal"]
         and regions["equal"]
         and region_geometry["equal"]
@@ -860,6 +917,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "net_table",
             "tracks",
             "vias",
+            "board_outline",
             "recovered_pads",
             "copper_regions",
             "region_geometry",
@@ -875,6 +933,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "nets": nets,
         "tracks": tracks,
         "vias": vias,
+        "outline": outline,
         "pads": pads,
         "regions": regions,
         "region_geometry": region_geometry,
