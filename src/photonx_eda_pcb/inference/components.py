@@ -26,14 +26,16 @@ def _trusted_evidence_values(pad, kind: str) -> tuple[str, ...]:
 
 
 def _source_pin_conflicts(members) -> list[str]:
-    """Return contradictory trusted X2 pin evidence on one pad candidate.
+    """Return contradictory trusted X2 pin evidence for one source component.
 
-    Gerber permits one component pad to be composed from multiple flashes.
-    Repeated refdes + pin evidence across separate pad candidates is therefore
-    not, by itself, a contradiction.
+    Gerber permits one component pad to be composed from multiple flashes, so
+    repeated refdes + pin evidence across pad candidates is valid. When those
+    repeated flashes provide pin functions, however, the trusted functions must
+    agree.
     """
 
     conflicts: list[str] = []
+    pin_functions_by_number: dict[str, set[str]] = {}
 
     for pad in sorted(members, key=lambda item: item.id):
         pin_numbers = tuple(
@@ -58,6 +60,21 @@ def _source_pin_conflicts(members) -> list[str]:
             detail = ", ".join(repr(value) for value in pin_functions)
             conflicts.append(
                 f"{pad.id} has conflicting trusted Gerber X2 .P pin functions: "
+                f"{detail}"
+            )
+
+        if len(pin_numbers) == 1 and len(pin_functions) == 1:
+            pin_functions_by_number.setdefault(
+                pin_numbers[0],
+                set(),
+            ).add(pin_functions[0])
+
+    for pin_number, functions in sorted(pin_functions_by_number.items()):
+        if len(functions) > 1:
+            detail = ", ".join(repr(value) for value in sorted(functions))
+            conflicts.append(
+                "trusted Gerber X2 .P pin "
+                f"{pin_number!r} has conflicting functions across flashes: "
                 f"{detail}"
             )
 
