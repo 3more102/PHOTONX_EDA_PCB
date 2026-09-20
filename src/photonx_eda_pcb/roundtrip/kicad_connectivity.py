@@ -1376,6 +1376,8 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     board_settings = _compare_multiset(
         [
             {
+                "thickness_count": 1,
+                "pad_to_mask_clearance_count": 1,
                 "thickness": _r(KICAD_DEFAULT_BOARD_THICKNESS_MM),
                 "pad_to_mask_clearance": _r(
                     KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM
@@ -1391,6 +1393,18 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         ],
         [
             {
+                "thickness_count": int(
+                    readback.get("board_settings", {}).get(
+                        "thickness_count",
+                        0,
+                    )
+                ),
+                "pad_to_mask_clearance_count": int(
+                    readback.get("board_settings", {}).get(
+                        "pad_to_mask_clearance_count",
+                        0,
+                    )
+                ),
                 "thickness": (
                     None
                     if readback.get("board_settings", {}).get("thickness") is None

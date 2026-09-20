@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened required KiCad board-setting parsing against duplicate tokens. The reader now records exact `thickness` and `pad_to_mask_clearance` counts, and the round-trip contract requires one of each, preventing a conflicting second value inside an otherwise singleton `general` or `setup` section from escaping first-match validation.
+
 - Added KiCad singleton board-section cardinality auditing. The reader now records counts for `general`, `paper`, `layers`, and `setup`; the round-trip contract requires exactly one of each, so duplicate or missing structural sections are fail-visible instead of silently relying on first-match parsing when a later conflicting section may exist.
 
 - Extended KiCad board-settings auditing to manufacturing output controls that PhotonX does not emit. The reader now preserves optional `aux_axis_origin`, `grid_origin`, and `pcbplotparams` presence; any injected origin or plot-settings block is fail-visible through `board_settings` instead of silently altering downstream plot/drill coordinate or manufacturing-output behavior.

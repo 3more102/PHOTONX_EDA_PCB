@@ -253,6 +253,55 @@ def test_reader_preserves_setup_origins_and_plot_settings_presence():
     assert readback["board_settings"]["pcbplotparams_present"] is True
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("thickness_count", 2),
+        ("pad_to_mask_clearance_count", 2),
+    ],
+)
+def test_connectivity_roundtrip_rejects_duplicate_required_setting_tokens(
+    tmp_path,
+    field,
+    value,
+):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    readback["board_settings"][field] = value
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["board_settings"]["equal"] is False
+    assert audit["roundtrip_equal"] is False
+
+
+def test_reader_counts_duplicate_required_setting_tokens():
+    readback = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (general
+            (thickness 1.6)
+            (thickness 2.0)
+          )
+          (setup
+            (pad_to_mask_clearance 0)
+            (pad_to_mask_clearance 0.2)
+          )
+        )
+        """
+    )
+
+    assert readback["board_settings"]["thickness_count"] == 2
+    assert (
+        readback["board_settings"]["pad_to_mask_clearance_count"]
+        == 2
+    )
+
+
 def test_connectivity_roundtrip_detects_board_thickness_drift(tmp_path):
     board = _board_with_all_connectivity_families()
     path, report = export_kicad_with_report(

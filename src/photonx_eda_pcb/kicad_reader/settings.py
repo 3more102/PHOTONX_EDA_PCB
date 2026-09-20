@@ -1,6 +1,6 @@
 from math import isfinite
 
-from .query import child
+from .query import child, children
 
 
 def _optional_xy(node, name, *, label):
@@ -31,6 +31,12 @@ def read_board_settings(root):
     general = child(root, "general")
     setup = child(root, "setup")
     return {
+        "thickness_count": len(children(general, "thickness")) if general else 0,
+        "pad_to_mask_clearance_count": (
+            len(children(setup, "pad_to_mask_clearance"))
+            if setup
+            else 0
+        ),
         "thickness": _optional_float(
             general,
             "thickness",

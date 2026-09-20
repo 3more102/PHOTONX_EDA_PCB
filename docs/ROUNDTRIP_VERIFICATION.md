@@ -12,7 +12,7 @@ The connectivity audit checks:
 - fail-closed source-net identity handling: duplicate physical `net.id` values are omitted from KiCad ordinal assignment instead of using dictionary last-one-wins semantics; dependent objects become explicit export losses/unresolved net claims;
 - fail-closed source-object identity handling: any duplicate physical object ID among tracks, pads, point drills, outline segments, slots, or copper regions is omitted from every affected export family before deterministic UUID generation; the collision appears as `duplicate_object_ids` source loss;
 
-- board fabrication defaults emitted by PhotonX: board thickness and global pad-to-mask clearance;
+- board fabrication defaults emitted by PhotonX: board thickness and global pad-to-mask clearance, including exact single-token cardinality so duplicate required settings cannot hide behind first-match parsing;
 - exact declared KiCad layer-table ID/name/type identity, including the contiguous inner-copper prefix and generated user layers;
 - exact generated board settings plus fail-closed absence checks for optional solder-mask/paste manufacturing overrides, stack-up data, auxiliary/grid origins, and `pcbplotparams` that PhotonX does not emit; unexpected origin/plot settings are rejected instead of silently changing manufacturing output coordinates or plot behavior;
 - exact KiCad net-table code/name identity;
