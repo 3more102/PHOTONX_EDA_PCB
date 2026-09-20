@@ -77,6 +77,8 @@ class ComponentHypothesis:
     evidence: list[str]
     reference: str | None = None
     package_hint: str | None = None
+    source_pin_map: dict[str, str] = field(default_factory=dict)
+    source_pin_functions: dict[str, str] = field(default_factory=dict)
 
 @dataclass
 class ParseDiagnostic:
