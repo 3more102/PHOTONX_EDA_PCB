@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extended recovered-slot round-trip auditing to the full emitted pad-stack geometry. NPTH and evidence-backed plated slots now compare footprint/pad placement, pad kind/shape/size, oval drill geometry, layer set, UUID identity, and net binding in addition to the independent canonical mechanical-slot comparator; annular copper/layer drift can no longer pass merely because the mechanical drill slot is unchanged.
+
 - Added expected-empty KiCad fabrication-graphics auditing for direct F/B.Mask and F/B.Paste artwork. Top-level `gr_*` objects and footprint `fp_*`/property/zone graphics on mask/paste layers are now surfaced through `unexpected_fabrication_graphics` and fail round-trip verification instead of bypassing copper-only guards.
 
 - Expanded KiCad zone repour-rule auditing to the full currently documented rule surface used by PhotonX verification: zone hatch style/pitch, `connect_pads` connection mode, smoothing/radius, and all hatched-fill tuning fields are now parsed and compared alongside clearance/thermal/island settings. Injected zone overrides can no longer preserve shell/net identity while silently changing future repours.

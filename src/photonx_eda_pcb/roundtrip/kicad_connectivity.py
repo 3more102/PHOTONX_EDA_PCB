@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status, track_export_status
+from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, pad_shape_name, proven_via_span_omissions, slot_export_status, slot_geometry, track_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -1282,6 +1282,43 @@ def _observed_regions(readback, net_lookup, issues):
     return out
 
 
+def _expected_npth_slot_pad_geometry(slot):
+    geometry = slot_geometry(slot)
+    return _pad_geometry_item(
+        geometry["center"],
+        0.0,
+        "F.Cu",
+        "",
+        "np_thru_hole",
+        "oval",
+        (0.0, 0.0),
+        geometry["angle_deg"],
+        (geometry["long_mm"], geometry["short_mm"]),
+        "oval",
+        (geometry["long_mm"], geometry["short_mm"]),
+        (0.0, 0.0),
+        ("*.Cu", "*.Mask"),
+    )
+
+
+def _expected_plated_slot_pad_geometry(padstack):
+    return _pad_geometry_item(
+        padstack.center,
+        0.0,
+        "F.Cu",
+        "1",
+        "thru_hole",
+        pad_shape_name(padstack.pad_shape),
+        (0.0, 0.0),
+        padstack.angle_deg,
+        padstack.pad_size,
+        "oval",
+        padstack.drill_size,
+        (0.0, 0.0),
+        (*padstack.layers, "*.Mask"),
+    )
+
+
 def _expected_slots(board, exported_ids, issues):
     out = []
     unresolved = []
@@ -1299,6 +1336,7 @@ def _expected_slots(board, exported_ids, issues):
                     "reference_count": 1,
                     "pad_uuid": photonx_uuid("slot-pad:" + str(slot.id)),
                     "kind": "npth",
+                    "geometry": _expected_npth_slot_pad_geometry(slot),
                     "net": {"code": 0, "name": ""},
                 }
             )
@@ -1337,6 +1375,7 @@ def _expected_slots(board, exported_ids, issues):
                 "reference_count": 1,
                 "pad_uuid": photonx_uuid("slot-pad:" + str(slot.id)),
                 "kind": "plated",
+                "geometry": _expected_plated_slot_pad_geometry(inference.padstack),
                 "net": binding,
             }
         )
@@ -1374,6 +1413,18 @@ def _observed_slots(readback, net_lookup, issues):
             )
             continue
 
+        try:
+            geometry = _observed_pad_geometry(footprint, pads[0])
+        except (TypeError, ValueError, IndexError, KeyError) as exc:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_INVALID_SLOT_PAD_GEOMETRY",
+                    "slot_id": str(reference),
+                    "detail": str(exc),
+                }
+            )
+            continue
+
         binding = _binding_from_code(
             pads[0].get("net"),
             net_lookup,
@@ -1396,6 +1447,7 @@ def _observed_slots(readback, net_lookup, issues):
                 "reference_count": int(footprint.get("reference_count", 0)),
                 "pad_uuid": pads[0].get("uuid"),
                 "kind": kind,
+                "geometry": geometry,
                 "net": binding,
             }
         )
@@ -1411,7 +1463,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     With an export report, the audit covers emitted board fabrication settings, the declared KiCad layer table, net table, and tracks,
     rejects unexpected KiCad vias, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, direct mask/paste graphics at board or footprint scope, footprint/pad copper-behavior overrides, verifies the emitted Edge.Cuts outline, and compares recovered point drills, pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
-    and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
+    and recovered slots, including canonical mechanical geometry plus the exact emitted KiCad slot pad-stack geometry. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
     object identity for emitted tracks, recovered pad/slot footprints and their child pads, regions, and slots. Recovered-pad emitted geometry is compared exactly as read back.

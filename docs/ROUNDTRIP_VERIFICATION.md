@@ -34,7 +34,7 @@ The connectivity audit checks:
 - emitted region fill/cache policy: solid regions must retain `(fill yes)` plus the deterministic cached shell polygon, while holed regions must retain the intentionally unfilled-cache state that forces KiCad to repour from exact shell/hole contours;
 - zone semantics that can change repour results even with identical polygon geometry: priority, keepout state, solid/hatched fill mode, filled-area thickness policy, connect-pad clearance, minimum thickness, thermal gap/bridge width, island-removal mode, and minimum island area;
 - recovered confirmed non-plated point drills as exact round NPTH footprints with deterministic footprint/Reference-property/child-pad identity and drill geometry; unknown/plated/invalid point drills remain explicit export losses;
-- recovered NPTH/plated-slot footprint/Reference-property/child-pad identity, kind, net binding, and canonical mechanical geometry using the existing slot round-trip comparator;
+- recovered NPTH/plated-slot footprint/Reference-property/child-pad identity, kind, net binding, canonical mechanical geometry, and exact emitted pad-stack geometry (placement, pad shape/size, oval drill geometry, layer set, and deterministic UUIDs); mechanical slot equality alone is not treated as copper pad-stack equality;
 - consistency between embedded KiCad net names and the board net table where the file format carries both;
 - proven plated via spans that are part of source physical connectivity but are not emitted by the current KiCad exporter.
 
