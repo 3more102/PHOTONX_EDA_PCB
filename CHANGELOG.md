@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added expected-empty KiCad fabrication-graphics auditing for direct F/B.Mask and F/B.Paste artwork. Top-level `gr_*` objects and footprint `fp_*`/property/zone graphics on mask/paste layers are now surfaced through `unexpected_fabrication_graphics` and fail round-trip verification instead of bypassing copper-only guards.
+
 - Expanded KiCad zone repour-rule auditing to the full currently documented rule surface used by PhotonX verification: zone hatch style/pitch, `connect_pads` connection mode, smoothing/radius, and all hatched-fill tuning fields are now parsed and compared alongside clearance/thermal/island settings. Injected zone overrides can no longer preserve shell/net identity while silently changing future repours.
 
 - Extended deterministic recovered-object identity checks to KiCad `Reference` properties. The reader now preserves Reference-property count and UUID; recovered pads, point drills, and slots require exactly one Reference plus the exporter-derived `ref:`, `drill-ref:`, or `slot-ref:` UUID, so duplicate Reference fields or Reference UUID drift cannot hide behind first-match object IDs.

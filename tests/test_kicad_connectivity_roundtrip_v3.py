@@ -81,6 +81,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "unexpected_edge_graphics",
         "unexpected_copper_graphics",
         "unexpected_footprint_copper_graphics",
+        "unexpected_fabrication_graphics",
         "unexpected_copper_overrides",
         "unexpected_fabrication_overrides",
         "unexpected_pad_properties",
@@ -213,6 +214,89 @@ def test_reader_preserves_singleton_board_section_counts():
         ("pcbplotparams_present", True),
     ],
 )
+def test_reader_exposes_board_and_footprint_fabrication_graphics():
+    readback = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (gr_rect
+            (start 0 0)
+            (end 2 2)
+            (stroke (width 0.1) (type default))
+            (fill none)
+            (layer "F.Mask")
+            (uuid 00000000-0000-0000-0000-000000000081)
+          )
+          (footprint "PHOTONX:RecoveredPad"
+            (layer "F.Cu")
+            (uuid 00000000-0000-0000-0000-000000000082)
+            (at 0 0)
+            (property "Reference" "P1"
+              (at 0 -2 0)
+              (layer "F.SilkS")
+              hide
+              (uuid 00000000-0000-0000-0000-000000000083)
+            )
+            (fp_line
+              (start 0 0)
+              (end 1 0)
+              (stroke (width 0.1) (type default))
+              (layer "B.Paste")
+              (uuid 00000000-0000-0000-0000-000000000084)
+            )
+          )
+        )
+        """
+    )
+
+    assert readback["unexpected_fabrication_graphics"] == [
+        {
+            "type": "gr_rect",
+            "layer": "F.Mask",
+            "uuid": "00000000-0000-0000-0000-000000000081",
+            "root_index": 0,
+        }
+    ]
+    assert readback["footprints"][0]["unexpected_fabrication_graphics"] == [
+        {
+            "type": "fp_line",
+            "layer": "B.Paste",
+            "uuid": "00000000-0000-0000-0000-000000000084",
+            "child_index": 4,
+        }
+    ]
+
+
+def test_connectivity_roundtrip_rejects_direct_fabrication_graphics():
+    readback = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (gr_circle
+            (center 0 0)
+            (end 1 0)
+            (stroke (width 0.1) (type default))
+            (fill solid)
+            (layer "F.Paste")
+            (uuid 00000000-0000-0000-0000-000000000085)
+          )
+        )
+        """
+    )
+
+    audit = compare_kicad_connectivity(BoardModel(), readback)
+
+    assert audit["unexpected_fabrication_graphics"]["equal"] is False
+    assert audit["unexpected_fabrication_graphics"]["observed_count"] == 1
+    assert audit["unexpected_fabrication_graphics"]["unexpected"][0] == {
+        "scope": "board",
+        "footprint_name": None,
+        "reference": None,
+        "type": "gr_circle",
+        "layer": "F.Paste",
+        "uuid": "00000000-0000-0000-0000-000000000085",
+    }
+    assert audit["roundtrip_equal"] is False
+
+
 def test_connectivity_roundtrip_rejects_unexpected_setup_output_controls(
     tmp_path,
     field,

@@ -34,5 +34,6 @@ def read_kicad_board_text(text):
         "edge_graphics": edge_graphics,
         "unexpected_edge_graphics": read_unexpected_edge_graphics(root),
         "unexpected_copper_graphics": read_unexpected_copper_graphics(root),
+        "unexpected_fabrication_graphics": read_unexpected_fabrication_graphics(root),
         "mechanical_slots": read_mechanical_slots(footprints),
     }

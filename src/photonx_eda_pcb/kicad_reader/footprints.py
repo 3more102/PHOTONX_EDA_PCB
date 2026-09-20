@@ -1,6 +1,6 @@
 from .query import child, children
 from .pads import read_pads
-from .graphics import _is_canonical_copper_layer
+from .graphics import _is_canonical_copper_layer, _is_fabrication_graphic_layer
 
 
 def _optional_float(node, name):
@@ -102,6 +102,35 @@ def _unexpected_copper_graphics(node):
     return out
 
 
+def _unexpected_fabrication_graphics(node):
+    out = []
+    for index, item in enumerate(node[2:]):
+        if not isinstance(item, list) or not item:
+            continue
+        token = str(item[0])
+        if not (
+            token.startswith("fp_")
+            or token in {"property", "zone"}
+        ):
+            continue
+        layer = child(item, "layer")
+        if not layer or len(layer) < 2:
+            continue
+        layer_name = str(layer[1])
+        if not _is_fabrication_graphic_layer(layer_name):
+            continue
+        uuid = child(item, "uuid")
+        out.append(
+            {
+                "type": token,
+                "layer": layer_name,
+                "uuid": str(uuid[1]) if uuid and len(uuid) >= 2 else None,
+                "child_index": index,
+            }
+        )
+    return out
+
+
 def read_footprints(root):
     out = []
     for f in children(root, "footprint"):
@@ -124,6 +153,7 @@ def read_footprints(root):
                 "fabrication_overrides": _fabrication_overrides(f),
                 "net_tie_pad_groups": _net_tie_pad_groups(f),
                 "unexpected_copper_graphics": _unexpected_copper_graphics(f),
+                "unexpected_fabrication_graphics": _unexpected_fabrication_graphics(f),
             }
         )
     return out

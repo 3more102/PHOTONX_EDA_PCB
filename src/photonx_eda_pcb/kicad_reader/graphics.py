@@ -64,6 +64,18 @@ def read_unexpected_edge_graphics(root):
 
 
 
+_FABRICATION_GRAPHIC_LAYERS = {
+    "F.Mask",
+    "B.Mask",
+    "F.Paste",
+    "B.Paste",
+}
+
+
+def _is_fabrication_graphic_layer(name):
+    return str(name) in _FABRICATION_GRAPHIC_LAYERS
+
+
 def _is_canonical_copper_layer(name):
     layer = str(name)
     if layer in {"F.Cu", "B.Cu"}:
@@ -90,6 +102,34 @@ def read_unexpected_copper_graphics(root):
             continue
         layer_name = str(layer[1])
         if not _is_canonical_copper_layer(layer_name):
+            continue
+        uuid = child(item, "uuid")
+        out.append(
+            {
+                "type": token,
+                "layer": layer_name,
+                "uuid": str(uuid[1]) if uuid and len(uuid) >= 2 else None,
+                "root_index": index,
+            }
+        )
+    return out
+
+
+def read_unexpected_fabrication_graphics(root):
+    out = []
+    if not isinstance(root, list):
+        return out
+    for index, item in enumerate(root[1:]):
+        if not isinstance(item, list) or not item:
+            continue
+        token = str(item[0])
+        if not token.startswith("gr_"):
+            continue
+        layer = child(item, "layer")
+        if not layer or len(layer) < 2:
+            continue
+        layer_name = str(layer[1])
+        if not _is_fabrication_graphic_layer(layer_name):
             continue
         uuid = child(item, "uuid")
         out.append(
