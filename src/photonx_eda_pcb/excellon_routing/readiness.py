@@ -75,7 +75,9 @@ def _net_is_unambiguous(board, net_id):
 
 
 def _plated_route_padstack(board, route):
-    # Lazy import avoids a models -> excellon_routing -> plated-slot -> geometry -> models cycle.
+    # Lazy imports avoid a models -> excellon_routing -> plated-slot -> geometry
+    # -> models cycle during package initialization.
+    from photonx_eda_pcb.exporters.kicad_policy import declared_copper_layer_names
     from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
     plating = str(getattr(route, "plated", "unknown")).lower().replace("_", "-")
@@ -87,6 +89,13 @@ def _plated_route_padstack(board, route):
     inference = infer_plated_slot_padstack(board, slot)
     padstack = inference.padstack
     if padstack is None or not _net_is_unambiguous(board, padstack.net_id):
+        return None
+
+    declared_layers = set(declared_copper_layer_names(board))
+    padstack_layers = tuple(str(layer) for layer in padstack.layers)
+    if not padstack_layers or any(
+        layer not in declared_layers for layer in padstack_layers
+    ):
         return None
     return padstack
 
