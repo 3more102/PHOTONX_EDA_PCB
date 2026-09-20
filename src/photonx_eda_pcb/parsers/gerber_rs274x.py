@@ -105,6 +105,94 @@ _ARC_MAX_CHORD_ERROR_MM = 0.005
 _MAX_ARC_SEGMENTS = 4096
 
 
+# Ucamco Gerber Layer Format Specification 2026.05, section 5.6.10.
+# Validate the value tuple before promoting .AperFunction to structured
+# evidence. Generic aperture-attribute evidence is preserved independently.
+_APER_FUNCTION_SINGLE = frozenset(
+    {
+        "BackDrill",
+        "CastellatedDrill",
+        "ComponentPad",
+        "ConnectorPad",
+        "HeatsinkPad",
+        "ViaPad",
+        "TestPad",
+        "CastellatedPad",
+        "ThermalReliefPad",
+        "WasherPad",
+        "AntiPad",
+        "Conductor",
+        "EtchedComponent",
+        "NonConductor",
+        "CopperBalancing",
+        "Border",
+        "ComponentMain",
+        "ComponentPin",
+        "Profile",
+        "NonMaterial",
+        "Material",
+    }
+)
+_APER_FUNCTION_REQUIRED_ENUM = {
+    "SMDPad": frozenset({"CuDef", "SMDef"}),
+    "BGAPad": frozenset({"CuDef", "SMDef"}),
+    "FiducialPad": frozenset({"Local", "Global", "Panel"}),
+    "ComponentOutline": frozenset(
+        {"Body", "Lead2Lead", "Footprint", "Courtyard"}
+    ),
+}
+_APER_FUNCTION_OPTIONAL_ENUM = {
+    "ViaDrill": frozenset(
+        {
+            "Ia",
+            "Ib",
+            "IIa",
+            "IIb",
+            "IIIa",
+            "IIIb",
+            "IVa",
+            "IVb",
+            "V",
+            "VI",
+            "VII",
+            "None",
+        }
+    ),
+    "ComponentDrill": frozenset({"PressFit"}),
+    "MechanicalDrill": frozenset({"Tooling", "Breakout", "Other"}),
+}
+_APER_FUNCTION_REQUIRED_FREEFORM = frozenset(
+    {"OtherDrill", "OtherPad", "OtherCopper", "Other"}
+)
+
+
+def _is_valid_x2_aperture_function(values) -> bool:
+    """Return whether a .AperFunction value tuple matches Gerber 2026.05."""
+
+    values = tuple(values)
+    if not values:
+        return False
+
+    function = values[0]
+    if function in _APER_FUNCTION_SINGLE:
+        return len(values) == 1
+
+    choices = _APER_FUNCTION_REQUIRED_ENUM.get(function)
+    if choices is not None:
+        return len(values) == 2 and values[1] in choices
+
+    choices = _APER_FUNCTION_OPTIONAL_ENUM.get(function)
+    if choices is not None:
+        return len(values) == 1 or (
+            len(values) == 2 and values[1] in choices
+        )
+
+    if function in _APER_FUNCTION_REQUIRED_FREEFORM:
+        return len(values) == 2 and bool(values[1])
+
+    return False
+
+
 @dataclass(frozen=True)
 class Aperture:
     code: int
@@ -2177,7 +2265,7 @@ class GerberRS274XParser:
                     source,
                 )
             )
-            if name == ".AperFunction":
+            if name == ".AperFunction" and _is_valid_x2_aperture_function(values):
                 prov.add_evidence(
                     Evidence(
                         "gerber_x2_aperture_function",
