@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from photonx_eda_pcb.parsers.layer_map import (
+    infer_layer,
     x2_file_function_declarations,
     x2_file_function_fields,
 )
@@ -30,6 +31,7 @@ def test_file_function_is_unique_immutable_attribute():
         ("Copper", "L2", "Bot"),
     )
     assert x2_file_function_fields(text) is None
+    assert infer_layer("top.gtl", text) is None
 
 
 def test_manifest_fails_closed_on_redefined_file_function(tmp_path: Path):
