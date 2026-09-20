@@ -36,5 +36,12 @@ validation findings remain inspectable without inventing object identity.
 Diagnostic, validation, and unknown-plating rows display confidence as
 unavailable rather than presenting an invented probability.
 
+Via-span evidence is also visible directly on the board canvas. Proven spans that
+meet the conservative KiCad export contract are drawn solid; proven-but-omitted
+spans are dashed; unproven spans use a shorter dash pattern. Selecting the drill
+opens a composite inspector payload containing plating, layer span, supporting
+pads, confidence, reconstructed net when unambiguous, and the exact KiCad
+omission code/message when export is intentionally refused.
+
 Human decisions remain explicit review metadata and do not mutate source
 evidence automatically.
