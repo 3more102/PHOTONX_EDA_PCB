@@ -48,7 +48,7 @@ SIGNATURES = [
         "pitch_cv_max": 0.15,
         "pitch_min_mm": 0.3,
         "pitch_max_mm": 10.0,
-        "base_score": 0.25,
+        "base_score": 0.10,
     },
     {
         "name": "SINGLE_ROW_SMD",
@@ -59,7 +59,7 @@ SIGNATURES = [
         "pitch_cv_max": 0.15,
         "pitch_min_mm": 0.3,
         "pitch_max_mm": 10.0,
-        "base_score": 0.25,
+        "base_score": 0.10,
     },
     {
         "name": "DUAL_ROW_THT",
@@ -72,7 +72,7 @@ SIGNATURES = [
         "pitch_cv_max": 0.15,
         "pitch_min_mm": 0.3,
         "pitch_max_mm": 10.0,
-        "base_score": 0.25,
+        "base_score": 0.10,
     },
     {
         "name": "DUAL_ROW_SMD",
@@ -85,7 +85,7 @@ SIGNATURES = [
         "pitch_cv_max": 0.15,
         "pitch_min_mm": 0.3,
         "pitch_max_mm": 10.0,
-        "base_score": 0.25,
+        "base_score": 0.10,
     },
 ]
 
