@@ -206,14 +206,6 @@ def test_reader_preserves_singleton_board_section_counts():
     }
 
 
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("aux_axis_origin", (10.0, 20.0)),
-        ("grid_origin", (1.5, 2.5)),
-        ("pcbplotparams_present", True),
-    ],
-)
 def test_reader_exposes_board_and_footprint_fabrication_graphics():
     readback = read_kicad_board_text(
         """
@@ -297,6 +289,14 @@ def test_connectivity_roundtrip_rejects_direct_fabrication_graphics():
     assert audit["roundtrip_equal"] is False
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("aux_axis_origin", (10.0, 20.0)),
+        ("grid_origin", (1.5, 2.5)),
+        ("pcbplotparams_present", True),
+    ],
+)
 def test_connectivity_roundtrip_rejects_unexpected_setup_output_controls(
     tmp_path,
     field,
