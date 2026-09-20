@@ -299,3 +299,58 @@ def test_malformed_recognized_xnc_tool_function_fails_closed(tmp_path: Path):
         diagnostic.code == "INVALID_EXCELLON_X2_TOOL_FUNCTION"
         for diagnostic in permissive.diagnostics
     )
+
+
+def test_standard_xnc_named_delete_clears_tool_function(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        "M48\n"
+        "; #@! TF.FileFunction,NonPlated,1,2,NPTH\n"
+        "METRIC\n"
+        "; #@! TA.AperFunction,MechanicalDrill,Breakout\n"
+        "T01C0.800\n"
+        "; #@! TD.AperFunction\n"
+        "T02C0.900\n"
+        "%\n"
+        "T01\n"
+        "X1.000Y1.000\n"
+        "T02\n"
+        "X2.000Y2.000\n"
+        "M30\n",
+    )
+
+    result = ExcellonParser(strict=True).parse(path)
+
+    assert [drill.x2_aperture_function for drill in result.drills] == [
+        "mechanicaldrill",
+        None,
+    ]
+
+
+def test_unsupported_xnc_tool_function_fails_closed_instead_of_leaking_modal_state(
+    tmp_path: Path,
+):
+    path = _write(
+        tmp_path,
+        "M48\n"
+        "; #@! TF.FileFunction,NonPlated,1,2,NPTH\n"
+        "METRIC\n"
+        "; #@! TA.AperFunction,BackDrill\n"
+        "T01C0.800\n"
+        "; #@! TA.AperFunction,FutureDrill\n"
+        "T02C0.900\n"
+        "%\n"
+        "T01\n"
+        "X1.000Y1.000\n"
+        "M30\n",
+    )
+
+    with pytest.raises(ParseError, match="unsupported or malformed XNC AperFunction"):
+        ExcellonParser(strict=True).parse(path)
+
+    permissive = ExcellonParser(strict=False).parse(path)
+    assert permissive.drills == []
+    assert any(
+        diagnostic.code == "INVALID_EXCELLON_X2_TOOL_FUNCTION"
+        for diagnostic in permissive.diagnostics
+    )
