@@ -16,4 +16,12 @@ def check_geometry(board):
         if not is_finite_number(s.width_mm) or s.width_mm<=0:issues.append(CheckIssue("error","SLOT_WIDTH_INVALID","slot width must be positive",s.id))
         vals=(*s.start,*s.end)
         if not all(is_finite_number(v) for v in vals):issues.append(CheckIssue("error","SLOT_COORDINATE_INVALID","slot coordinates must be finite",s.id))
+    for route in getattr(board,"routes",()):
+        if not is_finite_number(route.width_mm) or route.width_mm<=0:issues.append(CheckIssue("error","ROUTE_WIDTH_INVALID","route width must be finite and positive",route.id))
+        if not all(
+            isinstance(point,(tuple,list))
+            and len(point)==2
+            and all(is_finite_number(value) for value in point)
+            for point in route.points
+        ):issues.append(CheckIssue("error","ROUTE_COORDINATE_INVALID","route coordinates must be finite 2D points",route.id))
     return issues
