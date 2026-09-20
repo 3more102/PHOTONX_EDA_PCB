@@ -1,7 +1,80 @@
-SIGNATURES=[
- {'name':'TWO_PIN_THT','pad_count':2,'drilled_min':0.9,'aspect_min':1.2},
- {'name':'TWO_PAD_SMD','pad_count':2,'drilled_max':0.1,'aspect_min':1.2},
- {'name':'SOIC8_LIKE','pad_count':8,'drilled_max':0.1,'aspect_min':1.2},
- {'name':'DIP8_LIKE','pad_count':8,'drilled_min':0.8,'aspect_min':1.2},
+SIGNATURES = [
+    {
+        "name": "TWO_PIN_THT",
+        "pad_count": 2,
+        "drilled_min": 0.99,
+        "row_count": 1,
+        "base_score": 0.45,
+    },
+    {
+        "name": "TWO_PAD_SMD",
+        "pad_count": 2,
+        "drilled_max": 0.01,
+        "row_count": 1,
+        "base_score": 0.45,
+    },
+    {
+        "name": "DIP8_LIKE",
+        "pad_count": 8,
+        "drilled_min": 0.99,
+        "row_count": 2,
+        "row_size": 4,
+        "row_balance_min": 0.95,
+        "pitch_cv_max": 0.08,
+        "base_score": 0.45,
+    },
+    {
+        "name": "SOIC8_LIKE",
+        "pad_count": 8,
+        "drilled_max": 0.01,
+        "row_count": 2,
+        "row_size": 4,
+        "row_balance_min": 0.95,
+        "pitch_cv_max": 0.08,
+        "base_score": 0.45,
+    },
+    {
+        "name": "SINGLE_ROW_THT",
+        "pad_count_min": 3,
+        "pad_count_max": 40,
+        "drilled_min": 0.99,
+        "row_count": 1,
+        "pitch_cv_max": 0.15,
+        "base_score": 0.25,
+    },
+    {
+        "name": "SINGLE_ROW_SMD",
+        "pad_count_min": 3,
+        "pad_count_max": 40,
+        "drilled_max": 0.01,
+        "row_count": 1,
+        "pitch_cv_max": 0.15,
+        "base_score": 0.25,
+    },
+    {
+        "name": "DUAL_ROW_THT",
+        "pad_count_min": 4,
+        "pad_count_max": 40,
+        "pad_count_even": True,
+        "drilled_min": 0.99,
+        "row_count": 2,
+        "row_balance_min": 0.80,
+        "pitch_cv_max": 0.15,
+        "base_score": 0.25,
+    },
+    {
+        "name": "DUAL_ROW_SMD",
+        "pad_count_min": 4,
+        "pad_count_max": 40,
+        "pad_count_even": True,
+        "drilled_max": 0.01,
+        "row_count": 2,
+        "row_balance_min": 0.80,
+        "pitch_cv_max": 0.15,
+        "base_score": 0.25,
+    },
 ]
-def signature_by_name(name): return next((x for x in SIGNATURES if x['name']==name),None)
+
+
+def signature_by_name(name):
+    return next((item for item in SIGNATURES if item["name"] == name), None)
