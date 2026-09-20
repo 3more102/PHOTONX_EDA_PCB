@@ -53,3 +53,17 @@ The component identity may still remain certain when X2 proves its reference. In
 ## Regression coverage
 
 Focused tests cover rotated SOIC-8 and DIP-8 patterns, regular single-row headers, deliberate signature ambiguity, implausibly large pad pitch, X2 package-hint propagation, and X2 identity preservation when package geometry is unproven.
+
+
+## Structured source pin identity
+
+When trusted Gerber X2 `.P` evidence proves a component reference and a pad has exactly one trusted non-empty pin number, the corresponding `ComponentHypothesis` stores that relationship in `source_pin_map` as `pad_id -> source pin number`.
+
+Trusted pin functions are stored separately in `source_pin_functions`, but only for pads that also have a proven source pin number. Conflicting, empty, missing, or lower-confidence pin evidence is not promoted into these maps and remains explicitly unresolved in the human-readable evidence.
+
+The structured pin maps and `package_hint` coexist on the same component object but have different authority:
+
+- `source_pin_map` / `source_pin_functions` preserve source-declared identity only.
+- `package_hint` remains a geometry-backed package-shape hypothesis.
+- Geometry never invents or renumbers source pins.
+- Conflicting trusted pin numbers fail closed for that pad without discarding an otherwise proven component reference.
