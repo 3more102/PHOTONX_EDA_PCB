@@ -127,7 +127,13 @@ def test_reconstruct_kicad_emits_board_report_omissions_and_validation(
 
     monkeypatch.setattr(cli, "export_kicad_with_report", fake_export)
     roundtrip = {
-        "scope": [\n            "net_table",\n            "tracks",\n            "recovered_pads",\n            "copper_regions",\n            "recovered_slots",\n        ],
+        "scope": [
+            "net_table",
+            "tracks",
+            "recovered_pads",
+            "copper_regions",
+            "recovered_slots",
+        ],
         "roundtrip_equal": True,
         "source_connectivity_complete": False,
         "source_equivalent": False,
