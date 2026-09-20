@@ -36,7 +36,7 @@ The connectivity audit checks:
 - recovered confirmed non-plated point drills as exact round NPTH footprints with deterministic footprint/Reference-property/child-pad identity and drill geometry; unknown/plated/invalid point drills remain explicit export losses;
 - recovered NPTH/plated-slot footprint/Reference-property/child-pad identity, kind, net binding, and canonical mechanical geometry using the existing slot round-trip comparator;
 - consistency between embedded KiCad net names and the board net table where the file format carries both;
-- proven plated via spans that meet the exact via-export contract: an explicitly plated drill, exactly one concentric circular supporting pad on every declared copper layer in the span, one identical annular diameter, and one unambiguous reconstructed net. Exported vias are verified for position, size, drill, layer span, net binding, and deterministic UUID; spans that do not meet this contract remain explicit source losses.
+- proven full-stack plated via spans that meet the exact via-export contract: an explicitly plated F.Cu↔B.Cu drill, exactly one concentric circular supporting pad on every declared copper layer in the span, one identical annular diameter, and one unambiguous reconstructed net. Exported vias are verified for type, position, size, drill, layer span, net binding, and deterministic UUID. Partial-layer proven spans remain explicit source losses because Gerber/Excellon evidence does not distinguish blind/buried-via manufacturing from microvia manufacturing.
 
 The JSON result deliberately separates:
 
