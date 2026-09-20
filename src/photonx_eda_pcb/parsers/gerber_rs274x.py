@@ -101,6 +101,7 @@ _LEGACY_SCALE_FACTOR = re.compile(
 )
 
 _MAX_STEP_REPEAT_INSTANCES = 10_000
+_MAX_APERTURE_ID = 2_147_483_647
 _ARC_MAX_CHORD_ERROR_MM = 0.005
 _MAX_ARC_SEGMENTS = 4096
 
@@ -1117,6 +1118,48 @@ class GerberRS274XParser:
             self.current.y if y is None else y,
         )
 
+    def _claim_aperture_definition(
+        self,
+        code: int,
+        path: Path,
+        line_no: int,
+        line: str,
+        out: GerberLayerResult,
+    ) -> bool:
+        """Validate and reserve one AD aperture identifier before instantiation."""
+        if not 10 <= code <= _MAX_APERTURE_ID:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_APERTURE_ID",
+                (
+                    f"Gerber aperture number D{code} must be in "
+                    f"10..{_MAX_APERTURE_ID}"
+                ),
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return False
+
+        if code in self.apertures or code in self.unsupported_apertures:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "DUPLICATE_GERBER_APERTURE_ID",
+                f"Gerber aperture number D{code} cannot be re-assigned",
+                out,
+            )
+            self.unsupported_apertures.add(code)
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return False
+
+        return True
+
     def _instantiate_standard_aperture(
         self,
         code: int,
@@ -1355,6 +1398,33 @@ class GerberRS274XParser:
                 "aperture macro has no name",
                 out,
             )
+            return
+        if name in {"C", "R", "O", "P"}:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "INVALID_GERBER_APERTURE_MACRO_NAME",
+                (
+                    f"aperture macro name {name!r} conflicts with a standard "
+                    "aperture template"
+                ),
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
+            return
+        if name in self.aperture_macros:
+            self._parse_error_or_warn(
+                path,
+                line_no,
+                line,
+                "DUPLICATE_GERBER_APERTURE_MACRO",
+                f"aperture macro name {name!r} must be unique",
+                out,
+            )
+            if not self.strict:
+                self._disable_image_geometry(out)
             return
         self.aperture_macros[name] = body
 
@@ -4453,8 +4523,13 @@ class GerberRS274XParser:
                 if not self._require_units(p, line_no, line, out):
                     continue
                 code, shape, modifiers = m.groups()
+                aperture_code = int(code)
+                if not self._claim_aperture_definition(
+                    aperture_code, p, line_no, line, out
+                ):
+                    continue
                 self._instantiate_standard_aperture(
-                    int(code),
+                    aperture_code,
                     shape,
                     modifiers,
                     p,
@@ -4469,8 +4544,13 @@ class GerberRS274XParser:
                 if not self._require_units(p, line_no, line, out):
                     continue
                 code, name, modifiers = m.groups()
+                aperture_code = int(code)
+                if not self._claim_aperture_definition(
+                    aperture_code, p, line_no, line, out
+                ):
+                    continue
                 self._instantiate_macro_aperture(
-                    int(code),
+                    aperture_code,
                     name,
                     modifiers,
                     p,
