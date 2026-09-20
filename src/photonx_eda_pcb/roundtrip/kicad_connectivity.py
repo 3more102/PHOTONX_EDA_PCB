@@ -334,6 +334,49 @@ def _observed_tracks(readback, net_lookup, issues):
     return out
 
 
+def _active_overrides(values):
+    return {
+        key: value
+        for key, value in values.items()
+        if value is not None and value is not False
+    }
+
+
+def _observed_copper_overrides(readback):
+    out = []
+    for footprint in readback.get("footprints", ()):
+        if footprint.get("name") not in _PHOTONX_FOOTPRINT_NAMES:
+            continue
+        fp_overrides = _active_overrides(
+            dict(footprint.get("copper_overrides", {}))
+        )
+        if fp_overrides:
+            out.append(
+                {
+                    "scope": "footprint",
+                    "footprint_name": str(footprint.get("name")),
+                    "reference": footprint.get("reference"),
+                    "pad_number": None,
+                    "overrides": fp_overrides,
+                }
+            )
+        for pad in footprint.get("pads", ()):
+            pad_overrides = _active_overrides(
+                dict(pad.get("copper_overrides", {}))
+            )
+            if pad_overrides:
+                out.append(
+                    {
+                        "scope": "pad",
+                        "footprint_name": str(footprint.get("name")),
+                        "reference": footprint.get("reference"),
+                        "pad_number": str(pad.get("number")),
+                        "overrides": pad_overrides,
+                    }
+                )
+    return out
+
+
 def _observed_footprint_copper_graphics(readback):
     out = []
     for footprint in readback.get("footprints", ()):
@@ -1037,7 +1080,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     """Compare generated KiCad connectivity with the source/export policy.
 
     With an export report, the audit covers emitted board fabrication settings, the declared KiCad layer table, net table, and tracks,
-    rejects unexpected KiCad vias, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
+    rejects unexpected KiCad vias, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, footprint/pad copper-behavior overrides, verifies the emitted Edge.Cuts outline, and compares recovered pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
     and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
@@ -1158,6 +1201,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     unexpected_footprint_copper_graphics = _compare_multiset(
         [],
         _observed_footprint_copper_graphics(readback),
+    )
+
+    unexpected_copper_overrides = _compare_multiset(
+        [],
+        _observed_copper_overrides(readback),
     )
 
     exported_pad_ids, skipped_pad_ids = _reported_pad_sets(
@@ -1283,6 +1331,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and unexpected_edge_graphics["equal"]
         and unexpected_copper_graphics["equal"]
         and unexpected_footprint_copper_graphics["equal"]
+        and unexpected_copper_overrides["equal"]
         and foreign_footprints["equal"]
         and pads["equal"]
         and regions["equal"]
@@ -1317,6 +1366,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "unexpected_edge_graphics",
             "unexpected_copper_graphics",
             "unexpected_footprint_copper_graphics",
+            "unexpected_copper_overrides",
             "foreign_footprints",
             "recovered_pads",
             "copper_regions",
@@ -1341,6 +1391,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "unexpected_edge_graphics": unexpected_edge_graphics,
         "unexpected_copper_graphics": unexpected_copper_graphics,
         "unexpected_footprint_copper_graphics": unexpected_footprint_copper_graphics,
+        "unexpected_copper_overrides": unexpected_copper_overrides,
         "foreign_footprints": foreign_footprints,
         "pads": pads,
         "regions": regions,

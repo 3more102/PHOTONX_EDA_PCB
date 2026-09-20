@@ -3,6 +3,33 @@ from .pads import read_pads
 from .graphics import _is_canonical_copper_layer
 
 
+def _optional_float(node, name):
+    item = child(node, name)
+    if item is None:
+        return None
+    if len(item) != 2:
+        raise ValueError(f"footprint {name} must contain one numeric value")
+    return float(item[1])
+
+
+def _optional_int(node, name):
+    item = child(node, name)
+    if item is None:
+        return None
+    if len(item) != 2 or isinstance(item[1], bool) or not isinstance(item[1], int):
+        raise ValueError(f"footprint {name} must be an integer")
+    return item[1]
+
+
+def _copper_overrides(node):
+    return {
+        "clearance": _optional_float(node, "clearance"),
+        "zone_connect": _optional_int(node, "zone_connect"),
+        "thermal_width": _optional_float(node, "thermal_width"),
+        "thermal_gap": _optional_float(node, "thermal_gap"),
+    }
+
+
 def _property_value(node, name):
     for prop in children(node, "property"):
         if len(prop) >= 3 and str(prop[1]) == name:
@@ -54,6 +81,7 @@ def read_footprints(root):
                 "angle": float(at[3]) if at and len(at) > 3 else 0.0,
                 "layer": str(layer[1]) if layer else None,
                 "pads": read_pads(f),
+                "copper_overrides": _copper_overrides(f),
                 "unexpected_copper_graphics": _unexpected_copper_graphics(f),
             }
         )

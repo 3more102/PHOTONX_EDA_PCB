@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added fail-closed readback for KiCad footprint/pad copper-behavior overrides. PhotonX recovered footprints and child pads now surface non-default clearance, zone-connect, thermal width/gap, and pad unused-layer/end-layer controls through an `unexpected_copper_overrides` audit family, preventing unchanged geometry from hiding different zone-connection copper.
+
 - Expanded KiCad region-rule auditing to semantics that can change repour output without changing the zone polygon: priority, keepout state, solid-vs-hatched fill mode, filled-area-thickness policy, and minimum-island area. Missing/default values are normalized semantically (for example omitted priority equals zero), while meaningful changes now fail `region_rules`.
 
 - Added KiCad board-fabrication setting readback and round-trip verification. Exporter and audit now share the same default board-thickness and global pad-to-mask-clearance constants, and edits to either setting fail `board_settings` even when all copper connectivity objects are otherwise unchanged.

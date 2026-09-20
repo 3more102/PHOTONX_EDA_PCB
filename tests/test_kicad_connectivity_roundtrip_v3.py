@@ -79,6 +79,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "unexpected_edge_graphics",
         "unexpected_copper_graphics",
         "unexpected_footprint_copper_graphics",
+        "unexpected_copper_overrides",
         "foreign_footprints",
         "recovered_pads",
         "copper_regions",
@@ -452,6 +453,60 @@ def test_connectivity_roundtrip_rejects_footprint_copper_graphic(tmp_path):
         "type": "fp_poly",
         "layer": "F.Cu",
         "uuid": "00000000-0000-0000-0000-000000000093",
+    }
+
+
+def test_connectivity_roundtrip_rejects_footprint_copper_override(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    footprint = next(
+        item
+        for item in readback["footprints"]
+        if item["name"] == "PHOTONX:RecoveredPad"
+    )
+    footprint["copper_overrides"]["zone_connect"] = 2
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["unexpected_copper_overrides"]["observed_count"] == 1
+    assert audit["unexpected_copper_overrides"]["unexpected"][0] == {
+        "scope": "footprint",
+        "footprint_name": "PHOTONX:RecoveredPad",
+        "reference": "P1",
+        "pad_number": None,
+        "overrides": {"zone_connect": 2},
+    }
+
+
+def test_connectivity_roundtrip_rejects_pad_copper_override(tmp_path):
+    board = _board_with_all_connectivity_families()
+    path, report = export_kicad_with_report(
+        board,
+        tmp_path / "board.kicad_pcb",
+    )
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    footprint = next(
+        item
+        for item in readback["footprints"]
+        if item["name"] == "PHOTONX:RecoveredPad"
+    )
+    footprint["pads"][0]["copper_overrides"]["thermal_gap"] = 0.2
+
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["unexpected_copper_overrides"]["observed_count"] == 1
+    assert audit["unexpected_copper_overrides"]["unexpected"][0] == {
+        "scope": "pad",
+        "footprint_name": "PHOTONX:RecoveredPad",
+        "reference": "P1",
+        "pad_number": "1",
+        "overrides": {"thermal_gap": 0.2},
     }
 
 

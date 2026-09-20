@@ -1,6 +1,43 @@
 from .query import child, children
 
 
+def _optional_float(node, name):
+    item = child(node, name)
+    if item is None:
+        return None
+    if len(item) != 2:
+        raise ValueError(f"pad {name} must contain one numeric value")
+    return float(item[1])
+
+
+def _optional_int_alias(node, *names):
+    found = [child(node, name) for name in names]
+    found = [item for item in found if item is not None]
+    if not found:
+        return None
+    if len(found) != 1:
+        raise ValueError("pad zone connection override is ambiguous")
+    item = found[0]
+    if len(item) != 2 or isinstance(item[1], bool) or not isinstance(item[1], int):
+        raise ValueError("pad zone connection override must be an integer")
+    return item[1]
+
+
+def _copper_overrides(node):
+    return {
+        "clearance": _optional_float(node, "clearance"),
+        "zone_connect": _optional_int_alias(
+            node,
+            "zone_connect",
+            "zone_connection",
+        ),
+        "thermal_width": _optional_float(node, "thermal_width"),
+        "thermal_gap": _optional_float(node, "thermal_gap"),
+        "remove_unused_layer": child(node, "remove_unused_layer") is not None,
+        "keep_end_layers": child(node, "keep_end_layers") is not None,
+    }
+
+
 def _read_drill(drill):
     if not drill:
         return {
@@ -69,6 +106,7 @@ def read_pads(footprint):
                 "net": net_code,
                 "net_name": net_name,
                 "uuid": str(uuid[1]) if uuid and len(uuid) >= 2 else None,
+                "copper_overrides": _copper_overrides(pad),
             }
         )
     return out

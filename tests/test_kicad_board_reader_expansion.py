@@ -49,3 +49,50 @@ def test_reader_exposes_board_fabrication_settings():
         "thickness": 1.6,
         "pad_to_mask_clearance": 0.15,
     }
+
+
+
+def test_reader_exposes_footprint_and_pad_copper_overrides():
+    d = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (footprint "PHOTONX:RecoveredPad"
+            (layer "F.Cu")
+            (at 0 0)
+            (property "Reference" "P1"
+              (layer "F.SilkS")
+            )
+            (clearance 0.2)
+            (zone_connect 2)
+            (thermal_width 0.3)
+            (thermal_gap 0.4)
+            (pad "1" smd rect
+              (at 0 0)
+              (size 1 1)
+              (layers "F.Cu")
+              (clearance 0.1)
+              (zone_connect 1)
+              (thermal_width 0.25)
+              (thermal_gap 0.35)
+              (remove_unused_layer)
+              (keep_end_layers)
+            )
+          )
+        )
+        """
+    )
+    footprint = d["footprints"][0]
+    assert footprint["copper_overrides"] == {
+        "clearance": 0.2,
+        "zone_connect": 2,
+        "thermal_width": 0.3,
+        "thermal_gap": 0.4,
+    }
+    assert footprint["pads"][0]["copper_overrides"] == {
+        "clearance": 0.1,
+        "zone_connect": 1,
+        "thermal_width": 0.25,
+        "thermal_gap": 0.35,
+        "remove_unused_layer": True,
+        "keep_end_layers": True,
+    }
