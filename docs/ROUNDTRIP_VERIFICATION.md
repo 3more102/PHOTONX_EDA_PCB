@@ -36,7 +36,7 @@ The connectivity audit checks:
 - recovered confirmed non-plated point drills as exact round NPTH footprints with deterministic footprint/Reference-property/child-pad identity and drill geometry; unknown/plated/invalid point drills remain explicit export losses;
 - recovered NPTH/plated-slot footprint/Reference-property/child-pad identity, kind, net binding, and canonical mechanical geometry using the existing slot round-trip comparator;
 - consistency between embedded KiCad net names and the board net table where the file format carries both;
-- proven plated via spans: exact through vias plus source-declared X2 `Blind`/`Buried` spans are emitted when annular geometry, layer support, net binding, and via type are all exactly representable; untyped partial spans and contradictory type/span evidence remain explicit export losses.
+- proven plated via spans: exact through vias plus source-declared X2 `Blind`/`Buried` spans are emitted when annular geometry, layer support, net binding, and via semantics are exactly representable. PhotonX currently writes KiCad board format `20240108`, where the `blind` token represents the combined blind/buried class; an inner-to-inner layer pair is normalized back to semantic `buried` on readback. Untyped partial spans and contradictory type/span evidence remain explicit export losses.
 
 The JSON result deliberately separates:
 
