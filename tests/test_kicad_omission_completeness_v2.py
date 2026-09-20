@@ -8,7 +8,7 @@ from photonx_eda_pcb.exporters.omission_manifest import (
 )
 from photonx_eda_pcb.exporters.omission_validation import validate_omission_manifest
 from photonx_eda_pcb.mechanical_features import SlotFeature
-from photonx_eda_pcb.models import BoardModel, CopperRegion, Point, Track
+from photonx_eda_pcb.models import BoardModel, CopperRegion, DrillHit, PadCandidate, Point, Track
 
 
 def _square(region_id: str, x0: float, *, holes=()) -> CopperRegion:
@@ -129,4 +129,36 @@ def test_legacy_slot_only_manifest_remains_valid():
         ],
     }
 
+    assert validate_omission_manifest(data) == []
+
+
+def test_manifest_records_proven_via_span_connectivity_omission(tmp_path):
+    board = BoardModel(
+        pads=[
+            PadCandidate("P_F", Point(0, 0), 1.0, 1.0, "C", "F.Cu"),
+            PadCandidate("P_B", Point(0, 0), 1.0, 1.0, "C", "B.Cu"),
+        ],
+        drills=[DrillHit("D1", Point(0, 0), 0.4, "plated")],
+        metadata={
+            "via_spans": [
+                {
+                    "drill_id": "D1",
+                    "from_layer": "F.Cu",
+                    "to_layer": "B.Cu",
+                    "confidence": 0.95,
+                    "proven": True,
+                    "pad_ids": ["P_B", "P_F"],
+                    "evidence": [],
+                }
+            ]
+        },
+    )
+    _, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
+    data = omission_manifest(report)
+    assert data["omitted_via_spans"] == ["D1"]
+    assert any(
+        item["code"] == "KICAD_PROVEN_VIA_SPAN_UNSUPPORTED"
+        and item["object_id"] == "D1"
+        for item in data["issues"]
+    )
     assert validate_omission_manifest(data) == []

@@ -7,6 +7,7 @@ from photonx_eda_pcb.mechanical_features import SlotFeature
 from photonx_eda_pcb.models import (
     BoardModel,
     CopperRegion,
+    DrillHit,
     NetGroup,
     PadCandidate,
     Point,
@@ -82,6 +83,47 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
     assert audit["slots"]["equal"] is True
     assert audit["slots"]["expected_count"] == 1
     assert audit["issues"] == []
+
+
+def test_connectivity_roundtrip_marks_proven_via_span_as_source_loss(tmp_path):
+    board = BoardModel(
+        nets=[_net()],
+        pads=[
+            PadCandidate("P_F", Point(0, 0), 1.0, 1.0, "C", "F.Cu", None, "N1"),
+            PadCandidate("P_B", Point(0, 0), 1.0, 1.0, "C", "B.Cu", None, "N1"),
+        ],
+        drills=[DrillHit("D1", Point(0, 0), 0.4, "plated")],
+        metadata={
+            "via_spans": [
+                {
+                    "drill_id": "D1",
+                    "from_layer": "F.Cu",
+                    "to_layer": "B.Cu",
+                    "confidence": 0.95,
+                    "proven": True,
+                    "pad_ids": ["P_B", "P_F"],
+                    "evidence": ["plated drill with two-layer pad support"],
+                }
+            ]
+        },
+    )
+
+    path, report = export_kicad_with_report(board, tmp_path / "board.kicad_pcb")
+    readback = read_kicad_board_text(path.read_text(encoding="utf-8"))
+    audit = compare_kicad_connectivity(board, readback, report)
+
+    assert readback["vias"] == []
+    assert report.skipped_via_spans == 1
+    assert report.skipped_via_span_ids == ["D1"]
+    assert any(
+        issue.code == "KICAD_PROVEN_VIA_SPAN_UNSUPPORTED"
+        and issue.object_id == "D1"
+        for issue in report.issues
+    )
+    assert audit["roundtrip_equal"] is True
+    assert audit["source_connectivity_complete"] is False
+    assert audit["source_equivalent"] is False
+    assert audit["losses"]["omitted_proven_via_span_drill_ids"] == ["D1"]
 
 
 def test_connectivity_roundtrip_detects_unexpected_via(tmp_path):
@@ -294,6 +336,7 @@ def test_connectivity_roundtrip_separates_export_losses(tmp_path):
         "skipped_slot_ids": ["S_SKIP"],
         "unresolved_pad_net_ids": ["P_UNRESOLVED"],
         "unresolved_slot_net_ids": [],
+        "omitted_proven_via_span_drill_ids": [],
     }
 
 

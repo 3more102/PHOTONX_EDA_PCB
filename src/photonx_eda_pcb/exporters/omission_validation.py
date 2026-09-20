@@ -16,6 +16,9 @@ _REASON_CODES={
     "omitted_routes":{
         "KICAD_ARBITRARY_ROUTE_UNSUPPORTED",
     },
+    "omitted_via_spans":{
+        "KICAD_PROVEN_VIA_SPAN_UNSUPPORTED",
+    },
 }
 
 def _duplicate(values):
@@ -38,6 +41,7 @@ def validate_omission_manifest(data):
     exported_tracks=list(data.get("exported_tracks",()))
     skipped_tracks=list(data.get("skipped_tracks",()))
     omitted_routes=list(data.get("omitted_routes",()))
+    omitted_via_spans=list(data.get("omitted_via_spans",()))
 
     duplicate_checks=(
         ("OMISSION_EXPORTED_SLOT_DUPLICATE_ID",exported_slots),
@@ -47,6 +51,7 @@ def validate_omission_manifest(data):
         ("OMISSION_EXPORTED_TRACK_DUPLICATE_ID",exported_tracks),
         ("OMISSION_SKIPPED_TRACK_DUPLICATE_ID",skipped_tracks),
         ("OMISSION_ROUTE_DUPLICATE_ID",omitted_routes),
+        ("OMISSION_VIA_SPAN_DUPLICATE_ID",omitted_via_spans),
     )
     for code,values in duplicate_checks:
         if _duplicate(values):issues.append(code)
@@ -65,6 +70,7 @@ def validate_omission_manifest(data):
         ("OMISSION_SKIPPED_REGION_WITHOUT_REASON","skipped_regions",skipped_regions),
         ("OMISSION_SKIPPED_TRACK_WITHOUT_REASON","skipped_tracks",skipped_tracks),
         ("OMISSION_ROUTE_WITHOUT_REASON","omitted_routes",omitted_routes),
+        ("OMISSION_VIA_SPAN_WITHOUT_REASON","omitted_via_spans",omitted_via_spans),
     )
     for code,key,values in reason_checks:
         if _missing_reason(values,manifest_issues,_REASON_CODES[key]):issues.append(code)

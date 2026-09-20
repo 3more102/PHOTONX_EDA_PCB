@@ -11,3 +11,98 @@ def slot_export_status(slot):
     if plating=="non-plated":return "export-npth"
     if plating=="plated":return "infer-plated-padstack"
     return "skip-unknown-plating"
+
+
+def proven_via_span_omissions(board):
+    """Return proven via-span drill IDs plus malformed metadata diagnostics."""
+    metadata = getattr(board, "metadata", {}) or {}
+    if not isinstance(metadata, dict):
+        return (), (("via_spans", "board metadata must be a mapping"),)
+    raw_spans = metadata.get("via_spans", ())
+    if raw_spans is None:
+        return (), ()
+    if not isinstance(raw_spans, (list, tuple)):
+        return (), (("via_spans", "via_spans metadata must be a list or tuple"),)
+
+    drill_by_id = {str(item.id): item for item in getattr(board, "drills", ())}
+    pad_by_id = {str(item.id): item for item in getattr(board, "pads", ())}
+    omitted = []
+    problems = []
+    seen = set()
+
+    for index, span in enumerate(raw_spans):
+        object_id = f"via_spans[{index}]"
+        if not isinstance(span, dict):
+            problems.append((object_id, "via-span metadata entry must be a mapping"))
+            continue
+        proven = span.get("proven", False)
+        if not isinstance(proven, bool):
+            problems.append((object_id, "via-span proven flag must be boolean"))
+            continue
+        if not proven:
+            continue
+
+        drill_id = span.get("drill_id")
+        from_layer = span.get("from_layer")
+        to_layer = span.get("to_layer")
+        pad_ids = span.get("pad_ids", ())
+        if not isinstance(drill_id, str) or not drill_id:
+            problems.append((object_id, "proven via span requires a non-empty drill_id"))
+            continue
+        object_id = drill_id
+        if (
+            not isinstance(from_layer, str)
+            or not from_layer
+            or not isinstance(to_layer, str)
+            or not to_layer
+            or from_layer == to_layer
+        ):
+            problems.append(
+                (object_id, "proven via span requires two distinct non-empty copper layers")
+            )
+            continue
+        if (
+            not isinstance(pad_ids, (list, tuple))
+            or len(pad_ids) < 2
+            or any(not isinstance(pad_id, str) or not pad_id for pad_id in pad_ids)
+        ):
+            problems.append(
+                (object_id, "proven via span requires at least two supporting pad IDs")
+            )
+            continue
+
+        drill = drill_by_id.get(drill_id)
+        plating = str(getattr(drill, "plating", "unknown")).lower().replace("_", "-")
+        if drill is None or plating != "plated":
+            problems.append(
+                (object_id, "proven via span must reference an existing plated drill")
+            )
+            continue
+
+        missing_pads = sorted({pad_id for pad_id in pad_ids if pad_id not in pad_by_id})
+        if missing_pads:
+            problems.append(
+                (
+                    object_id,
+                    "proven via span references missing supporting pads: "
+                    + ", ".join(missing_pads),
+                )
+            )
+            continue
+
+        supporting_layers = {str(pad_by_id[pad_id].layer) for pad_id in pad_ids}
+        if from_layer not in supporting_layers or to_layer not in supporting_layers:
+            problems.append(
+                (
+                    object_id,
+                    "proven via span endpoints are not both supported by referenced pads",
+                )
+            )
+            continue
+        if drill_id in seen:
+            problems.append((object_id, "duplicate proven via-span drill ID"))
+            continue
+        seen.add(drill_id)
+        omitted.append(drill_id)
+
+    return tuple(sorted(omitted)), tuple(problems)

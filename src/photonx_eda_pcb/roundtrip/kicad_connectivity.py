@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import slot_export_status
+from ..exporters.kicad_policy import proven_via_span_omissions, slot_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -563,7 +563,9 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     With an export report, the audit covers the net table plus tracks,
     rejects unexpected KiCad vias, and compares recovered pads, copper regions,
-    and recovered slots. Deterministic PhotonX UUIDs are part of the supported
+    and recovered slots. Proven plated via spans are tracked as explicit source
+    export losses because the current exporter does not synthesize via annular
+    geometry. Deterministic PhotonX UUIDs are part of the supported
     object identity for emitted tracks, recovered pads, regions, and slots.
     Without a report,
     the legacy fallback can still validate net/track/pad connectivity, but
@@ -572,6 +574,15 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     """
 
     issues = []
+    source_via_span_ids, via_span_metadata_problems = proven_via_span_omissions(board)
+    for object_id, message in via_span_metadata_problems:
+        issues.append(
+            {
+                "code": "KICAD_ROUNDTRIP_VIA_SPAN_METADATA_INVALID",
+                "object_id": object_id,
+                "detail": message,
+            }
+        )
     net_lookup = _observed_net_lookup(readback, issues)
 
     nets = _compare_multiset(
@@ -608,6 +619,16 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     skipped_region_ids = set()
     skipped_slot_ids = set()
     unresolved_slot_ids = []
+    if export_report is None:
+        skipped_via_span_ids = set(source_via_span_ids)
+    else:
+        _, skipped_via_span_ids = _reported_sets(
+            source_via_span_ids,
+            (),
+            getattr(export_report, "skipped_via_span_ids", ()),
+            "VIA_SPAN",
+            issues,
+        )
 
     source_regions = list(getattr(board, "regions", ()))
     source_slots = list(getattr(board, "slots", ()))
@@ -680,6 +701,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "skipped_slot_ids": sorted(skipped_slot_ids),
         "unresolved_pad_net_ids": unresolved_pad_ids,
         "unresolved_slot_net_ids": unresolved_slot_ids,
+        "omitted_proven_via_span_drill_ids": sorted(skipped_via_span_ids),
     }
     source_connectivity_complete = not any(losses.values())
 
