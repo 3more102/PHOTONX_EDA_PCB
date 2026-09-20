@@ -1,4 +1,4 @@
-from photonx_eda_pcb.gui.via_review import (
+from photonx_eda_pcb.via_review import (
     build_via_review_descriptors,
     via_review_descriptor,
     via_review_summary,
