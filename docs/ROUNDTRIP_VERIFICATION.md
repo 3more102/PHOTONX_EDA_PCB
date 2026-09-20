@@ -13,7 +13,7 @@ The connectivity audit checks:
 - exact KiCad net-table code/name identity;
 - net bindings on track segments the exporter reported as emitted;
 - fail-closed rejection of unexpected top-level KiCad routed `arc` track objects (distinct from graphical `gr_arc` / footprint `fp_arc` objects);
-- exact emitted `Edge.Cuts` line geometry/stroke semantics and deterministic outline UUID identity while preserving the legacy `edge_lines` reader surface;
+- exact emitted `Edge.Cuts` line geometry/stroke semantics and deterministic outline UUID identity while preserving the legacy `edge_lines` reader surface; non-finite/non-numeric or zero-length source outline segments are omitted explicitly and participate in source-loss accounting;
 - fail-closed rejection of any non-`gr_line` top-level `gr_*` object placed on `Edge.Cuts` (for example an injected `gr_arc` or `gr_rect`);
 - fail-closed rejection of any unexpected top-level item with a direct canonical copper layer (`F.Cu`, `B.Cu`, or `In1.Cu`–`In30.Cu`). Only the electrical containers PhotonX understands (`segment`, routed `arc`, `zone`, and `footprint`) bypass this generic guard; board graphics, text, dimensions, targets, images, and future direct-layer object classes fail closed;
 - fail-closed rejection of footprint-local copper graphics/properties/zones inside both PhotonX-generated and foreign footprints; silkscreen reference properties remain allowed, but nested items moved onto copper are surfaced explicitly;
@@ -31,7 +31,7 @@ The connectivity audit checks:
 The JSON result deliberately separates:
 
 - `roundtrip_equal`: emitted KiCad objects re-read with the same supported electrical semantics;
-- `source_connectivity_complete`: no drill, pad, track, region, slot, routed mechanical path, proven plated via span, or unresolved pad/slot net claim was lost by conservative export policy;
+- `source_connectivity_complete`: no drill, outline segment, pad, track, region, slot, routed mechanical path, proven plated via span, or unresolved pad/slot net claim was lost by conservative export policy;
 - `source_equivalent`: both conditions are true.
 
 A skipped source object is therefore recorded as a source-equivalence loss, not mislabeled as readback corruption. Proven plated via spans are listed in `losses.omitted_proven_via_span_drill_ids` and in the omission manifest as `omitted_via_spans`; PHOTONX does not synthesize KiCad via annular geometry when that geometry is not explicitly reconstructed. Conversely, a changed net ordinal, changed embedded net name, missing recovered identity, duplicate net code, or unexpected emitted connectivity fails the round-trip check.

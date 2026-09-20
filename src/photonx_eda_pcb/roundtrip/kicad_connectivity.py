@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ..exporters.kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status
+from ..exporters.kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -245,6 +245,25 @@ def _reported_track_sets(board, export_report, issues):
     )
 
 
+def _reported_outline_sets(board, export_report, issues):
+    source_ids = {segment.id for segment in board.outline}
+    if export_report is None:
+        exported = {
+            segment.id
+            for segment in board.outline
+            if outline_export_status(segment) == "export"
+        }
+        return exported, source_ids - exported
+
+    return _reported_sets(
+        source_ids,
+        getattr(export_report, "exported_outline_ids", ()),
+        getattr(export_report, "skipped_outline_ids", ()),
+        "OUTLINE",
+        issues,
+    )
+
+
 def _reported_drill_sets(board, export_report, issues):
     source_ids = {drill.id for drill in board.drills}
     if export_report is None:
@@ -470,7 +489,7 @@ def _outline_item(start, end, width, layer, stroke_type, object_uuid):
     }
 
 
-def _expected_outline(board):
+def _expected_outline(board, exported_outline_ids):
     return [
         _outline_item(
             (segment.start.x, segment.start.y),
@@ -481,6 +500,7 @@ def _expected_outline(board):
             photonx_uuid("edge:" + str(segment.id)),
         )
         for segment in board.outline
+        if segment.id in exported_outline_ids
     ]
 
 
@@ -1284,8 +1304,13 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         _observed_track_arcs(readback, net_lookup, issues),
     )
 
+    exported_outline_ids, skipped_outline_ids = _reported_outline_sets(
+        board,
+        export_report,
+        issues,
+    )
     outline = _compare_multiset(
-        _expected_outline(board),
+        _expected_outline(board, exported_outline_ids),
         _observed_outline(readback, issues),
     )
 
@@ -1487,6 +1512,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     losses = {
         "skipped_drill_ids": sorted(skipped_drill_ids),
+        "skipped_outline_ids": sorted(skipped_outline_ids),
         "skipped_pad_ids": sorted(skipped_pad_ids),
         "skipped_track_ids": sorted(skipped_track_ids),
         "skipped_region_ids": sorted(skipped_region_ids),

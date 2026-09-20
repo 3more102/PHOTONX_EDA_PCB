@@ -101,6 +101,21 @@ def pad_export_descriptor(pad):
         "layers":layers,
     },ref_layer,warning
 
+def outline_export_status(segment):
+    try:
+        sx = float(segment.start.x)
+        sy = float(segment.start.y)
+        ex = float(segment.end.x)
+        ey = float(segment.end.y)
+    except (TypeError, ValueError):
+        return "skip-invalid-coordinate"
+    if not all(isfinite(value) for value in (sx, sy, ex, ey)):
+        return "skip-invalid-coordinate"
+    if sx == ex and sy == ey:
+        return "skip-zero-length"
+    return "export"
+
+
 def drill_export_status(drill):
     try:
         diameter = float(drill.diameter)

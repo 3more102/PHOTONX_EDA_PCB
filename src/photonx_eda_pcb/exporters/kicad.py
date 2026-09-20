@@ -6,7 +6,7 @@ from ..models import BoardModel
 from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
-from .kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,proven_via_span_omissions
+from .kicad_policy import KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,proven_via_span_omissions
 from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
@@ -36,6 +36,52 @@ def _board_layer_lines(board):
         lines.append(
             f'    ({row["id"]} {_q(row["name"])} {row["type"]}{suffix})'
         )
+    return lines
+
+
+def _outline_lines(board, report):
+    lines = []
+    for segment in board.outline:
+        status = outline_export_status(segment)
+        if status != "export":
+            report.skipped_outline += 1
+            report.skipped_outline_ids.append(segment.id)
+            if status == "skip-zero-length":
+                code = "KICAD_OUTLINE_ZERO_LENGTH"
+                message = (
+                    "outline segment start and end are identical; segment omitted"
+                )
+            else:
+                code = "KICAD_OUTLINE_COORDINATE_INVALID"
+                message = (
+                    "outline segment coordinates must be finite numeric values; "
+                    "segment omitted"
+                )
+            report.issues.append(
+                KicadExportIssue(
+                    "warning",
+                    code,
+                    segment.id,
+                    message,
+                )
+            )
+            continue
+
+        sx = float(segment.start.x)
+        sy = float(segment.start.y)
+        ex = float(segment.end.x)
+        ey = float(segment.end.y)
+        lines.append(
+            (
+                f'  (gr_line (start {sx:.6f} {sy:.6f}) '
+                f'(end {ex:.6f} {ey:.6f}) '
+                f'(stroke (width 0.1) (type default)) '
+                f'(layer "Edge.Cuts") '
+                f'(uuid {photonx_uuid("edge:"+segment.id)}))'
+            )
+        )
+        report.exported_outline += 1
+        report.exported_outline_ids.append(segment.id)
     return lines
 
 
@@ -376,7 +422,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
     ]
     for net in board.nets:lines.append(f'  (net {net_num[net.id]} {_q(net.label or net.id)})')
     lines.extend(_drill_lines(board,report));lines.extend(_pad_lines(board,net_num,report));lines.extend(_slot_lines(board,net_num,report));lines.extend(_region_lines(board,net_num,report));lines.extend(_track_lines(board,net_num,report));_record_via_span_skips(board,report);_record_route_skips(board,report)
-    for seg in board.outline:lines.append(f'  (gr_line (start {seg.start.x:.6f} {seg.start.y:.6f}) (end {seg.end.x:.6f} {seg.end.y:.6f}) (stroke (width 0.1) (type default)) (layer "Edge.Cuts") (uuid {photonx_uuid("edge:"+seg.id)}))')
+    lines.extend(_outline_lines(board,report))
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
 def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]
 def validate_with_kicad_cli(path:str|Path,*,timeout_s:float=30.0)->tuple[bool|None,str]:

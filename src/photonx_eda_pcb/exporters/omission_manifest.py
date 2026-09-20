@@ -5,6 +5,8 @@ def omission_manifest(report):
     return {
       "exported_slots":list(getattr(report,"exported_slot_ids",())),
       "exported_drills":list(getattr(report,"exported_drill_ids",())),
+      "exported_outline":list(getattr(report,"exported_outline_ids",())),
+      "skipped_outline":list(getattr(report,"skipped_outline_ids",())),
       "skipped_drills":list(getattr(report,"skipped_drill_ids",())),
       "exported_pads":list(getattr(report,"exported_pad_ids",())),
       "skipped_pads":list(getattr(report,"skipped_pad_ids",())),

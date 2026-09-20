@@ -1072,6 +1072,7 @@ def test_connectivity_roundtrip_separates_export_losses(tmp_path):
     assert audit["source_equivalent"] is False
     assert audit["losses"] == {
         "skipped_drill_ids": [],
+        "skipped_outline_ids": [],
         "skipped_pad_ids": [],
         "skipped_track_ids": ["T_SKIP"],
         "skipped_region_ids": ["R_SKIP"],

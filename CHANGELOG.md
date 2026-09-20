@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hardened KiCad `Edge.Cuts` export against invalid source outline geometry. Non-numeric/non-finite coordinates and zero-length `OutlineSegment` objects are now omitted with explicit reasons, tracked through export reports/omission manifests, and surfaced as `skipped_outline_ids` source losses; valid outline segments still round-trip with exact deterministic UUID/geometry checks.
+
 - Added conservative KiCad point-drill export and round-trip auditing. Confirmed non-plated `DrillHit` objects now export as deterministic round NPTH footprints; unknown, plated-without-pad-stack, invalid, or unsupported-plating drills are explicitly omitted and recorded in the omission manifest. Round-trip `losses` now includes `skipped_drill_ids`, and previously uncounted arbitrary routed-milling omissions now surface as `omitted_route_ids` so `source_equivalent` cannot remain true when mechanical source features were dropped.
 
 - Added fail-closed readback for KiCad footprint/pad copper-behavior overrides. PhotonX recovered footprints and child pads now surface non-default clearance, zone-connect, thermal width/gap, and pad unused-layer/end-layer controls through an `unexpected_copper_overrides` audit family, preventing unchanged geometry from hiding different zone-connection copper.
