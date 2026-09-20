@@ -44,15 +44,12 @@ def _package_hint_from_pads(pads):
 
 
 def _trusted_evidence_values(pad, kind: str) -> tuple[str, ...]:
-    return tuple(
-        sorted(
-            {
-                evidence.detail
-                for evidence in pad.provenance.evidence
-                if evidence.kind == kind and evidence.confidence == 1.0
-            }
-        )
-    )
+    values = {
+        str(evidence.detail).strip()
+        for evidence in pad.provenance.evidence
+        if evidence.kind == kind and evidence.confidence == 1.0
+    }
+    return tuple(sorted(value for value in values if value))
 
 
 def _source_component_hypotheses(pads):
