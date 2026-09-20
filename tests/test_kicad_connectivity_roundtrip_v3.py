@@ -258,13 +258,6 @@ def test_connectivity_roundtrip_detects_recovered_object_uuid_drift(
     assert audit[comparison_key]["missing"][0]["uuid"] != audit[comparison_key]["unexpected"][0]["uuid"]
 
 
-@pytest.mark.parametrize(
-    ("family", "comparison_key"),
-    [
-        ("pad", "pads"),
-        ("slot", "slots"),
-    ],
-)
 def test_connectivity_roundtrip_detects_recovered_pad_geometry_drift(tmp_path):
     board = _board_with_all_connectivity_families()
     path, report = export_kicad_with_report(
@@ -287,6 +280,13 @@ def test_connectivity_roundtrip_detects_recovered_pad_geometry_drift(tmp_path):
     assert audit["pads"]["unexpected"][0]["geometry"]["size"] == [9.0, 9.0]
 
 
+@pytest.mark.parametrize(
+    ("family", "comparison_key"),
+    [
+        ("pad", "pads"),
+        ("slot", "slots"),
+    ],
+)
 def test_connectivity_roundtrip_detects_recovered_child_pad_uuid_drift(
     tmp_path,
     family,
