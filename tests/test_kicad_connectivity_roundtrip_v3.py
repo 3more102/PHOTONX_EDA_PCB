@@ -388,7 +388,7 @@ def test_kicad_reader_preserves_optional_manufacturing_settings():
 
     assert readback["board_settings"] == {
         "thickness": 1.6,
-            "thickness_count": 1,
+        "thickness_count": 1,
         "pad_to_mask_clearance": 0.0,
         "pad_to_mask_clearance_count": 1,
         "solder_mask_min_width": 0.1,
