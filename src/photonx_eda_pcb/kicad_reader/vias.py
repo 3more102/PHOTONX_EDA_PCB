@@ -11,7 +11,7 @@ def _net_ordinal(node):
 
 def _via_type(via):
     if len(via) > 1 and isinstance(via[1], str):
-        if via[1] in {"blind", "micro"}:
+        if via[1] in {"blind", "buried", "micro"}:
             return via[1]
     return "through"
 
