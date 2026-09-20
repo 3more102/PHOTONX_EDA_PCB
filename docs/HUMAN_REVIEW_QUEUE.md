@@ -45,6 +45,14 @@ inventing object identity.
 Diagnostic, validation, unresolved-clearance, and unknown-plating rows display
 confidence as unavailable rather than presenting an invented probability.
 
+Non-exportable via-span evidence is also promoted into the canonical Evidence
+Review queue by default. Rows classified as `omitted`, `unproven`, or `invalid`
+reuse the exact same classifier as the Via Evidence tab and preserve the KiCad
+omission code, backing drill identity when selectable, layer span, resolved net,
+supporting pads, and reconstruction confidence. Exactly exportable spans stay out
+of the queue because they do not require human intervention. Callers can disable
+this adapter with `include_via_evidence=False`.
+
 The adjacent **Via Evidence** tab is a read-only audit view over reconstructed
 `board.metadata["via_spans"]`. It reuses `proven_via_span_export_plan()`, so
 the GUI and KiCad exporter share one eligibility policy instead of maintaining
