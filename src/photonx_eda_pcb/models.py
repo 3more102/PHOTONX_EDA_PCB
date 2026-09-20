@@ -72,6 +72,7 @@ class ComponentHypothesis:
     confidence: float
     evidence: list[str]
     reference: str | None = None
+    package_hint: str | None = None
 
 @dataclass
 class ParseDiagnostic:
