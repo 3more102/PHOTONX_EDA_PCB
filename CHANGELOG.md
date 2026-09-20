@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserved Gerber X2 aperture attributes as immutable source evidence. Supported `AD` apertures now snapshot current `TA` attributes, D01/D03 geometry carries the captured aperture evidence, regions snapshot `TA` state at `G36` rather than inheriting selected-aperture metadata, and `TD` updates only future tracked TA/TO state. `.AperFunction` is preserved as evidence and is not promoted into inferred design intent.
+
 - Hardened KiCad `paper` readback against malformed scalar arity. A singleton `(paper ...)` section is now accepted only when it contains exactly one value; extra trailing values fail closed as unknown and therefore fail the round-trip structure contract instead of being silently ignored.
 
 - Promoted fully trusted Gerber X2 `.P` component-reference evidence into component reconstruction before geometric pairing. Source-proven refdes groups retain pin/function evidence, repeated step-and-repeat instances stay separate, lower-confidence identity is not escalated, and conflicting trusted refdes evidence remains explicit and fail-closed instead of being reassigned by proximity.
