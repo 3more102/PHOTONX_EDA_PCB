@@ -395,6 +395,13 @@ def proven_via_span_export_plan(board):
                 "proven via span endpoint is not a declared canonical KiCad copper layer",
             )
             continue
+        if {from_layer, to_layer} != {"F.Cu", "B.Cu"}:
+            omit(
+                drill_id,
+                "KICAD_PROVEN_VIA_TYPE_UNPROVEN",
+                "partial-layer plated span is proven, but Gerber/Excellon evidence does not distinguish KiCad blind/buried via semantics from microvia manufacturing; via omitted instead of guessing a via type",
+            )
+            continue
 
         start_index, end_index = sorted(
             (layer_index[from_layer], layer_index[to_layer])
