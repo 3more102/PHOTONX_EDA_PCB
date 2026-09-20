@@ -118,3 +118,27 @@ def test_reader_preserves_footprint_net_tie_pad_groups():
     )
 
     assert d["footprints"][0]["net_tie_pad_groups"] == ("1,2", "3,4")
+
+
+def test_reader_preserves_special_pad_property():
+    d = read_kicad_board_text(
+        """
+        (kicad_pcb
+          (footprint "PHOTONX:RecoveredPad"
+            (layer "F.Cu")
+            (at 0 0)
+            (pad "1" smd rect
+              (at 0 0)
+              (size 1 1)
+              (layers "F.Cu")
+              (property pad_prop_castellated)
+              (uuid 00000000-0000-0000-0000-000000000090)
+            )
+          )
+        )
+        """
+    )
+
+    assert d["footprints"][0]["pads"][0]["property"] == (
+        "pad_prop_castellated"
+    )

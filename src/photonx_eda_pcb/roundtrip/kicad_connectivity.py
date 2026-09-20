@@ -386,6 +386,27 @@ def _active_overrides(values):
     }
 
 
+def _observed_pad_properties(readback):
+    out = []
+    for footprint in readback.get("footprints", ()):
+        if footprint.get("name") not in _PHOTONX_FOOTPRINT_NAMES:
+            continue
+        for pad in footprint.get("pads", ()):
+            value = pad.get("property")
+            if value is None:
+                continue
+            out.append(
+                {
+                    "footprint_name": str(footprint.get("name")),
+                    "reference": footprint.get("reference"),
+                    "pad_number": str(pad.get("number")),
+                    "property": str(value),
+                    "uuid": pad.get("uuid"),
+                }
+            )
+    return out
+
+
 def _observed_copper_overrides(readback):
     out = []
     for footprint in readback.get("footprints", ()):
@@ -1418,6 +1439,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         _observed_copper_overrides(readback),
     )
 
+    unexpected_pad_properties = _compare_multiset(
+        [],
+        _observed_pad_properties(readback),
+    )
+
     unexpected_net_tie_groups = _compare_multiset(
         [],
         _observed_net_tie_groups(readback),
@@ -1569,6 +1595,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and unexpected_copper_graphics["equal"]
         and unexpected_footprint_copper_graphics["equal"]
         and unexpected_copper_overrides["equal"]
+        and unexpected_pad_properties["equal"]
         and unexpected_net_tie_groups["equal"]
         and foreign_footprints["equal"]
         and drills["equal"]
@@ -1611,6 +1638,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "unexpected_copper_graphics",
             "unexpected_footprint_copper_graphics",
             "unexpected_copper_overrides",
+            "unexpected_pad_properties",
             "unexpected_net_tie_groups",
             "foreign_footprints",
             "recovered_drills",
@@ -1638,6 +1666,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "unexpected_copper_graphics": unexpected_copper_graphics,
         "unexpected_footprint_copper_graphics": unexpected_footprint_copper_graphics,
         "unexpected_copper_overrides": unexpected_copper_overrides,
+        "unexpected_pad_properties": unexpected_pad_properties,
         "unexpected_net_tie_groups": unexpected_net_tie_groups,
         "foreign_footprints": foreign_footprints,
         "drills": drills,

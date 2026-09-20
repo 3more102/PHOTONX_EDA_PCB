@@ -38,6 +38,15 @@ def _copper_overrides(node):
     }
 
 
+def _pad_property(node):
+    item = child(node, "property")
+    if item is None:
+        return None
+    if len(item) != 2:
+        raise ValueError("pad property must contain one value")
+    return str(item[1])
+
+
 def _read_drill(drill):
     if not drill:
         return {
@@ -106,6 +115,7 @@ def read_pads(footprint):
                 "net": net_code,
                 "net_name": net_name,
                 "uuid": str(uuid[1]) if uuid and len(uuid) >= 2 else None,
+                "property": _pad_property(pad),
                 "copper_overrides": _copper_overrides(pad),
             }
         )
