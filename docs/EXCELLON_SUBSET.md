@@ -15,10 +15,19 @@ Tool identifiers use ASCII decimal digits only. Unicode digit lookalikes and mal
 
 PhotonX recognizes the bounded KiCad-style X2-compatible structured comments used in Excellon drill files:
 
-- `; #@! TF.FileFunction,Plated|NonPlated|MixedPlating,<start-layer>,<end-layer>,PTH|NPTH|Blind|Buried[,Drill|Route|Mixed]`
+- `; #@! TF.FileFunction,Plated|NonPlated|MixedPlating,<start-layer>,<end-layer>,PTH|NPTH|Blind|Buried[,Drill|Rout|Mixed]`
 - `; #@! TA.AperFunction,Plated|NonPlated,PTH|NPTH|Blind|Buried,ViaDrill|ComponentDrill`
 - `; #@! TD` to clear the modal aperture-function evidence.
+
+The file-level copper-layer ordinals are preserved on each point drill as a normalized `layer_span` plus `span_kind`. Layer numbers are one-based and a span must reference two distinct copper layers. Reversed from/to order is normalized because the Gerber FileFunction definition treats that order as insignificant.
 
 A specific file-level `Plated` or `NonPlated` claim applies when a tool has no stronger tool-level claim. `MixedPlating` deliberately resolves to `unknown` unless a tool-level `TA.AperFunction` proves the tool's plating. Conflicting specific file/tool claims, conflicting file claims, and malformed recognized plating attributes fail closed; permissive mode emits `INVALID_EXCELLON_X2_PLATING` and suppresses file geometry.
 
 The resolved plating state is carried into drill hits, G85 slots, and routed paths with provenance evidence. Unrelated structured comments remain metadata-only and do not create plating claims.
+
+
+## X2 layer-span resolution
+
+Explicit drill spans are not converted directly into KiCad layer names unless the copper stack order is itself ordinal-addressable. The preferred mapping source is a conflict-free Gerber X2 copper stackup with a declared bottom-layer ordinal. For legacy two-layer packages, `PTH/NPTH L1..L2` may map to `F.Cu..B.Cu` when those are the only reconstructed copper layers.
+
+Blind or buried spans never use the two-layer shortcut. If an explicit span exceeds the declared stackup or cannot be mapped safely, PhotonX suppresses vertical connectivity for that drill and emits `X2_DRILL_SPAN_UNRESOLVED`; it does not fall back to a wider geometry-derived via span.
