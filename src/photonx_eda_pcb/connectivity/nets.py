@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import networkx as nx
+
 from ..ids import stable_id
 from ..models import BoardModel, NetGroup
 from ..provenance import Evidence, Provenance
@@ -16,11 +18,98 @@ def _x2_net_evidence(index: dict[str, object], members: list[str]) -> list[Evide
     return evidence
 
 
+def _plated_via_evidence(
+    board: BoardModel,
+    graph: nx.Graph,
+    members: list[str],
+) -> tuple[list[Evidence], list[object]]:
+    by_drill: dict[str, dict[str, object]] = {}
+    for left_id, right_id, data in graph.subgraph(members).edges(data=True):
+        if data.get("reason") != "plated_via_span":
+            continue
+        drill_id = str(data.get("drill_id") or "")
+        if not drill_id:
+            continue
+        entry = by_drill.setdefault(
+            drill_id,
+            {
+                "pads": set(),
+                "from_layer": data.get("from_layer"),
+                "to_layer": data.get("to_layer"),
+                "confidence": float(data.get("confidence", 0.0)),
+            },
+        )
+        entry["pads"].update((left_id, right_id))
+        entry["confidence"] = min(
+            float(entry["confidence"]),
+            float(data.get("confidence", 0.0)),
+        )
+
+    index = board.object_index()
+    evidence: list[Evidence] = []
+    sources: list[object] = []
+    for drill_id in sorted(by_drill):
+        entry = by_drill[drill_id]
+        drill = index.get(drill_id)
+        source = None
+        provenance = getattr(drill, "provenance", None)
+        if getattr(provenance, "sources", None):
+            source = provenance.sources[0]
+            if source not in sources:
+                sources.append(source)
+
+        pads = ",".join(sorted(entry["pads"]))
+        evidence.append(
+            Evidence(
+                "plated_via_span",
+                (
+                    f"drill={drill_id}; "
+                    f"span={entry['from_layer']}->{entry['to_layer']}; "
+                    f"pads={pads}"
+                ),
+                float(entry["confidence"]),
+                source,
+            )
+        )
+    return evidence, sources
+
+
 def assign_physical_nets(board: BoardModel, graph: nx.Graph) -> list[NetGroup]:
-    index = board.object_index(); nets = []
-    for component in sorted(nx.connected_components(graph), key=lambda ids: sorted(ids)[0]):
-        members = sorted(component); net_id = stable_id("net", *members)
-        prov = Provenance(evidence=[Evidence("connectivity", "members connected by copper geometry", 0.99)])
+    index = board.object_index()
+    nets = []
+    for component in sorted(
+        nx.connected_components(graph),
+        key=lambda ids: sorted(ids)[0],
+    ):
+        members = sorted(component)
+        net_id = stable_id("net", *members)
+
+        via_evidence, via_sources = _plated_via_evidence(
+            board,
+            graph,
+            members,
+        )
+        net_confidence = min(
+            [0.99, *(item.confidence for item in via_evidence)]
+        )
+        connectivity_detail = (
+            "members connected by copper geometry and evidence-backed plated-via spans"
+            if via_evidence
+            else "members connected by copper geometry"
+        )
+        prov = Provenance(
+            evidence=[
+                Evidence(
+                    "connectivity",
+                    connectivity_detail,
+                    net_confidence,
+                )
+            ]
+        )
+        for item in via_evidence:
+            prov.add_evidence(item)
+        for source in via_sources:
+            prov.add_source(source)
 
         x2_evidence = _x2_net_evidence(index, members)
         x2_names = sorted({item.detail for item in x2_evidence})
@@ -63,10 +152,19 @@ def assign_physical_nets(board: BoardModel, graph: nx.Graph) -> list[NetGroup]:
                 )
             )
 
-        net = NetGroup(net_id, members, 0.99, label=label, provenance=prov); nets.append(net)
+        net = NetGroup(
+            net_id,
+            members,
+            net_confidence,
+            label=label,
+            provenance=prov,
+        )
+        nets.append(net)
         for member in members:
             obj = index.get(member)
-            if hasattr(obj, "net_id"): obj.net_id = net_id
+            if hasattr(obj, "net_id"):
+                obj.net_id = net_id
+
     label_counts: dict[str, int] = {}
     for net in nets:
         if net.label:
@@ -87,4 +185,5 @@ def assign_physical_nets(board: BoardModel, graph: nx.Graph) -> list[NetGroup]:
                 )
             )
 
-    board.nets = nets; return nets
+    board.nets = nets
+    return nets
