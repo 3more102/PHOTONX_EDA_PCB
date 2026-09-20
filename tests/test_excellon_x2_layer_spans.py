@@ -1,7 +1,9 @@
 from pathlib import Path
+from types import SimpleNamespace as NS
 
 import pytest
 
+from photonx_eda_pcb.copper_solver.barrel import barrel_is_electrical, barrel_layers
 from photonx_eda_pcb.errors import ParseError
 from photonx_eda_pcb.parsers.excellon import ExcellonParser
 from photonx_eda_pcb.pipeline import reconstruct
@@ -159,6 +161,9 @@ def test_x2_blind_span_limits_vertical_connectivity(tmp_path: Path):
     assert board.drills[0].x2_layer_span == (1, 2)
     assert board.drills[0].layer_span == ("F.Cu", "In1.Cu")
     assert board.drills[0].span_proven is True
+    ordered = [NS(name=name) for name in ("F.Cu", "In1.Cu", "In2.Cu", "B.Cu")]
+    assert barrel_layers(board.drills[0], ordered) == ["F.Cu", "In1.Cu"]
+    assert barrel_is_electrical(board.drills[0]) is True
 
     assert _net_layer_sets(board) == {
         frozenset({"F.Cu", "In1.Cu"}),
