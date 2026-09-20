@@ -12,10 +12,10 @@ def span_evidence(
     if drill.plating!="unknown":
         ev.append(f"plating metadata: {drill.plating}")
 
-    declared=getattr(drill,"layer_span",None)
-    if bool(getattr(drill,"span_proven",False)) and declared is not None:
+    declared=getattr(drill,"x2_layer_span",None)
+    if declared is not None:
         lo,hi=declared
-        kind=getattr(drill,"span_kind",None)
+        kind=getattr(drill,"x2_span_kind",None)
         detail=f"X2 declared copper span: L{lo}..L{hi}"
         if kind:
             detail+=f" ({kind})"
