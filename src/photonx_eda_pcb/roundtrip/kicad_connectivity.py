@@ -334,8 +334,17 @@ def _reported_drill_sets(board, export_report, issues, via_export_ids=()):
     )
 
 
-def _reported_pad_sets(board, export_report, issues):
-    source_ids = {pad.id for pad in board.pads}
+def _reported_pad_sets(
+    board,
+    export_report,
+    issues,
+    represented_via_pad_ids=(),
+):
+    represented_via_pad_ids=set(represented_via_pad_ids)
+    source_ids = {
+        pad.id for pad in board.pads
+        if pad.id not in represented_via_pad_ids
+    }
     if export_report is None:
         exported = {
             pad.id
@@ -1884,10 +1893,29 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         _observed_drills(readback, net_lookup, issues),
     )
 
+    represented_via_pad_ids={
+        pad_id
+        for item in via_exportable
+        if item["drill_id"] in exported_via_span_ids
+        for pad_id in item.get("pad_ids",())
+    }
+    if export_report is not None:
+        reported_via_pad_ids=set(
+            getattr(export_report,"represented_via_pad_ids",())
+        )
+        if reported_via_pad_ids != represented_via_pad_ids:
+            issues.append(
+                {
+                    "code":"KICAD_ROUNDTRIP_VIA_PAD_REPORT_MISMATCH",
+                    "expected":sorted(represented_via_pad_ids),
+                    "reported":sorted(reported_via_pad_ids),
+                }
+            )
     exported_pad_ids, skipped_pad_ids = _reported_pad_sets(
         board,
         export_report,
         issues,
+        represented_via_pad_ids,
     )
     expected_pads, unresolved_pad_ids = _expected_pads(
         board,
@@ -2084,6 +2112,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         ],
         "roundtrip_equal": roundtrip_equal,
         "source_connectivity_complete": source_connectivity_complete,
+        "represented_via_pad_ids": sorted(represented_via_pad_ids),
         "source_equivalent": bool(
             roundtrip_equal and source_connectivity_complete
         ),
