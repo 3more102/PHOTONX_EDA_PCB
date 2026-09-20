@@ -9,7 +9,7 @@ from ..review_queue import build_board_review_queue
 from .canvas import BoardCanvas
 from .inspector import Inspector
 from .state import ViewState
-from .via_review import via_review_summary
+from ..via_review import via_review_summary
 
 
 def _review_confidence_text(item) -> str:
