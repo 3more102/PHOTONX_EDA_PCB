@@ -111,7 +111,7 @@ def test_trusted_x2_refdes_groups_pads_before_geometry():
     assert geometric[0].pad_ids == ["P3", "P4"]
 
 
-def test_lower_confidence_x2_refdes_does_not_become_certain():
+def test_lower_confidence_x2_refdes_isolated_from_geometry():
     board = BoardModel(
         pads=[
             _pad(
@@ -124,12 +124,32 @@ def test_lower_confidence_x2_refdes_does_not_become_certain():
         ]
     )
 
-    components = infer_component_hypotheses(board)
+    components = infer_component_hypotheses(
+        board,
+        max_pair_distance_mm=2.0,
+        backend="python",
+    )
 
-    assert len(components) == 1
-    assert components[0].reference is None
-    assert components[0].pad_ids == ["P1", "P2"]
-    assert components[0].confidence < 1.0
+    conflict = [
+        item
+        for item in components
+        if item.kind == "gerber_x2_component_conflict"
+    ]
+    assert len(conflict) == 1
+    assert conflict[0].pad_ids == ["P1"]
+    assert conflict[0].confidence == 0.0
+
+    unresolved = [
+        item
+        for item in components
+        if item.kind == "unresolved_pad"
+    ]
+    assert len(unresolved) == 1
+    assert unresolved[0].pad_ids == ["P2"]
+    assert not any(
+        set(item.pad_ids) == {"P1", "P2"}
+        for item in components
+    )
 
 
 def test_conflicting_trusted_x2_refdes_isolated_from_geometry():
@@ -225,6 +245,45 @@ def test_step_repeat_instances_with_same_refdes_stay_separate():
     }
     assert {item.reference for item in source} == {"U1"}
     assert len({item.id for item in source}) == 2
+
+
+def test_duplicate_x2_pin_identity_fails_closed_without_repeat_partition():
+    board = BoardModel(
+        pads=[
+            _pad("A1", 0.0, refdes="U1", pin="1"),
+            _pad("A2", 1.0, refdes="U1", pin="2"),
+            _pad("B1", 20.0, refdes="U1", pin="1"),
+            _pad("B2", 21.0, refdes="U1", pin="2"),
+        ]
+    )
+
+    components = infer_component_hypotheses(
+        board,
+        max_pair_distance_mm=2.0,
+        backend="python",
+    )
+
+    assert not any(
+        item.kind == "gerber_x2_component"
+        for item in components
+    )
+    conflicts = [
+        item
+        for item in components
+        if item.kind == "gerber_x2_component_conflict"
+    ]
+    assert len(conflicts) == 4
+    assert {tuple(item.pad_ids) for item in conflicts} == {
+        ("A1",),
+        ("A2",),
+        ("B1",),
+        ("B2",),
+    }
+    assert all(item.confidence == 0.0 for item in conflicts)
+    assert not any(
+        len(item.pad_ids) > 1
+        for item in components
+    )
 
 
 def test_x2_source_inference_has_spatial_bruteforce_parity():

@@ -13,15 +13,43 @@ _X2_PIN_FUNCTION = "gerber_x2_pin_function"
 _STEP_REPEAT = "gerber_step_repeat"
 
 
+def _evidence_events(pad, kind: str):
+    return [
+        evidence
+        for evidence in pad.provenance.evidence
+        if evidence.kind == kind
+    ]
+
+
 def _trusted_evidence_values(pad, kind: str) -> tuple[str, ...]:
     return tuple(
         sorted(
             {
                 evidence.detail
-                for evidence in pad.provenance.evidence
-                if evidence.kind == kind and evidence.confidence == 1.0
+                for evidence in _evidence_events(pad, kind)
+                if evidence.confidence == 1.0
             }
         )
+    )
+
+
+def _source_identity_conflict(pad, refdes_values, reason: str):
+    detail = ", ".join(repr(value) for value in refdes_values) or "<empty>"
+    return ComponentHypothesis(
+        stable_id(
+            "cmp",
+            "gerber_x2_refdes_conflict",
+            pad.id,
+            *refdes_values,
+            reason,
+        ),
+        [pad.id],
+        "gerber_x2_component_conflict",
+        0.0,
+        [
+            reason,
+            f"Gerber X2 component reference evidence: {detail}",
+        ],
     )
 
 
@@ -33,38 +61,62 @@ def _source_component_hypotheses(pads):
     remaining = []
 
     for pad in sorted(pads, key=lambda item: item.id):
-        refdes_values = _trusted_evidence_values(pad, _X2_REFDES)
-        if not refdes_values:
+        refdes_events = _evidence_events(pad, _X2_REFDES)
+        if not refdes_events:
             remaining.append(pad)
             continue
 
-        if len(refdes_values) != 1 or not refdes_values[0]:
-            detail = ", ".join(repr(value) for value in refdes_values) or "<empty>"
+        refdes_values = _trusted_evidence_values(pad, _X2_REFDES)
+        all_refdes_values = tuple(
+            sorted({event.detail for event in refdes_events})
+        )
+        fully_trusted = all(
+            event.confidence == 1.0
+            for event in refdes_events
+        )
+
+        if (
+            not fully_trusted
+            or len(refdes_values) != 1
+            or len(all_refdes_values) != 1
+            or not refdes_values[0]
+        ):
             conflicts.append(
-                ComponentHypothesis(
-                    stable_id(
-                        "cmp",
-                        "gerber_x2_refdes_conflict",
-                        pad.id,
-                        *refdes_values,
+                _source_identity_conflict(
+                    pad,
+                    all_refdes_values,
+                    (
+                        "conflicting, empty, or non-proven trusted Gerber X2 "
+                        ".P component reference evidence; pad excluded from "
+                        "geometric reassignment"
                     ),
-                    [pad.id],
-                    "gerber_x2_component_conflict",
-                    0.0,
-                    [
-                        "conflicting or empty trusted Gerber X2 .P component "
-                        f"reference evidence: {detail}"
-                    ],
                 )
             )
             continue
 
         refdes = refdes_values[0]
+        step_repeat_events = _evidence_events(pad, _STEP_REPEAT)
         step_repeat = tuple(
             value
             for value in _trusted_evidence_values(pad, _STEP_REPEAT)
             if value
         )
+        if step_repeat_events and (
+            any(event.confidence != 1.0 for event in step_repeat_events)
+            or len(step_repeat) != 1
+        ):
+            conflicts.append(
+                _source_identity_conflict(
+                    pad,
+                    (refdes,),
+                    (
+                        "ambiguous Gerber step-repeat instance evidence; "
+                        "pad excluded from geometric reassignment"
+                    ),
+                )
+            )
+            continue
+
         groups.setdefault((refdes, step_repeat), []).append(pad)
 
     components = []
@@ -73,6 +125,41 @@ def _source_component_hypotheses(pads):
         key=lambda item: (item[0][0], item[0][1]),
     ):
         members = sorted(members, key=lambda item: item.id)
+
+        trusted_pins = []
+        for pad in members:
+            pin_numbers = tuple(
+                value
+                for value in _trusted_evidence_values(pad, _X2_PIN)
+                if value
+            )
+            if len(pin_numbers) == 1:
+                trusted_pins.append((pad.id, pin_numbers[0]))
+
+        pin_numbers = [pin for _, pin in trusted_pins]
+        duplicate_pins = sorted(
+            {
+                pin
+                for pin in pin_numbers
+                if pin_numbers.count(pin) > 1
+            }
+        )
+        if duplicate_pins:
+            reason = (
+                "repeated trusted Gerber X2 pin numbers within one component "
+                "identity group; possible expanded panel copies or split-pad "
+                "identity ambiguity, so grouping fails closed"
+            )
+            for pad in members:
+                conflicts.append(
+                    _source_identity_conflict(
+                        pad,
+                        (refdes,),
+                        reason + f": {', '.join(duplicate_pins)}",
+                    )
+                )
+            continue
+
         pad_ids = [pad.id for pad in members]
         evidence = [
             f"Gerber X2 .P component reference: {refdes}",
@@ -94,7 +181,10 @@ def _source_component_hypotheses(pads):
             )
             pin_functions = tuple(
                 value
-                for value in _trusted_evidence_values(pad, _X2_PIN_FUNCTION)
+                for value in _trusted_evidence_values(
+                    pad,
+                    _X2_PIN_FUNCTION,
+                )
                 if value
             )
             if len(pin_numbers) != 1:
@@ -106,7 +196,9 @@ def _source_component_hypotheses(pads):
             pin_details.append(detail)
 
         if pin_details:
-            evidence.append("Gerber X2 .P pins: " + ", ".join(pin_details))
+            evidence.append(
+                "Gerber X2 .P pins: " + ", ".join(pin_details)
+            )
 
         components.append(
             ComponentHypothesis(
@@ -163,7 +255,9 @@ def infer_component_hypotheses_bruteforce(
     board: BoardModel,
     max_pair_distance_mm: float = 4.0,
 ) -> list[ComponentHypothesis]:
-    source_components, remaining_pads = _source_component_hypotheses(board.pads)
+    source_components, remaining_pads = _source_component_hypotheses(
+        board.pads
+    )
     remaining = {pad.id: pad for pad in remaining_pads}
     result = list(source_components)
 
