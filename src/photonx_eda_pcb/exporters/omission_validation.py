@@ -45,6 +45,14 @@ _REASON_CODES={
     },
     "omitted_via_spans":{
         "KICAD_PROVEN_VIA_SPAN_UNSUPPORTED",
+        "KICAD_PROVEN_VIA_SOURCE_AMBIGUOUS",
+        "KICAD_PROVEN_VIA_SUPPORT_AMBIGUOUS",
+        "KICAD_PROVEN_VIA_LAYER_UNSUPPORTED",
+        "KICAD_PROVEN_VIA_LAYER_SUPPORT_INCOMPLETE",
+        "KICAD_PROVEN_VIA_GEOMETRY_INVALID",
+        "KICAD_PROVEN_VIA_ANNULUS_UNREPRESENTABLE",
+        "KICAD_PROVEN_VIA_NET_CONFLICT",
+        "KICAD_PROVEN_VIA_NET_UNRESOLVED",
     },
 }
 
@@ -74,6 +82,7 @@ def validate_omission_manifest(data):
     exported_tracks=list(data.get("exported_tracks",()))
     skipped_tracks=list(data.get("skipped_tracks",()))
     omitted_routes=list(data.get("omitted_routes",()))
+    exported_via_spans=list(data.get("exported_via_spans",()))
     omitted_via_spans=list(data.get("omitted_via_spans",()))
 
     duplicate_checks=(
@@ -90,6 +99,7 @@ def validate_omission_manifest(data):
         ("OMISSION_EXPORTED_TRACK_DUPLICATE_ID",exported_tracks),
         ("OMISSION_SKIPPED_TRACK_DUPLICATE_ID",skipped_tracks),
         ("OMISSION_ROUTE_DUPLICATE_ID",omitted_routes),
+        ("OMISSION_EXPORTED_VIA_SPAN_DUPLICATE_ID",exported_via_spans),
         ("OMISSION_VIA_SPAN_DUPLICATE_ID",omitted_via_spans),
     )
     for code,values in duplicate_checks:
@@ -102,6 +112,7 @@ def validate_omission_manifest(data):
         ("OMISSION_PAD_BOTH_EXPORTED_AND_SKIPPED",exported_pads,skipped_pads),
         ("OMISSION_REGION_BOTH_EXPORTED_AND_SKIPPED",exported_regions,skipped_regions),
         ("OMISSION_TRACK_BOTH_EXPORTED_AND_SKIPPED",exported_tracks,skipped_tracks),
+        ("OMISSION_VIA_SPAN_BOTH_EXPORTED_AND_SKIPPED",exported_via_spans,omitted_via_spans),
     )
     for code,exported,skipped in overlap_checks:
         if set(exported)&set(skipped):issues.append(code)
