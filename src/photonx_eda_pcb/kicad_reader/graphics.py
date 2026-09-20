@@ -78,11 +78,12 @@ def read_unexpected_copper_graphics(root):
     out = []
     if not isinstance(root, list):
         return out
+    allowed_direct_copper_items = {"segment", "arc", "zone", "footprint"}
     for index, item in enumerate(root[1:]):
         if not isinstance(item, list) or not item:
             continue
         token = str(item[0])
-        if not token.startswith("gr_"):
+        if token in allowed_direct_copper_items:
             continue
         layer = child(item, "layer")
         if not layer or len(layer) < 2:

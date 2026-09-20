@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Generalized the top-level KiCad copper guard beyond `gr_*` tokens. Any board-level object carrying a direct canonical copper layer now fails closed unless it is one of the explicitly audited electrical containers (`segment`, routed `arc`, `zone`, or `footprint`). This also catches copper-layer dimensions, targets, images, and future direct-layer item classes instead of relying on a brittle token list.
+
 - Hardened KiCad footprint readback against hidden copper additions. Footprint-local `fp_*` graphics, text properties, or nested zones placed on canonical copper layers are now preserved as `unexpected_copper_graphics` and rejected by the round-trip audit. This prevents a PhotonX recovered footprint from gaining extra fabrication copper while its pad/reference identity still appears unchanged.
 
 - Closed a KiCad copper-graphics audit escape hatch. The board reader now records top-level `gr_*` items placed on canonical copper layers, and connectivity round-trip treats every such object as an unexpected expected-empty family because PhotonX never emits electrical copper as board graphics. Injected `gr_line`, `gr_arc`, `gr_poly`, text, or similar copper graphics can no longer alter fabrication copper while remaining invisible to the audit.

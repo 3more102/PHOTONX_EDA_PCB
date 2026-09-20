@@ -344,6 +344,39 @@ def test_connectivity_roundtrip_rejects_top_level_copper_graphic():
     ]
 
 
+def test_connectivity_roundtrip_rejects_non_gr_copper_item():
+    text = """
+    (kicad_pcb
+      (layers
+        (0 "F.Cu" signal)
+        (31 "B.Cu" signal)
+        (36 "B.SilkS" user "b.silkscreen")
+        (37 "F.SilkS" user "f.silkscreen")
+        (44 "Edge.Cuts" user)
+      )
+      (net 0 "")
+      (dimension
+        (type aligned)
+        (layer "F.Cu")
+        (uuid 00000000-0000-0000-0000-000000000092)
+      )
+    )
+    """
+    readback = read_kicad_board_text(text)
+
+    audit = compare_kicad_connectivity(BoardModel(), readback)
+
+    assert audit["roundtrip_equal"] is False
+    assert audit["unexpected_copper_graphics"]["observed_count"] == 1
+    assert audit["unexpected_copper_graphics"]["unexpected"] == [
+        {
+            "type": "dimension",
+            "layer": "F.Cu",
+            "uuid": "00000000-0000-0000-0000-000000000092",
+        }
+    ]
+
+
 def test_connectivity_roundtrip_rejects_footprint_copper_graphic(tmp_path):
     board = _board_with_all_connectivity_families()
     path, report = export_kicad_with_report(
