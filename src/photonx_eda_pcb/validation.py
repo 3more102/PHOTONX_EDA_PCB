@@ -23,6 +23,74 @@ class ValidationReport:
     @property
     def ok(self):return not self.errors
 
+def _validate_component_source_pin_maps(comp):
+    issues = []
+    pad_ids = set(comp.pad_ids)
+    pin_map = getattr(comp, "source_pin_map", {})
+    pin_functions = getattr(comp, "source_pin_functions", {})
+
+    if not isinstance(pin_map, dict):
+        return [
+            ValidationIssue(
+                "error",
+                "COMPONENT_PIN_MAP_INVALID",
+                "source pin map must be a dictionary",
+                (comp.id,),
+            )
+        ]
+    if not isinstance(pin_functions, dict):
+        issues.append(
+            ValidationIssue(
+                "error",
+                "COMPONENT_PIN_FUNCTION_MAP_INVALID",
+                "source pin function map must be a dictionary",
+                (comp.id,),
+            )
+        )
+        pin_functions = {}
+
+    for pad_id, pin_number in sorted(pin_map.items()):
+        if pad_id not in pad_ids:
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "COMPONENT_PIN_MAP_PAD_NOT_MEMBER",
+                    f"source pin map references non-member pad {pad_id}",
+                    (comp.id, str(pad_id)),
+                )
+            )
+        if not isinstance(pin_number, str) or not pin_number.strip():
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "COMPONENT_PIN_NUMBER_INVALID",
+                    f"invalid source pin number for pad {pad_id}",
+                    (comp.id, str(pad_id)),
+                )
+            )
+
+    for pad_id, pin_function in sorted(pin_functions.items()):
+        if pad_id not in pin_map:
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "COMPONENT_PIN_FUNCTION_PAD_NOT_MAPPED",
+                    f"source pin function references pad without source pin number {pad_id}",
+                    (comp.id, str(pad_id)),
+                )
+            )
+        if not isinstance(pin_function, str) or not pin_function.strip():
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "COMPONENT_PIN_FUNCTION_INVALID",
+                    f"invalid source pin function for pad {pad_id}",
+                    (comp.id, str(pad_id)),
+                )
+            )
+
+    return issues
+
 def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationReport:
     if isinstance(outline_tolerance_mm,bool):
         raise ValueError("outline_tolerance_mm must be a positive finite number")
@@ -67,6 +135,7 @@ def validate_board(board:BoardModel,outline_tolerance_mm:float=.05)->ValidationR
         missing=[pid for pid in comp.pad_ids if pid not in pad_ids]
         if missing:r.issues.append(ValidationIssue("error","COMPONENT_PAD_MISSING",f"{comp.id} references missing pads {missing}",(comp.id,*missing)))
         if not 0<=comp.confidence<=1:r.issues.append(ValidationIssue("error","INVALID_COMPONENT_CONFIDENCE",f"invalid confidence for {comp.id}",(comp.id,)))
+        r.issues.extend(_validate_component_source_pin_maps(comp))
     for slot in getattr(board,"slots",()):
         if float(slot.width_mm)<=0:r.issues.append(ValidationIssue("error","SLOT_WIDTH_INVALID","slot width must be positive",(slot.id,)))
         if tuple(slot.start)==tuple(slot.end):r.issues.append(ValidationIssue("warning","SLOT_ZERO_LENGTH","slot start and end are identical",(slot.id,)))

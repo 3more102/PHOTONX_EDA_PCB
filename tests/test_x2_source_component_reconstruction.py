@@ -250,3 +250,42 @@ def test_x2_source_inference_has_spatial_bruteforce_parity():
     )
 
     assert _signature(spatial) == _signature(brute)
+
+
+def test_x2_component_exposes_machine_readable_source_pin_binding():
+    board = BoardModel(
+        pads=[
+            _pad("P1", 0.0, refdes="U1", pin="1", pin_function="VCC"),
+            _pad("P2", 2.0, refdes="U1", pin="2", pin_function="GND"),
+        ]
+    )
+
+    component = infer_component_hypotheses(board, backend="python")[0]
+
+    assert component.reference == "U1"
+    assert component.package_hint == "TWO_PAD_SMD"
+    assert component.source_pin_map == {"P1": "1", "P2": "2"}
+    assert component.source_pin_functions == {"P1": "VCC", "P2": "GND"}
+
+
+def test_x2_pin_mapping_fails_closed_on_conflicting_trusted_pin_numbers():
+    p1 = _pad("P1", 0.0, refdes="U1", pin="1", pin_function="VCC")
+    p1.provenance.add_evidence(
+        Evidence("gerber_x2_pin_number", "99", 1.0)
+    )
+    board = BoardModel(
+        pads=[
+            p1,
+            _pad("P2", 2.0, refdes="U1", pin="2", pin_function="GND"),
+        ]
+    )
+
+    component = infer_component_hypotheses(board, backend="python")[0]
+
+    assert component.reference == "U1"
+    assert component.source_pin_map == {"P2": "2"}
+    assert component.source_pin_functions == {"P2": "GND"}
+    assert any(
+        "pin identity unresolved for pads: P1" in item
+        for item in component.evidence
+    )

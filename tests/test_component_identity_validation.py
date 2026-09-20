@@ -39,3 +39,44 @@ def test_duplicate_pad_references_inside_component_are_rejected_consistently():
 
     for codes in _codes(board):
         assert "COMPONENT_PAD_DUPLICATE" in codes
+
+
+def test_source_pin_map_must_reference_component_member_pads_consistently():
+    board = BoardModel(
+        pads=[_pad()],
+        components=[
+            ComponentHypothesis(
+                "C1",
+                ["P1"],
+                "gerber_x2_component",
+                1.0,
+                [],
+                source_pin_map={"P2": "1"},
+            )
+        ],
+    )
+
+    for codes in _codes(board):
+        assert "COMPONENT_PIN_MAP_PAD_NOT_MEMBER" in codes
+
+
+def test_source_pin_identity_rejects_empty_values_and_unbound_functions():
+    board = BoardModel(
+        pads=[_pad()],
+        components=[
+            ComponentHypothesis(
+                "C1",
+                ["P1"],
+                "gerber_x2_component",
+                1.0,
+                [],
+                source_pin_map={"P1": ""},
+                source_pin_functions={"P2": ""},
+            )
+        ],
+    )
+
+    for codes in _codes(board):
+        assert "COMPONENT_PIN_NUMBER_INVALID" in codes
+        assert "COMPONENT_PIN_FUNCTION_PAD_NOT_MAPPED" in codes
+        assert "COMPONENT_PIN_FUNCTION_INVALID" in codes
