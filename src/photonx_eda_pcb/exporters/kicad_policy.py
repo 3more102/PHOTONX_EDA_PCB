@@ -185,6 +185,8 @@ def pad_export_descriptor(pad):
     },ref_layer,warning
 
 _X2_REFDES_EVIDENCE = "gerber_x2_component_refdes"
+_X2_PIN_EVIDENCE = "gerber_x2_pin_number"
+_X2_PIN_FUNCTION_EVIDENCE = "gerber_x2_pin_function"
 
 
 def _trusted_pad_evidence_values(pad, kind):
@@ -204,10 +206,11 @@ def x2_component_export_plan(board):
 
     Component reference and structured pin maps are produced upstream only from
     trusted Gerber X2 .P evidence. Export consumes those machine-readable maps
-    directly instead of reparsing pad evidence for pin identity. Every grouped
-    pad still has to carry matching trusted refdes evidence and exact exportable
-    geometry. Malformed, incomplete, cross-claimed, or duplicate pin identity
-    fails closed to independent recovered-pad export.
+    as the canonical identity, then independently cross-checks them against the
+    original trusted per-pad provenance. It never repairs or re-derives a stale
+    map. Every grouped pad also needs exact exportable geometry. Malformed,
+    incomplete, contradictory, cross-claimed, or duplicate pin identity fails
+    closed to independent recovered-pad export.
     """
     source_components = [
         component
@@ -317,13 +320,56 @@ def x2_component_export_plan(board):
             if pin_number is None:
                 continue
 
+            trusted_pin_numbers = tuple(
+                sorted(
+                    {
+                        value.strip()
+                        for value in _trusted_pad_evidence_values(
+                            pad, _X2_PIN_EVIDENCE
+                        )
+                        if value.strip()
+                    }
+                )
+            )
+            if trusted_pin_numbers != (pin_number,):
+                reasons.append(
+                    f"{pad_id} structured source pin number does not match trusted X2 evidence"
+                )
+                continue
+
+            trusted_pin_functions = tuple(
+                sorted(
+                    {
+                        value.strip()
+                        for value in _trusted_pad_evidence_values(
+                            pad, _X2_PIN_FUNCTION_EVIDENCE
+                        )
+                        if value.strip()
+                    }
+                )
+            )
+            source_function = normalized_pin_functions.get(pad_id)
+            if len(trusted_pin_functions) > 1:
+                reasons.append(
+                    f"{pad_id} carries conflicting trusted X2 pin functions"
+                )
+            elif len(trusted_pin_functions) == 1:
+                if source_function != trusted_pin_functions[0]:
+                    reasons.append(
+                        f"{pad_id} structured source pin function does not match trusted X2 evidence"
+                    )
+            elif source_function is not None:
+                reasons.append(
+                    f"{pad_id} structured source pin function lacks matching trusted X2 evidence"
+                )
+
             descriptor, _ref_layer, _warning = pad_export_descriptor(pad)
             rows.append(
                 {
                     "pad": pad,
                     "pad_id": pad_id,
                     "number": pin_number,
-                    "function": normalized_pin_functions.get(pad_id),
+                    "function": source_function,
                     "descriptor": descriptor,
                 }
             )
