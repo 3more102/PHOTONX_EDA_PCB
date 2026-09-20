@@ -41,6 +41,7 @@ _REASON_CODES={
         "KICAD_TRACK_ZERO_LENGTH",
     },
     "omitted_routes":{
+        "KICAD_OBJECT_ID_DUPLICATE",
         "KICAD_ARBITRARY_ROUTE_UNSUPPORTED",
     },
     "omitted_via_spans":{
@@ -73,6 +74,7 @@ def validate_omission_manifest(data):
     skipped_regions=list(data.get("skipped_regions",()))
     exported_tracks=list(data.get("exported_tracks",()))
     skipped_tracks=list(data.get("skipped_tracks",()))
+    exported_routes=list(data.get("exported_routes",()))
     omitted_routes=list(data.get("omitted_routes",()))
     omitted_via_spans=list(data.get("omitted_via_spans",()))
 
@@ -89,6 +91,7 @@ def validate_omission_manifest(data):
         ("OMISSION_SKIPPED_REGION_DUPLICATE_ID",skipped_regions),
         ("OMISSION_EXPORTED_TRACK_DUPLICATE_ID",exported_tracks),
         ("OMISSION_SKIPPED_TRACK_DUPLICATE_ID",skipped_tracks),
+        ("OMISSION_EXPORTED_ROUTE_DUPLICATE_ID",exported_routes),
         ("OMISSION_ROUTE_DUPLICATE_ID",omitted_routes),
         ("OMISSION_VIA_SPAN_DUPLICATE_ID",omitted_via_spans),
     )
@@ -102,6 +105,7 @@ def validate_omission_manifest(data):
         ("OMISSION_PAD_BOTH_EXPORTED_AND_SKIPPED",exported_pads,skipped_pads),
         ("OMISSION_REGION_BOTH_EXPORTED_AND_SKIPPED",exported_regions,skipped_regions),
         ("OMISSION_TRACK_BOTH_EXPORTED_AND_SKIPPED",exported_tracks,skipped_tracks),
+        ("OMISSION_ROUTE_BOTH_EXPORTED_AND_SKIPPED",exported_routes,omitted_routes),
     )
     for code,exported,skipped in overlap_checks:
         if set(exported)&set(skipped):issues.append(code)

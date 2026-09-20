@@ -5,6 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 from ..exporters.kicad_policy import KICAD_BOARD_FORMAT_VERSION, KICAD_GENERATOR, KICAD_DEFAULT_BOARD_THICKNESS_MM, KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM, declared_copper_layer_names, drill_export_status, kicad_board_layer_rows, kicad_duplicate_object_ids, kicad_net_export_rows, outline_export_status, pad_export_descriptor, pad_export_status, proven_via_span_omissions, slot_export_status, track_export_status
+from ..excellon_routing import assess_route_export_readiness, route_export_descriptor
 from ..kicad_reader import read_kicad_board_text
 from ..kicad_identity import photonx_uuid
 from ..plated_slot_inference import infer_plated_slot_padstack
@@ -16,11 +17,13 @@ _RECOVERED_PAD_FOOTPRINT = "PHOTONX:RecoveredPad"
 _RECOVERED_NPTH_DRILL = "PHOTONX:RecoveredNPTHDrill"
 _RECOVERED_NPTH_SLOT = "PHOTONX:RecoveredNPTHSlot"
 _RECOVERED_PLATED_SLOT = "PHOTONX:RecoveredPlatedSlot"
+_RECOVERED_NPTH_ROUTE = "PHOTONX:RecoveredNPTHRoute"
 _PHOTONX_FOOTPRINT_NAMES = {
     _RECOVERED_PAD_FOOTPRINT,
     _RECOVERED_NPTH_DRILL,
     _RECOVERED_NPTH_SLOT,
     _RECOVERED_PLATED_SLOT,
+    _RECOVERED_NPTH_ROUTE,
 }
 
 
@@ -1402,6 +1405,114 @@ def _observed_slots(readback, net_lookup, issues):
     return out
 
 
+def _expected_routes(board, exported_ids, issues):
+    out = []
+    for route in getattr(board, "routes", ()):
+        if route.id not in exported_ids:
+            continue
+        descriptor = route_export_descriptor(route)
+        if descriptor is None:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_EXPORTED_ROUTE_POLICY_INVALID",
+                    "route_id": route.id,
+                }
+            )
+            continue
+        geometry = _pad_geometry_item(
+            descriptor["center"],
+            0.0,
+            descriptor["footprint_layer"],
+            "",
+            "np_thru_hole",
+            "oval",
+            (0.0, 0.0),
+            descriptor["angle_deg"],
+            descriptor["size"],
+            "oval",
+            descriptor["drill_size"],
+            (0.0, 0.0),
+            descriptor["layers"],
+        )
+        out.append(
+            {
+                "id": str(route.id),
+                "uuid": photonx_uuid("route-fp:" + str(route.id)),
+                "reference_uuid": photonx_uuid("route-ref:" + str(route.id)),
+                "reference_count": 1,
+                "pad_uuid": photonx_uuid("route-pad:" + str(route.id)),
+                "geometry": geometry,
+                "net": {"code": 0, "name": ""},
+            }
+        )
+    return out
+
+
+def _observed_routes(readback, net_lookup, issues):
+    out = []
+    for fp_index, footprint in enumerate(readback.get("footprints", ())):
+        if footprint.get("name") != _RECOVERED_NPTH_ROUTE:
+            continue
+        reference = footprint.get("reference")
+        pads = list(footprint.get("pads", ()))
+        if not reference:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_ROUTE_REFERENCE_MISSING",
+                    "footprint_index": fp_index,
+                }
+            )
+            continue
+        if len(pads) != 1:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_ROUTE_PAD_COUNT_INVALID",
+                    "route_id": str(reference),
+                    "pad_count": len(pads),
+                }
+            )
+            continue
+
+        try:
+            geometry = _observed_pad_geometry(footprint, pads[0])
+        except (TypeError, ValueError, IndexError, KeyError) as exc:
+            issues.append(
+                {
+                    "code": "KICAD_ROUNDTRIP_INVALID_ROUTE_GEOMETRY",
+                    "route_id": str(reference),
+                    "detail": str(exc),
+                }
+            )
+            continue
+
+        binding = _binding_from_code(
+            pads[0].get("net"),
+            net_lookup,
+            issues,
+            "route",
+            reference,
+        )
+        _check_embedded_net_name(
+            pads[0],
+            binding,
+            issues,
+            "route",
+            reference,
+        )
+        out.append(
+            {
+                "id": str(reference),
+                "uuid": footprint.get("uuid"),
+                "reference_uuid": footprint.get("reference_uuid"),
+                "reference_count": int(footprint.get("reference_count", 0)),
+                "pad_uuid": pads[0].get("uuid"),
+                "geometry": geometry,
+                "net": binding,
+            }
+        )
+    return out
+
+
 def _empty_comparison():
     return _compare_multiset([], [])
 
@@ -1411,7 +1522,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
 
     With an export report, the audit covers emitted board fabrication settings, the declared KiCad layer table, net table, and tracks,
     rejects unexpected KiCad vias, routed track arcs, foreign footprints, non-line Edge.Cuts graphics, and top-level graphics placed on canonical copper layers, copper graphics nested inside footprints, direct mask/paste graphics at board or footprint scope, footprint/pad copper-behavior overrides, verifies the emitted Edge.Cuts outline, and compares recovered point drills, pads, copper regions including canonical shell/hole geometry plus fill/cache and exporter-default zone rules,
-    and recovered slots, including canonical exported slot geometry. Proven plated via spans are tracked as explicit source
+    recovered slots, and exact non-plated routed paths exported as NPTH route footprints. Proven plated via spans are tracked as explicit source
     export losses because the current exporter does not synthesize via annular
     geometry. Deterministic PhotonX UUIDs are part of the supported
     object identity for emitted tracks, recovered pad/slot footprints and their child pads, regions, and slots. Recovered-pad emitted geometry is compared exactly as read back.
@@ -1692,17 +1803,17 @@ def compare_kicad_connectivity(board, readback, export_report=None):
     skipped_region_ids = set()
     skipped_slot_ids = set()
     unresolved_slot_ids = []
-    source_route_ids = {
-        route.id
-        for route in getattr(board, "routes", ())
-    }
+    source_routes = list(getattr(board, "routes", ()))
+    source_route_ids = {route.id for route in source_routes}
     if export_report is None:
-        skipped_route_ids = set(source_route_ids)
+        route_readiness = assess_route_export_readiness(source_routes)
+        exported_route_ids = set(route_readiness.exportable)
+        skipped_route_ids = set(route_readiness.omitted)
         skipped_via_span_ids = set(source_via_span_ids)
     else:
-        _, skipped_route_ids = _reported_sets(
+        exported_route_ids, skipped_route_ids = _reported_sets(
             source_route_ids,
-            (),
+            getattr(export_report, "exported_route_ids", ()),
             getattr(export_report, "skipped_route_ids", ()),
             "ROUTE",
             issues,
@@ -1714,6 +1825,11 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "VIA_SPAN",
             issues,
         )
+
+    routes = _compare_multiset(
+        _expected_routes(board, exported_route_ids, issues),
+        _observed_routes(readback, net_lookup, issues),
+    )
 
     source_regions = list(getattr(board, "regions", ()))
     source_slots = list(getattr(board, "slots", ()))
@@ -1820,6 +1936,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         and region_rules["equal"]
         and slots["equal"]
         and slot_geometry["equal"]
+        and routes["equal"]
         and not issues
     )
 
@@ -1867,6 +1984,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
             "region_rules",
             "recovered_slots",
             "slot_geometry",
+            "recovered_routes",
         ],
         "roundtrip_equal": roundtrip_equal,
         "source_connectivity_complete": source_connectivity_complete,
@@ -1899,6 +2017,7 @@ def compare_kicad_connectivity(board, readback, export_report=None):
         "region_rules": region_rules,
         "slots": slots,
         "slot_geometry": slot_geometry,
+        "routes": routes,
         "losses": losses,
         "issues": issues,
     }

@@ -95,6 +95,7 @@ def test_connectivity_roundtrip_covers_regions_and_slots(tmp_path):
         "region_rules",
         "recovered_slots",
         "slot_geometry",
+        "recovered_routes",
     ]
     assert audit["roundtrip_equal"] is True
     assert audit["source_connectivity_complete"] is True

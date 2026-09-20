@@ -7,7 +7,7 @@ from ..kicad_identity import photonx_uuid
 from ..geometry_kernel.regions import region_shape
 from .kicad_report import KicadExportReport,KicadExportIssue
 from .kicad_policy import KICAD_BOARD_FORMAT_VERSION,KICAD_GENERATOR,KICAD_DEFAULT_BOARD_THICKNESS_MM,KICAD_DEFAULT_PAD_TO_MASK_CLEARANCE_MM,declared_copper_layer_names,drill_export_status,kicad_board_layer_specs,kicad_duplicate_object_ids,kicad_net_export_rows,outline_export_status,pad_export_descriptor,pad_export_status,pad_shape_name,slot_geometry,slot_export_status,track_export_status,proven_via_span_omissions
-from photonx_eda_pcb.excellon_routing import assess_route_export_readiness
+from photonx_eda_pcb.excellon_routing import assess_route_export_readiness,route_export_descriptor
 from photonx_eda_pcb.plated_slot_inference import infer_plated_slot_padstack
 
 def _q(text:str)->str:return '"'+text.replace("\\","\\\\").replace('"','\\"').replace("\n","\\n").replace("\r","\\r")+'"'
@@ -409,17 +409,48 @@ def _record_via_span_skips(board,report):
             "proven plated via span is part of source connectivity, but the current KiCad exporter does not synthesize drill-derived annular via geometry; vertical bridge omitted",
         ))
 
-def _record_route_skips(board,report):
-    readiness=assess_route_export_readiness(getattr(board,"routes",()))
-    for route_id in readiness.omitted:
+def _npth_route_lines(route,report):
+    descriptor=route_export_descriptor(route)
+    if descriptor is None:
+        return []
+    cx,cy=descriptor["center"]
+    long_dim,short_dim=descriptor["size"]
+    angle=descriptor["angle_deg"]
+    report.exported_routes+=1
+    report.exported_route_ids.append(route.id)
+    return [
+      f'  (footprint "PHOTONX:RecoveredNPTHRoute" (layer "F.Cu") (uuid {photonx_uuid("route-fp:"+route.id)})',
+      f'    (at {cx:.6f} {cy:.6f})',
+      f'    (property "Reference" {_q(route.id)} (at 0 -2 0) (layer "F.SilkS") hide (uuid {photonx_uuid("route-ref:"+route.id)}))',
+      f'    (pad "" np_thru_hole oval (at 0 0 {angle:.6f}) (size {long_dim:.6f} {short_dim:.6f}) (drill oval {long_dim:.6f} {short_dim:.6f}) (layers "*.Cu" "*.Mask") (uuid {photonx_uuid("route-pad:"+route.id)}))',
+      '  )'
+    ]
+
+
+def _route_lines(board,report,duplicate_object_ids=()):
+    routes=getattr(board,"routes",())
+    readiness=assess_route_export_readiness(routes)
+    exportable=set(readiness.exportable)
+    duplicate_object_ids=set(duplicate_object_ids)
+    lines=[]
+    for route in sorted(routes,key=lambda item:item.id):
+        if route.id in duplicate_object_ids:
+            report.skipped_routes+=1
+            if route.id not in report.skipped_route_ids:
+                report.skipped_route_ids.append(route.id)
+            continue
+        if route.id in exportable:
+            lines.extend(_npth_route_lines(route,report))
+            continue
         report.skipped_routes+=1
-        report.skipped_route_ids.append(route_id)
+        report.skipped_route_ids.append(route.id)
         report.issues.append(KicadExportIssue(
             "warning",
-            readiness.reasons[route_id],
-            route_id,
-            "arbitrary routed milling is preserved in PHOTONX but cannot be represented faithfully by the current KiCad exporter; route omitted",
+            readiness.reasons.get(route.id,"KICAD_ARBITRARY_ROUTE_UNSUPPORTED"),
+            route.id,
+            "routed milling is preserved in PHOTONX but only exact straight non-plated routes can be represented faithfully by the current KiCad exporter; route omitted",
         ))
+    return lines
 
 
 def _slot_lines(board,net_num,report,duplicate_object_ids=()):
@@ -514,7 +545,7 @@ def export_kicad_with_report(board:BoardModel,path:str|Path)->tuple[Path,KicadEx
         '  (net 0 "")',
     ]
     for row in net_rows:lines.append(f'  (net {row["code"]} {_q(row["name"])})')
-    lines.extend(_drill_lines(board,report,duplicate_object_ids));lines.extend(_pad_lines(board,net_num,report,duplicate_object_ids));lines.extend(_slot_lines(board,net_num,report,duplicate_object_ids));lines.extend(_region_lines(board,net_num,report,duplicate_object_ids));lines.extend(_track_lines(board,net_num,report,duplicate_object_ids));_record_via_span_skips(board,report);_record_route_skips(board,report)
+    lines.extend(_drill_lines(board,report,duplicate_object_ids));lines.extend(_pad_lines(board,net_num,report,duplicate_object_ids));lines.extend(_slot_lines(board,net_num,report,duplicate_object_ids));lines.extend(_region_lines(board,net_num,report,duplicate_object_ids));lines.extend(_track_lines(board,net_num,report,duplicate_object_ids));lines.extend(_route_lines(board,report,duplicate_object_ids));_record_via_span_skips(board,report)
     lines.extend(_outline_lines(board,report,duplicate_object_ids))
     lines.append(')');p.write_text("\n".join(lines)+"\n",encoding="utf-8");return p,report
 def export_kicad(board:BoardModel,path:str|Path)->Path:return export_kicad_with_report(board,path)[0]

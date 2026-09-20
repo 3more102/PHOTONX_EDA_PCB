@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added exact KiCad export for straight non-plated Excellon routed paths. Two-point finite routes now become deterministic `PHOTONX:RecoveredNPTHRoute` oval NPTH footprints; route export/omission partitions are machine-readable, and KiCad round-trip verification checks recovered route identity, geometry, and unassigned-net semantics without misclassifying route footprints as component slots.
+
 - Added expected-empty KiCad fabrication-graphics auditing for direct F/B.Mask and F/B.Paste artwork. Top-level `gr_*` objects and footprint `fp_*`/property/zone graphics on mask/paste layers are now surfaced through `unexpected_fabrication_graphics` and fail round-trip verification instead of bypassing copper-only guards.
 
 - Expanded KiCad zone repour-rule auditing to the full currently documented rule surface used by PhotonX verification: zone hatch style/pitch, `connect_pads` connection mode, smoothing/radius, and all hatched-fill tuning fields are now parsed and compared alongside clearance/thermal/island settings. Injected zone overrides can no longer preserve shell/net identity while silently changing future repours.
