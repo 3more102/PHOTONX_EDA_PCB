@@ -1,5 +1,6 @@
 import pytest
 
+from photonx_eda_pcb.excellon_routing import RoutedPath
 from photonx_eda_pcb.mechanical_features.model import SlotFeature
 from photonx_eda_pcb.models import (
     BoardModel,
@@ -195,3 +196,56 @@ def test_canonical_review_queue_surfaces_unproven_via_span_and_can_disable_it():
         include_diagnostics=False,
     )
     assert not any(item.kind == "via_span" for item in disabled.all())
+
+
+
+def _route_review_board(*, exportable=False) -> BoardModel:
+    if exportable:
+        route = RoutedPath(
+            "R_EXACT",
+            ((0.0, 0.0), (3.0, 0.0)),
+            0.6,
+            plated="non-plated",
+        )
+    else:
+        route = RoutedPath(
+            "R_REVIEW",
+            ((0.0, 0.0), (2.0, 0.0), (2.0, 2.0)),
+            0.6,
+            plated="non-plated",
+        )
+    return BoardModel(routes=[route])
+
+
+def test_canonical_review_queue_skips_exactly_exportable_route():
+    queue = build_board_review_queue(
+        _route_review_board(exportable=True),
+        include_unresolved_clearance=False,
+        include_diagnostics=False,
+    )
+
+    assert not any(item.kind == "route_evidence" for item in queue.all())
+
+
+def test_canonical_review_queue_surfaces_route_omission_and_can_disable_it():
+    board = _route_review_board()
+
+    queue = build_board_review_queue(
+        board,
+        include_unresolved_clearance=False,
+        include_diagnostics=False,
+    )
+    item = next(item for item in queue.all() if item.kind == "route_evidence")
+    assert item.target_id == "R_REVIEW"
+    assert item.metadata["status"] == "omitted"
+    assert item.metadata["export_code"] == "KICAD_ARBITRARY_ROUTE_UNSUPPORTED"
+    assert item.metadata["selectable_object_id"] == "R_REVIEW"
+    assert item.metadata["confidence_available"] is False
+
+    disabled = build_board_review_queue(
+        board,
+        include_route_evidence=False,
+        include_unresolved_clearance=False,
+        include_diagnostics=False,
+    )
+    assert not any(item.kind == "route_evidence" for item in disabled.all())

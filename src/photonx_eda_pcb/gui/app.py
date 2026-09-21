@@ -9,6 +9,7 @@ from ..review_queue import ReviewItem, build_board_review_queue
 from .canvas import BoardCanvas
 from .inspector import Inspector
 from .state import ViewState
+from .route_review import build_route_evidence_rows
 from .via_review import build_via_evidence_rows
 
 
@@ -115,7 +116,7 @@ def launch(input_dir: str | Path) -> None:
             nets.set(item.target_id)
             state.selected_id = None
             inspector.show(item.target_id)
-        elif item.kind in {"diagnostic", "validation", "via_span"}:
+        elif item.kind in {"diagnostic", "validation", "via_span", "route_evidence"}:
             selectable = item.metadata.get("selectable_object_id")
             if selectable in result.board.object_index():
                 state.selected_id = selectable
@@ -225,12 +226,121 @@ def launch(input_dir: str | Path) -> None:
 
     via.bind("<<TreeviewSelect>>", inspect_via)
 
+
+    route_tab = ttk.Frame(tabs)
+    route_tab.rowconfigure(0, weight=1)
+    route_tab.columnconfigure(0, weight=1)
+    tabs.add(route_tab, text="Route Evidence")
+
+    route_rows = build_route_evidence_rows(result.board)
+    route_rows_by_id = {row["id"]: row for row in route_rows}
+    route_view = ttk.Treeview(
+        route_tab,
+        columns=(
+            "status",
+            "route",
+            "plating",
+            "span",
+            "x2_kind",
+            "segments",
+            "width",
+            "net",
+            "reason",
+        ),
+        show="headings",
+        height=10,
+    )
+    route_view.heading("status", text="Status")
+    route_view.heading("route", text="Route")
+    route_view.heading("plating", text="Plating")
+    route_view.heading("span", text="Layer span")
+    route_view.heading("x2_kind", text="X2 kind")
+    route_view.heading("segments", text="Segments")
+    route_view.heading("width", text="Width mm")
+    route_view.heading("net", text="Net")
+    route_view.heading("reason", text="Evidence / omission reason")
+    route_view.column("status", width=90, stretch=False)
+    route_view.column("route", width=130, stretch=False)
+    route_view.column("plating", width=90, stretch=False)
+    route_view.column("span", width=150, stretch=False)
+    route_view.column("x2_kind", width=90, stretch=False)
+    route_view.column("segments", width=75, stretch=False, anchor="center")
+    route_view.column("width", width=80, stretch=False, anchor="center")
+    route_view.column("net", width=120, stretch=False)
+    route_view.column("reason", width=360, stretch=True)
+
+    for row in route_rows:
+        width = row["width_mm"]
+        width_text = "—" if width is None else str(width)
+        route_view.insert(
+            "",
+            "end",
+            iid=row["id"],
+            values=(
+                row["status"],
+                row["route_id"],
+                row["plating"],
+                row["span"],
+                row["x2_kind"],
+                row["segments"],
+                width_text,
+                row["net"],
+                row["reason"],
+            ),
+        )
+    route_view.grid(row=0, column=0, sticky="nsew")
+
+    def inspect_route(_event=None):
+        selection = route_view.selection()
+        if not selection:
+            return
+        row = route_rows_by_id.get(selection[0])
+        if row is None:
+            return
+
+        route_id = row["route_id"]
+        if route_id in result.board.object_index():
+            state.selected_id = route_id
+        else:
+            state.selected_id = None
+
+        net_id = row.get("net_id")
+        state.highlighted_net_id = net_id
+        nets.set(net_id or "")
+
+        inspector.show_review(
+            ReviewItem(
+                id=row["id"],
+                kind="route_evidence",
+                target_id=route_id,
+                reason=row["reason"],
+                confidence=0.0,
+                metadata={
+                    "confidence_available": False,
+                    "status": row["status"],
+                    "plating": row["plating"],
+                    "layer_span": row["span"],
+                    "span_proven": row["span_proven"],
+                    "x2_kind": row["x2_kind"],
+                    "width_mm": row["width_mm"],
+                    "segments": row["segments"],
+                    "net": row["net"],
+                    "export_kind": row["export_kind"],
+                    "export_code": row["export_code"],
+                },
+            )
+        )
+        canvas.redraw()
+
+    route_view.bind("<<TreeviewSelect>>", inspect_route)
+
     status = (
         f"validation={'PASS' if result.validation.ok else 'FAIL'} | "
         f"errors={len(result.validation.errors)} | "
         f"warnings={len(result.validation.warnings)} | "
         f"review={len(review_queue.open_items())} | "
-        f"via_evidence={len(via_rows)}"
+        f"via_evidence={len(via_rows)} | "
+        f"route_evidence={len(route_rows)}"
     )
     ttk.Label(side, text=status).grid(row=2, column=0, sticky="ew")
 

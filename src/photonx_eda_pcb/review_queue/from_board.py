@@ -8,6 +8,7 @@ from ..ids import stable_id
 from ..models import BoardModel
 from .item import ReviewItem
 from .queue import ReviewQueue
+from .route_evidence import build_route_evidence_rows
 from .via_evidence import build_via_evidence_rows
 
 
@@ -28,6 +29,7 @@ def build_board_review_queue(
     component_confidence_below: float | None = None,
     include_unknown_plating: bool = True,
     include_via_evidence: bool = True,
+    include_route_evidence: bool = True,
     include_unresolved_clearance: bool = True,
     include_diagnostics: bool = True,
     drc_config: DrcConfig | None = None,
@@ -186,6 +188,45 @@ def build_board_review_queue(
                         "net": row["net"],
                         "net_id": row["net_id"],
                         "pad_ids": tuple(row["pad_ids"]),
+                        "export_code": row["export_code"],
+                        "selectable_object_id": selectable,
+                    },
+                )
+            )
+
+
+    if include_route_evidence:
+        for row in build_route_evidence_rows(board):
+            if row["status"] == "exportable":
+                continue
+            route_id = str(row["route_id"])
+            selectable = route_id if route_id in object_index else None
+            queue.add(
+                ReviewItem(
+                    stable_id(
+                        "review",
+                        "route-evidence",
+                        row["id"],
+                        row["status"],
+                        row["export_code"],
+                        row["reason"],
+                    ),
+                    "route_evidence",
+                    route_id,
+                    row["reason"],
+                    0.0,
+                    metadata={
+                        "confidence_available": False,
+                        "status": row["status"],
+                        "plating": row["plating"],
+                        "layer_span": row["span"],
+                        "span_proven": row["span_proven"],
+                        "x2_kind": row["x2_kind"],
+                        "width_mm": row["width_mm"],
+                        "segments": row["segments"],
+                        "net": row["net"],
+                        "net_id": row["net_id"],
+                        "export_kind": row["export_kind"],
                         "export_code": row["export_code"],
                         "selectable_object_id": selectable,
                     },
